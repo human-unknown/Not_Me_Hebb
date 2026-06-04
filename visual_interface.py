@@ -19,6 +19,8 @@ import hashlib
 import numpy as np
 from urllib.request import urlretrieve
 
+from layer0_gestalt import compute_gestalt_from_image
+
 CIFAR10_URL = 'https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz'
 CIFAR10_CLASSES = [
     'airplane', 'automobile', 'bird', 'cat', 'deer',
@@ -105,6 +107,8 @@ class VisualEnvironment:
         v2_cache_path = os.path.join(cache_dir, f'{cache_key}_v2.npy')
         v4_cache_path = os.path.join(cache_dir, f'{cache_key}_v4.npy')
         color_cache_path = os.path.join(cache_dir, f'{cache_key}_color.npy')
+        gestalt_cache_path = os.path.join(cache_dir,
+                                          f'{cache_key}_gestalt.npy')
 
         if os.path.exists(cache_path) and os.path.exists(pca_path):
             print(f"  Loading cached vision encodings + PCA...")
@@ -127,19 +131,26 @@ class VisualEnvironment:
                 print(f"  Color cached: {self.encodings_color.shape}")
             elif use_color:
                 self.encodings_color = None
+            # Module A: Gestalt — load cache or compute lazily
+            if os.path.exists(gestalt_cache_path):
+                self.encodings_gestalt = np.load(gestalt_cache_path)
+                print(f"  Gestalt cached: {self.encodings_gestalt.shape}")
+            else:
+                self.encodings_gestalt = None  # computed lazily
         else:
             if use_v2 or use_v4 or use_color:
                 self.encodings, self.encodings_v2, self.encodings_v4, \
-                    self.encodings_color, self.pca = (
+                    self.encodings_color, self.encodings_gestalt, self.pca = (
                     self._encode_with_pca_v2(cache_path, v2_cache_path,
                                              v4_cache_path, color_cache_path,
-                                             pca_path))
+                                             gestalt_cache_path, pca_path))
             else:
                 self.encodings, self.pca = self._encode_with_pca(
                     cache_path, pca_path)
                 self.encodings_v2 = None
                 self.encodings_v4 = None
                 self.encodings_color = None
+                self.encodings_gestalt = None
 
         # 导航状态
         self.cursor: int = 0
@@ -373,13 +384,14 @@ class VisualEnvironment:
 
     def _encode_with_pca_v2(self, cache_path: str, v2_cache_path: str,
                              v4_cache_path: str, color_cache_path: str,
-                             pca_path: str
+                             gestalt_cache_path: str, pca_path: str
                              ) -> tuple:
-        """编码 V1 + V2 + V4 + Color + PCA → 缓存。
+        """编码 V1 + V2 + V4 + Color + Gestalt + PCA → 缓存。
 
         V1: 1024d raw → PCA → pca_components
         V2: ~276d raw → PCA → v2_components
         V4: ~72d raw → PCA or raw
+        Gestalt: ~19d raw (no PCA, already compact)
         Color: ~512d raw → PCA → color_components
         """
         from sklearn.decomposition import PCA
@@ -404,16 +416,25 @@ class VisualEnvironment:
         do_v2 = self.use_v2
         do_v4 = self.use_v4
 
+        # Gestalt dim (Module A)
+        from layer0_gestalt import GestaltGrouping
+        gestalt_dim = GestaltGrouping(
+            image_size=self.image_size,
+            n_scales=self._gabor.n_scales,
+            n_orientations=self._gabor.n_orientations).feature_dim  # 19
+
         print(f"  Encoding {n} images (V1 {v1_raw_dim}d -> "
               f"{self.pca_components}d"
               + (f" + V2 {v2_raw_dim}d -> {self.v2_components}d" if do_v2 else "")
               + (f" + V4 {v4_raw_dim}d" if do_v4 else "")
+              + f" + Gestalt {gestalt_dim}d"
               + (f" + Color {color_raw_dim}d -> {self.color_components}d" if do_color else "")
               + ")...")
 
         v1_raw = np.zeros((n, v1_raw_dim), dtype=np.float32)
         v2_raw = np.zeros((n, v2_raw_dim), dtype=np.float32) if do_v2 else None
         v4_raw = np.zeros((n, v4_raw_dim), dtype=np.float32) if do_v4 else None
+        gestalt_raw = np.zeros((n, gestalt_dim), dtype=np.float32)
         color_raw = np.zeros((n, color_raw_dim), dtype=np.float32) if do_color else None
 
         for i in range(n):
@@ -426,6 +447,9 @@ class VisualEnvironment:
                 v4_raw[i] = self._gabor.encode_v4(self.images[i])
             if do_color:
                 color_raw[i] = self._gabor.encode_color(self.images[i])
+            # Module A: gestalt features
+            gestalt_raw[i] = compute_gestalt_from_image(
+                self.images[i], self._gabor)
 
         profile = self._gabor.get_gain_profile()
         print(f"  Hebb gain: mean={profile['mean_gain']:.3f}, "
@@ -489,12 +513,18 @@ class VisualEnvironment:
         else:
             color_enc = None
 
+        # Gestalt: L2 normalize (no PCA, already compact 19d)
+        gestalt_norms = np.linalg.norm(gestalt_raw, axis=1, keepdims=True)
+        gestalt_enc = gestalt_raw / (gestalt_norms + 1e-8)
+        pca_data['gestalt_dim'] = gestalt_dim
+
         # 缓存
         np.save(cache_path, v1_enc)
         if do_v2 and v2_enc is not None:
             np.save(v2_cache_path, v2_enc)
         if do_v4 and v4_enc is not None:
             np.save(v4_cache_path, v4_enc)
+        np.save(gestalt_cache_path, gestalt_enc)
         if do_color and color_enc is not None:
             np.save(color_cache_path, color_enc)
         with open(pca_path, 'wb') as f:
@@ -502,9 +532,10 @@ class VisualEnvironment:
         print(f"  Cached: {cache_path}"
               + (f", {v2_cache_path}" if do_v2 else "")
               + (f", {v4_cache_path}" if do_v4 else "")
+              + f", {gestalt_cache_path}"
               + (f", {color_cache_path}" if do_color else ""))
 
-        return v1_enc, v2_enc, v4_enc, color_enc, pca_data
+        return v1_enc, v2_enc, v4_enc, gestalt_enc, color_enc, pca_data
 
     def encode_image(self, image: np.ndarray) -> np.ndarray:
         """单张图像 → V1 视觉向量 (Gabor V1 → PCA)。
@@ -569,6 +600,9 @@ class VisualEnvironment:
             parts.append(self.encodings_v2[index].copy())
         if include_v4 and self.use_v4 and self.encodings_v4 is not None:
             parts.append(self.encodings_v4[index].copy())
+        # Module A: Gestalt features
+        if getattr(self, 'encodings_gestalt', None) is not None:
+            parts.append(self.encodings_gestalt[index].copy())
         if include_color and self.use_color and getattr(self, 'encodings_color', None) is not None:
             parts.append(self.encodings_color[index].copy())
         if len(parts) == 1:

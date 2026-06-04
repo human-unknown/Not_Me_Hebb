@@ -279,6 +279,7 @@ def compute_free_energy(
     beliefs = None,  # AgentBelief (M3+)
     body = None,     # BodyVector (v2)
     social_ctx = None,  # SocialContext (Stage 6 人类对话)
+    visual_pred_error: float = 0.0,  # Module D: 视觉预测编码
 ) -> FreeEnergy:
     """计算当前时刻的总自由能及其分解
 
@@ -334,8 +335,11 @@ def compute_free_energy(
     F_social = compute_F_social(s, beliefs, theta, social_ctx)
     F_cognitive = compute_F_cognitive(net, theta, s)
 
-    # 合成: F = F_body + F_social + F_cognitive + F_accuracy
-    F_total = (F_body_deviation + F_social + F_cognitive + F_accuracy)
+    # 合成: F = F_body + F_social + F_cognitive + F_accuracy + F_visual_pred
+    # Module D: 视觉预测编码 — 层级预测误差惩罚
+    # 高层级预测误差 → 视觉世界不稳定 → F 增加 → 驱动注意/学习
+    F_total = (F_body_deviation + F_social + F_cognitive + F_accuracy
+               + theta.w_accuracy * 0.5 * visual_pred_error)
 
     # Valence & Arousal — 基于 F_total 相对 habituation baseline 的变化
     # F_total < running_F → 自由能下降 → 正效价（在变好）

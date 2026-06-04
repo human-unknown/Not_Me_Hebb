@@ -49,14 +49,16 @@ from layer3_meta import create_default_theta
 TEXT_WIDTH  = 64
 V1_WIDTH    = 96
 V2_WIDTH    = 64
-V4_WIDTH    = 64
-COLOR_WIDTH = 42  # truncated from 64
+V4_WIDTH    = 45       # reduced from 64 → 45 to fit gestalt
+GESTALT_WIDTH = 19     # Module A: Gestalt grouping features
+COLOR_WIDTH = 42       # truncated from 64
 
-TEXT_START,  TEXT_END  = 0,   TEXT_WIDTH                         # s[0:64]
-V1_START,    V1_END    = 64,  64 + V1_WIDTH                      # s[64:160]
-V2_START,    V2_END    = 160, 160 + V2_WIDTH                     # s[160:224]
-V4_START,    V4_END    = 224, 224 + V4_WIDTH                     # s[224:288]
-COLOR_START, COLOR_END = 288, 288 + COLOR_WIDTH                  # s[288:330]
+TEXT_START,    TEXT_END    = 0,   TEXT_WIDTH                          # s[0:64]
+V1_START,      V1_END      = 64,  64 + V1_WIDTH                       # s[64:160]
+V2_START,      V2_END      = 160, 160 + V2_WIDTH                      # s[160:224]
+V4_START,      V4_END      = 224, 224 + V4_WIDTH                      # s[224:269]
+GESTALT_START, GESTALT_END = 269, 269 + GESTALT_WIDTH                 # s[269:288]
+COLOR_START,   COLOR_END   = 288, 288 + COLOR_WIDTH                   # s[288:330]
 
 assert COLOR_END == D, f"Layout ends at {COLOR_END}, expected {D}"
 
@@ -435,13 +437,15 @@ def build_crossmodal_sensory(text_emb: np.ndarray,
                                v1_feat: np.ndarray,
                                v2_feat: np.ndarray = None,
                                v4_feat: np.ndarray = None,
-                               color_feat: np.ndarray = None) -> np.ndarray:
+                               color_feat: np.ndarray = None,
+                               gestalt_feat: np.ndarray = None) -> np.ndarray:
     """构建跨模态感知向量 (D=330)。
 
     s[0:64]    = text embedding
     s[64:160]  = V1 Gabor
     s[160:224] = V2 Gabor
-    s[224:288] = V4 Gabor
+    s[224:269] = V4 Gabor
+    s[269:288] = Gestalt grouping (Module A)
     s[288:330] = Color opponent
     """
     s = np.zeros(D, dtype=np.float32)
@@ -464,6 +468,11 @@ def build_crossmodal_sensory(text_emb: np.ndarray,
     if v4_feat is not None:
         flen = min(len(v4_feat), V4_WIDTH)
         s[V4_START:V4_START + flen] = v4_feat[:flen]
+
+    # Gestalt grouping (Module A)
+    if gestalt_feat is not None:
+        flen = min(len(gestalt_feat), GESTALT_WIDTH)
+        s[GESTALT_START:GESTALT_START + flen] = gestalt_feat[:flen]
 
     # Color
     if color_feat is not None:

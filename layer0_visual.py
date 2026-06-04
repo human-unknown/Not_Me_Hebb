@@ -20,6 +20,7 @@ Gabor 滤波器的地位 = 生物的"视网膜 + V1 简单细胞":
 
 import numpy as np
 from scipy.fft import fft2, ifft2
+from scipy.ndimage import uniform_filter
 
 
 class GaborFilterBank:
@@ -56,12 +57,24 @@ class GaborFilterBank:
         self.gains = np.ones(self.n_filters, dtype=np.float32)
         self.gain_lr: float = 0.005
 
+        # Divisive normalization params (Module B: brightness/color constancy)
+        self.surround_sigma: float = image_size / 16.0  # ~4 for 64×64
+        self.semi_saturation: float = 0.1               # σ², V1-like
+
         # 构建核 + 预计算 FFT
         self.kernels = self._build_kernels()
+        self._build_surround_kernel()
         self.n_encodes: int = 0
+
+        # Module D: 视觉预测编码状态
+        self._has_last: bool = False
+        self._last_v1: np.ndarray = None
+        self._last_v2: np.ndarray = None
+        self._last_v4: np.ndarray = None
 
         # 网格边界 (预计算)
         grid_bounds = np.linspace(0, image_size, grid_size + 1, dtype=int)
+        self.n_cells = grid_size * grid_size  # 16
         self._grid_slices = []
         for gy in range(grid_size):
             for gx in range(grid_size):
@@ -132,6 +145,63 @@ class GaborFilterBank:
         return kernels
 
     # ================================================================
+    # Divisive Normalization (Module B: brightness/color constancy)
+    # ================================================================
+
+    def _build_surround_kernel(self):
+        """构建 Gaussian surround 核用于 divisive normalization。
+
+        V1 surround suppression: 每个神经元的响应被其空间邻域的
+        总能量归一化 → 实现亮度恒常性和对比度归一化。
+        """
+        radius = max(1, self.image_size // 16)  # ~4
+        ksize = radius * 2 + 1                 # ~9
+        y, x = np.mgrid[-radius:radius + 1,
+                        -radius:radius + 1].astype(np.float32)
+        gaussian = np.exp(-(x ** 2 + y ** 2)
+                          / (2.0 * self.surround_sigma ** 2))
+        gaussian /= gaussian.sum()
+
+        # Pad to FFT size
+        padded = np.zeros((self.fft_size, self.fft_size), dtype=np.float32)
+        start = (self.fft_size - ksize) // 2
+        padded[start:start + ksize, start:start + ksize] = gaussian
+        self._surround_kernel_fft = fft2(padded).conj()
+
+    def _divisive_normalize(self, response: np.ndarray
+                            ) -> np.ndarray:
+        """Divisive normalization: V1 surround suppression.
+
+        R_norm = R / (σ² + local_sq_energy)
+        local_sq_energy = Gaussian_blur(R²)
+
+        效果: 局部高对比度区域 → 归一化抑制 → 类似亮度恒常性。
+        同一物体在亮/暗环境下产生更一致的响应。
+        """
+        h, w = response.shape
+        # 局部平方能量 (仿生物 V1: Σ w_ij * R_j²)
+        sq_response = response.astype(np.float32) ** 2
+
+        # 如果响应图尺寸与 image_size 不同 (如 pulvinar 降采样),
+        # 用对应的核尺寸做卷积，回退到 scipy uniform_filter
+        if h != self.image_size:
+            from scipy.ndimage import uniform_filter
+            radius = max(1, h // 16)
+            local_sq_energy = uniform_filter(
+                sq_response, size=radius * 2 + 1)
+        else:
+            padded = np.zeros((self.fft_size, self.fft_size),
+                              dtype=np.float32)
+            padded[:h, :w] = sq_response
+            energy_full = np.real(
+                ifft2(fft2(padded) * self._surround_kernel_fft))
+            local_sq_energy = np.abs(energy_full[:h, :w])
+
+        # Normalize
+        return response / (self.semi_saturation ** 2
+                           + np.sqrt(local_sq_energy) + 1e-8)
+
+    # ================================================================
     # 图像编码
     # ================================================================
 
@@ -161,6 +231,8 @@ class GaborFilterBank:
         for i in range(self.n_filters):
             resp_full = np.real(ifft2(image_fft * self._kernel_ffts[i]))
             response = resp_full[:self.image_size, :self.image_size]
+            # Module B: divisive normalization (brightness constancy)
+            response = self._divisive_normalize(response)
             raw_means[i] = float(np.mean(np.abs(response)))
 
             modulated = response * self.gains[i]
@@ -221,6 +293,8 @@ class GaborFilterBank:
         for i in range(self.n_filters):
             resp_full = np.real(ifft2(image_fft * self._kernel_ffts[i]))
             response = resp_full[:self.image_size, :self.image_size]
+            # Module B: divisive normalization
+            response = self._divisive_normalize(response)
             modulated = response * self.gains[i]
 
             for ci, (sy, sx) in enumerate(v2_cells):
@@ -300,6 +374,8 @@ class GaborFilterBank:
         for i in range(n_f):
             resp_full = np.real(ifft2(image_fft * self._kernel_ffts[i]))
             response = resp_full[:self.image_size, :self.image_size]
+            # Module B: divisive normalization
+            response = self._divisive_normalize(response)
             modulated = response * self.gains[i]
             response_maps[i] = modulated
             global_features[i * 2] = float(np.mean(modulated))
@@ -419,6 +495,8 @@ class GaborFilterBank:
             for i in range(self.n_filters):
                 resp_full = np.real(ifft2(ch_fft * self._kernel_ffts[i]))
                 response = resp_full[:self.image_size, :self.image_size]
+                # Module B: divisive normalization
+                response = self._divisive_normalize(response)
                 modulated = response * self.gains[i]
 
                 filt_offset = ch_offset + i * n_cells * 2
@@ -426,6 +504,15 @@ class GaborFilterBank:
                     cell = modulated[sy, sx]
                     features[filt_offset + ci * 2] = float(np.mean(cell))
                     features[filt_offset + ci * 2 + 1] = float(np.std(cell))
+
+        # ---- 跨通道归一化 (Module B: 颜色恒常性) ----
+        # RG 和 BY 通道互相抑制: 一个通道强 → 抑制另一个
+        # 模拟 V1 双拮抗细胞的颜色恒常性
+        half_features = self.n_filters * n_cells * 2  # 256
+        rg_norm = float(np.linalg.norm(features[:half_features]))
+        by_norm = float(np.linalg.norm(features[half_features:]))
+        features[:half_features] /= (1.0 + by_norm)
+        features[half_features:] /= (1.0 + rg_norm)
 
         # ---- L2 归一化 ----
         norm = np.linalg.norm(features)
@@ -510,6 +597,8 @@ class GaborFilterBank:
 
                 resp_full = np.real(ifft2(image_fft * self._kernel_ffts[fi]))
                 response = resp_full[:ds_size, :ds_size]
+                # Module B: divisive normalization
+                response = self._divisive_normalize(response)
                 modulated = response * self.gains[fi]
 
                 # 全局 1×1 池化
@@ -566,7 +655,10 @@ class GaborFilterBank:
 
         for i in range(self.n_filters):
             resp_full = np.real(ifft2(image_fft * self._kernel_ffts[i]))
-            response_maps[i] = resp_full[:self.image_size, :self.image_size]
+            response = resp_full[:self.image_size, :self.image_size]
+            # Module B: divisive normalization
+            response = self._divisive_normalize(response)
+            response_maps[i] = response
 
         # ---- 合并为 8 个朝向图 (跨尺度平均) ----
         orient_maps = np.zeros(
@@ -613,6 +705,207 @@ class GaborFilterBank:
             features /= norm
 
         return features.astype(np.float32)
+
+    # ================================================================
+    # Saliency Map (Module C: 视觉显著性 + IOR)
+    # ================================================================
+
+    def compute_saliency(self, image: np.ndarray,
+                         attention_precision: float = 0.5
+                         ) -> tuple[np.ndarray, np.ndarray]:
+        """自底向上显著性图 — Center-Surround 差异。
+
+        生物类比:
+          上丘 (Superior Colliculus) + V1 显著性图
+          Center-surround 差异 → 定位"与众不同的区域"
+
+        算法:
+          1. 计算 32 个 Gabor 响应图
+          2. 对每个滤波器: center-surround 差异
+             center = 原始响应, surround = Gaussian 模糊 (σ=image_size/8)
+          3. 跨滤波器求和 → 原始显著性图
+          4. 跨尺度增强: fine scale (σ=2) vs coarse (σ=8) 差异
+          5. 归一化到 [0, 1]
+          6. L1 attention_precision 调制增益
+          7. IOR mask: 指数衰减抑制已关注位置
+
+        Args:
+            image: (H, W, 3) uint8 RGB
+            attention_precision: [0, 1] L1 注意力精度调制
+
+        Returns:
+            (saliency_map, attended_features)
+            saliency_map: (H, W) float32 [0, 1]
+            attended_features: weighted average of V1 features at salient locations
+        """
+        gray = self._preprocess(image)
+        fft_size = self.fft_size
+        gray_padded = np.zeros((fft_size, fft_size), dtype=np.float32)
+        gray_padded[:self.image_size, :self.image_size] = gray
+        image_fft = fft2(gray_padded)
+
+        h, w = self.image_size, self.image_size
+
+        # ---- Center-surround per filter ----
+        saliency = np.zeros((h, w), dtype=np.float32)
+
+        for i in range(self.n_filters):
+            resp_full = np.real(ifft2(image_fft * self._kernel_ffts[i]))
+            response = resp_full[:h, :w]
+            # Divisive normalization (Module B)
+            response = self._divisive_normalize(response)
+
+            # Center: 原始响应绝对值
+            center = np.abs(response)
+
+            # Surround: Gaussian 模糊 (sigma = image_size/8)
+            surround = uniform_filter(center, size=max(3, h // 4))
+
+            # |center - surround| → 局部异常 = 显著
+            cs_diff = np.abs(center - surround)
+            saliency += cs_diff
+
+        # ---- 跨尺度增强 ----
+        # Fine scale: 小 sigma (σ=2) 的 Gabor 对细节敏感
+        # Coarse scale: 大 sigma (σ=8) 的 Gabor 对整体敏感
+        # |fine - coarse| → 多尺度差异增强显著性
+        fine_idx = list(range(0, self.n_orientations))       # scale 0 (σ=2)
+        coarse_idx = list(range(
+            (self.n_scales - 1) * self.n_orientations,
+            self.n_filters))                                 # scale 3 (σ=8)
+
+        fine_map = np.zeros((h, w), dtype=np.float32)
+        coarse_map = np.zeros((h, w), dtype=np.float32)
+        for fi in fine_idx:
+            resp_full = np.real(ifft2(image_fft * self._kernel_ffts[fi]))
+            fine_map += np.abs(resp_full[:h, :w])
+        for fi in coarse_idx:
+            resp_full = np.real(ifft2(image_fft * self._kernel_ffts[fi]))
+            coarse_map += np.abs(resp_full[:h, :w])
+
+        cross_scale = np.abs(
+            fine_map / (len(fine_idx) + 1e-8)
+            - coarse_map / (len(coarse_idx) + 1e-8))
+        saliency += cross_scale
+
+        # ---- 归一化到 [0, 1] ----
+        smax = saliency.max()
+        if smax > 1e-8:
+            saliency /= smax
+
+        # ---- L1 attention_precision 调制 ----
+        # 高精度 → 增益高 → 更锐利的显著性 (更选择性的注意)
+        # 低精度 → 增益低 → 更平坦的显著性 (更分散的注意)
+        gain = 0.5 + attention_precision
+        saliency = np.tanh(gain * saliency)
+
+        # ---- IOR (Inhibition of Return) ----
+        if not hasattr(self, '_ior_mask'):
+            self._ior_mask = np.ones((h, w), dtype=np.float32)
+            self._ior_decay = 0.8   # 每步衰减因子
+            self._ior_boost = 0.3   # 当前注视点的抑制量
+
+        saliency_with_ior = saliency * self._ior_mask
+
+        # ---- 更新 IOR mask: 当前峰值位置被抑制 ----
+        peak_y, peak_x = np.unravel_index(
+            np.argmax(saliency), saliency.shape)
+        # 在峰值周围 8×8 区域施加抑制
+        r = h // 8
+        y0, y1 = max(0, peak_y - r), min(h, peak_y + r)
+        x0, x1 = max(0, peak_x - r), min(w, peak_x + r)
+        self._ior_mask[y0:y1, x0:x1] *= self._ior_boost
+        # 全局衰减 → 抑制逐渐消失
+        self._ior_mask = np.minimum(
+            1.0, self._ior_mask + (1.0 - self._ior_mask) * (1.0 - self._ior_decay))
+
+        # ---- 显著性加权的视觉特征 ----
+        # 对 V1 encoding 做显著性加权
+        attended_features = np.zeros(self.raw_dim, dtype=np.float32)
+        weight_sum = 0.0
+        for i in range(self.n_filters):
+            resp_full = np.real(ifft2(image_fft * self._kernel_ffts[i]))
+            response = np.abs(resp_full[:h, :w])
+            # 显著性加权的响应
+            weighted = response * saliency_with_ior
+            for ci, (sy, sx) in enumerate(self._grid_slices):
+                cell = weighted[sy, sx]
+                attended_features[i * self.n_cells * 2 + ci * 2] = float(np.mean(cell))
+                attended_features[i * self.n_cells * 2 + ci * 2 + 1] = float(np.std(cell))
+
+        wsum = float(np.sum(weighted))
+        if wsum > 1e-8:
+            attended_features /= wsum * 0.01  # 缩放到合理范围
+
+        return saliency_with_ior.astype(np.float32), attended_features.astype(np.float32)
+
+    def reset_ior(self):
+        """重置 IOR mask (切换图像时调用)"""
+        self._ior_mask = np.ones((self.image_size, self.image_size),
+                                 dtype=np.float32)
+
+    # ================================================================
+    # Predictive Coding Buffer (Module D: 视觉预测编码)
+    # ================================================================
+
+    def store_encoding(self, v1_vec: np.ndarray,
+                       v2_vec: np.ndarray = None,
+                       v4_vec: np.ndarray = None):
+        """存储最近的编码向量用于预测误差计算。
+
+        V1(t-1) → 预测 V1(t) — 时间平滑先验
+        V2 → 预测 V1    — 层级反馈预测
+        V4 → 预测 V2    — 层级反馈预测
+        """
+        self._last_v1 = v1_vec.copy()
+        self._last_v2 = v2_vec.copy() if v2_vec is not None else None
+        self._last_v4 = v4_vec.copy() if v4_vec is not None else None
+        self._has_last = True
+
+    def compute_prediction_error(self, v1_curr: np.ndarray,
+                                  v2_curr: np.ndarray = None,
+                                  v4_curr: np.ndarray = None
+                                  ) -> dict[str, float]:
+        """计算视觉预测误差。
+
+        Returns:
+            {temporal_v1_err, feedback_v1_err, feedback_v2_err, total}
+        """
+        result = {'temporal_v1_err': 0.0, 'feedback_v1_err': 0.0,
+                  'feedback_v2_err': 0.0, 'total': 0.0}
+
+        if not hasattr(self, '_has_last') or not self._has_last:
+            return result
+
+        # 时间预测误差: ||V1(t) - V1(t-1)||²
+        if self._last_v1 is not None:
+            diff = v1_curr - self._last_v1
+            # 对齐维度
+            min_len = min(len(v1_curr), len(self._last_v1))
+            result['temporal_v1_err'] = float(
+                np.sum(diff[:min_len] ** 2) / max(min_len, 1))
+
+        # 层级反馈预测误差: ||V1 - feedback(V2)||²
+        # feedback ≈ V2 的前 n 维 (粗略但生物合理 — 反馈连接保留低维结构)
+        if self._last_v2 is not None and v2_curr is not None:
+            n_dims = min(len(v1_curr), len(v2_curr))
+            # V2 粗粒度 → 上采样到 V1 维度 (简单复制/插值)
+            v2_upsampled = np.zeros(len(v1_curr), dtype=np.float32)
+            v2_upsampled[:n_dims] = v2_curr[:n_dims]
+            err = np.sum((v1_curr - v2_upsampled) ** 2) / max(len(v1_curr), 1)
+            result['feedback_v1_err'] = float(err)
+
+        if self._last_v4 is not None and v2_curr is not None:
+            n_dims = min(len(v2_curr), len(v4_curr))
+            v4_up = np.zeros(len(v2_curr), dtype=np.float32)
+            v4_up[:n_dims] = v4_curr[:n_dims]
+            err = np.sum((v2_curr - v4_up) ** 2) / max(len(v2_curr), 1)
+            result['feedback_v2_err'] = float(err)
+
+        result['total'] = (result['temporal_v1_err']
+                           + result['feedback_v1_err'] * 0.3
+                           + result['feedback_v2_err'] * 0.2)
+        return result
 
     # ================================================================
     # 图像预处理
