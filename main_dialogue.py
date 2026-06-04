@@ -1,12 +1,14 @@
 """
-main_dialogue.py —— Stage 6: 人机对话闭环 (v3: 视觉通道)
+main_dialogue.py —— Stage 6: 人机对话闭环 (v7: Stage 3 多模态感知)
 自由能原理智能体
 
 持续流模式: Agent 不等人类，10 FPS 持续循环。
 人类输入 → 语义编码 s[0:64] + 情感编码 s[80:88] → Agent 被对话改变。
 
-v3: 视觉通道 — 输入 img:<path> 让 Agent ""看到"" 图片并描述。
-     管线: 图像 → Gabor 编码 → 跨模态模型 V→T recall → 中文标签 → 对话。
+v7: Stage 3 多模态感知 —
+     Scene A: 图像 → Gabor 编码 → 跨模态检索 → 视觉属性 → 身体调制 → 情感影响
+     Scene B: 文本 → 跨模态视觉补全 ("苹果" → 脑补苹果的样子 → 丰富回应)
+     Scene C: 视觉特征 → Body ODE 调制 → F_body → valence/arousal 变化
 """
 import sys, time, queue, pickle, os as _os, numpy as np
 from data_types import D, BodyVector, Action, ACTION_DIRECTIONS
@@ -228,6 +230,444 @@ def _visual_recall(vis_brain: dict, image_path: str,
     return results
 
 
+# ================================================================
+# Stage 3: 跨模态视觉补全 — 文本 → 视觉联想 (Scene B)
+# ================================================================
+
+def _cross_modal_complete(vis_brain: dict, text_str: str,
+                          min_similarity: float = 0.25) -> dict | None:
+    """文本触发跨模态视觉补全: 听到"苹果" → 脑补苹果的样子。
+
+    策略: 检测文本中是否包含 COCO 类别中文名 → 用对应英文模板编码 →
+    在视觉大脑的 English PCA 空间中检索匹配簇。
+
+    MiniLM-L6-v2 是英文模型，直接用中文编码余弦 <0.1 (不可用)。
+    因此用中→英类别名桥接。
+
+    Args:
+        vis_brain: _setup_visual_brain() 返回的视觉大脑
+        text_str: 用户输入的中文文本
+        min_similarity: 最低文本相似度阈值
+
+    Returns:
+        None (未找到匹配) 或 dict:
+            visual_vec: (266,) 补全的视觉特征 s[64:330]
+            centroid: (330,) 最佳匹配簇的完整 centroid
+            similarity: 文本相似度
+            zh_category: 匹配到的中文类别
+            visual_attrs: 视觉属性描述
+    """
+    # ---- Step 1: 检测文本中包含的 COCO 类别 (中文关键词匹配) ----
+    mentioned_cats = []  # [(en_name, zh_name)]
+    for en_name, zh_name in COCO_CATEGORIES_ZH.items():
+        if zh_name in text_str:
+            mentioned_cats.append((en_name, zh_name))
+
+    if not mentioned_cats:
+        return None  # 没有具体物体 → 不触发视觉补全
+
+    # ---- Step 2: 用英文模板编码 (与 centroid 文本部分同空间) ----
+    st_model = vis_brain['st_model']
+    pca = vis_brain['pca']
+    net = vis_brain['net']
+
+    # 为每个提到的类别构建英文查询
+    EN_TEMPLATES = ['a photo of a {}', 'a {} in the scene',
+                    'an image containing a {}']
+
+    best_sim = -1.0
+    best_c = None
+    best_en_name = None
+    best_zh_name = None
+
+    for en_name, zh_name in mentioned_cats:
+        # 构建英文查询 (多个模板取平均 — 类似训练时的多模板)
+        en_queries = [tmpl.format(en_name) for tmpl in EN_TEMPLATES]
+        emb_full = st_model.encode(en_queries, show_progress_bar=False,
+                                   batch_size=len(en_queries))
+        emb_64 = pca.transform(emb_full).astype(np.float32)
+        # 多模板平均
+        emb_avg = emb_64.mean(axis=0)
+        emb_norm = np.linalg.norm(emb_avg)
+        if emb_norm > 1e-8:
+            emb_avg /= emb_norm
+
+        # 检索最佳匹配簇
+        for cl in net.clusters:
+            c_text = cl.centroid[:64].astype(np.float32)
+            c_norm = np.linalg.norm(c_text)
+            if c_norm < 1e-8:
+                continue
+            c_text = c_text / c_norm
+            sim = float(np.dot(c_text, emb_avg))
+            if sim > best_sim:
+                best_sim = sim
+                best_c = cl
+                best_en_name = en_name
+                best_zh_name = zh_name
+
+    if best_c is None or best_sim < min_similarity:
+        return None
+
+    # ---- Step 3: 提取视觉特征 ----
+    visual_vec = best_c.centroid[64:330].copy().astype(np.float32)
+
+    # 提取视觉属性
+    attrs = _extract_visual_attributes(visual_vec)
+
+    return {
+        'visual_vec': visual_vec,
+        'centroid': best_c.centroid.copy(),
+        'similarity': float(best_sim),
+        'zh_category': best_zh_name,
+        'visual_attrs': attrs,
+    }
+
+
+def _extract_visual_attributes(vis_vec: np.ndarray) -> dict:
+    """从 Gabor 视觉特征提取人类可读的视觉属性。
+
+    vis_vec 布局: V1[0:96] | V2[96:160] | V4[160:224] | Color[224:266]
+
+    由于 features 已经过逐通道 L2 归一化，不使用 norm（总为 1），
+    而是用通道内统计量: 均值(亮度/色调)、方差(复杂度)、偏度(纹理)。
+
+    Returns:
+        dict with keys:
+            brightness: str — "明亮的", "暗淡的", "黑暗的"
+            color_tone: str — "暖色调", "冷色调", "中性色调"
+            dominant_color: str — "偏红", "偏蓝", "偏绿", "偏黄"
+            texture: str — "纹理分明", "光滑"
+            shape: str — "棱角分明", "圆润"
+            brightness_val: float — [-1, 1]
+            warmth_val: float — [-1, 1]
+            complexity_val: float — [0, 1]
+    """
+    V1 = vis_vec[0:96]
+    V2 = vis_vec[96:160]
+    V4 = vis_vec[160:224]
+    Color = vis_vec[224:266]
+
+    # ---- 亮度: Color L 分量均值 (归一化后均值仍有信息) ----
+    color_l = Color[0:14]
+    brightness_raw = float(np.mean(color_l))
+    # 缩放: 归一化向量的均值范围约 [-1/sqrt(d), +1/sqrt(d)]
+    brightness_val = float(np.clip(brightness_raw * 4.0, -1.0, 1.0))
+
+    if brightness_val > 0.2:
+        brightness = "明亮的"
+    elif brightness_val < -0.2:
+        brightness = "暗淡的"
+    elif brightness_val < -0.5:
+        brightness = "黑暗的"
+    else:
+        brightness = ""
+
+    # ---- 色调解码: R-G 和 B-Y 对手通道均值 ----
+    rg = Color[14:28]
+    by_ = Color[28:42]
+    rg_val = float(np.mean(rg))
+    by_val = float(np.mean(by_))
+
+    # 放缩: 归一化后的均值范围较小
+    warmth_val = float(np.clip(rg_val * 4.0, -1.0, 1.0))
+
+    if warmth_val > 0.12:
+        color_tone = "暖色调"
+        if abs(by_val) < abs(rg_val):
+            dominant_color = "偏红"
+        else:
+            dominant_color = "偏黄"
+    elif warmth_val < -0.12:
+        color_tone = "冷色调"
+        if abs(by_val) < abs(rg_val):
+            dominant_color = "偏绿"
+        else:
+            dominant_color = "偏蓝"
+    elif by_val > 0.12 * 4:
+        color_tone = "暖色调"
+        dominant_color = "偏黄"
+    elif by_val < -0.12 * 4:
+        color_tone = "冷色调"
+        dominant_color = "偏蓝"
+    else:
+        color_tone = "中性色调"
+        dominant_color = ""
+
+    # ---- 纹理复杂度: V1 通道内方差 (高方差 = 边缘分布不均匀 = 纹理分明) ----
+    v1_var = float(np.var(V1))
+    v4_var = float(np.var(V4))
+    # 归一化向量的方差 ≈ 1/dim, 缩放使范围在 [0, 1]
+    complexity_val = float(np.clip((v1_var * 96 + v4_var * 64) / 2.0, 0.0, 1.0))
+
+    if complexity_val > 0.5:
+        texture = "纹理分明"
+    elif complexity_val < 0.2:
+        texture = "光滑"
+    else:
+        texture = ""
+
+    # ---- 形状: V4 方差 (曲率选择性) ----
+    if v4_var * 64 > 0.6:
+        shape = "棱角分明"
+    elif v4_var * 64 < 0.25:
+        shape = "圆润"
+    else:
+        shape = ""
+
+    return {
+        'brightness': brightness,
+        'color_tone': color_tone,
+        'dominant_color': dominant_color,
+        'texture': texture,
+        'shape': shape,
+        'brightness_val': brightness_val,
+        'warmth_val': warmth_val,
+        'complexity_val': complexity_val,
+    }
+
+
+def _extract_image_stats(img_np: np.ndarray) -> dict:
+    """从原始像素提取全局图像统计信息 (亮度, 色彩, 饱和度)。
+
+    与 Gabor 特征互补: Gabor 提取纹理/形状, 此函数提取全局色彩/亮度。
+    img_np: (H, W, 3) uint8 RGB 图像
+    """
+    img_float = img_np.astype(np.float32) / 255.0
+
+    # 亮度: 感知亮度 (0.299R + 0.587G + 0.114B)
+    luminance = 0.299 * img_float[..., 0] + 0.587 * img_float[..., 1] + 0.114 * img_float[..., 2]
+    mean_lum = float(np.mean(luminance))
+    brightness_val = float(np.clip((mean_lum - 0.5) * 2.0, -1.0, 1.0))
+
+    if brightness_val > 0.3:
+        brightness = "明亮的"
+    elif brightness_val < -0.3:
+        brightness = "暗淡的"
+    elif brightness_val < -0.6:
+        brightness = "黑暗的"
+    else:
+        brightness = ""
+
+    # 色彩: 平均 RGB → 色相/温暖度
+    mean_r = float(np.mean(img_float[..., 0]))
+    mean_g = float(np.mean(img_float[..., 1]))
+    mean_b = float(np.mean(img_float[..., 2]))
+
+    # 温暖度: 红-蓝对比
+    warmth_raw = (mean_r - mean_b) / max(mean_r + mean_g + mean_b, 0.01)
+    warmth_val = float(np.clip(warmth_raw * 3.0, -1.0, 1.0))
+
+    # 饱和度: RGB 标准差
+    saturation = float(np.std([mean_r, mean_g, mean_b]) * 3.0)
+
+    if warmth_val > 0.12:
+        color_tone = "暖色调"
+        if mean_r > mean_g and mean_r > mean_b:
+            dominant_color = "偏红"
+        elif mean_g > mean_r:
+            dominant_color = "偏黄"
+        else:
+            dominant_color = "偏暖"
+    elif warmth_val < -0.12:
+        color_tone = "冷色调"
+        if mean_b > mean_r and mean_b > mean_g:
+            dominant_color = "偏蓝"
+        elif mean_g > mean_r:
+            dominant_color = "偏绿"
+        else:
+            dominant_color = "偏冷"
+    else:
+        color_tone = "中性色调"
+        dominant_color = ""
+
+    return {
+        'brightness': brightness,
+        'color_tone': color_tone,
+        'dominant_color': dominant_color,
+        'brightness_val': brightness_val,
+        'warmth_val': warmth_val,
+        'saturation': saturation,
+    }
+
+
+def _extract_visual_attributes_from_raw(raw_features: dict) -> dict:
+    """从 RAW Gabor 特征提取视觉属性 (未归一化, 用于真实图像)。
+
+    与 _extract_visual_attributes() 不同: 输入是 img_enc.encode_from_path()
+    返回的原始 dict, 在归一化之前提取属性, 变化更丰富。
+
+    raw_features: {'v1': (96,), 'v2': (64,), 'v4': (64,), 'color': (42,)}
+    """
+    V1 = raw_features['v1']
+    V2 = raw_features['v2']
+    V4 = raw_features['v4']
+    Color = raw_features['color']
+
+    # ---- 亮度: Color[0:14] 原始均值 ----
+    color_l = Color[0:14]
+    brightness_raw = float(np.mean(color_l))
+    # 原始范围较大, 用 tanh 压缩
+    brightness_val = float(np.tanh(brightness_raw * 0.3))
+
+    if brightness_val > 0.15:
+        brightness = "明亮的"
+    elif brightness_val < -0.15:
+        brightness = "暗淡的"
+    elif brightness_val < -0.4:
+        brightness = "黑暗的"
+    else:
+        brightness = ""
+
+    # ---- 色调解码 ----
+    rg = Color[14:28]
+    by_ = Color[28:42]
+    rg_val = float(np.mean(rg))
+    by_val = float(np.mean(by_))
+
+    warmth_val = float(np.tanh(rg_val * 0.3))
+
+    if warmth_val > 0.1:
+        color_tone = "暖色调"
+        dominant_color = "偏红" if abs(rg_val) > abs(by_val) else "偏黄"
+    elif warmth_val < -0.1:
+        color_tone = "冷色调"
+        dominant_color = "偏绿" if abs(rg_val) > abs(by_val) else "偏蓝"
+    elif by_val > 0.05:
+        color_tone = "暖色调"; dominant_color = "偏黄"
+    elif by_val < -0.05:
+        color_tone = "冷色调"; dominant_color = "偏蓝"
+    else:
+        color_tone = "中性色调"; dominant_color = ""
+
+    # ---- 纹理复杂度: V1 原始 L2 范数 ----
+    v1_norm = float(np.linalg.norm(V1))
+    v4_norm = float(np.linalg.norm(V4))
+    # V1 norm 经验范围: 0.01-0.15 (未归一化)
+    complexity_val = float(np.clip(v1_norm * 8.0 + v4_norm * 0.15, 0.0, 1.0))
+
+    if complexity_val > 0.45:
+        texture = "纹理分明"
+    elif complexity_val < 0.15:
+        texture = "光滑"
+    else:
+        texture = ""
+
+    # ---- 形状: V4 原始范数 ----
+    v4_scaled = v4_norm * 0.15
+    if v4_scaled > 0.55:
+        shape = "棱角分明"
+    elif v4_scaled < 0.2:
+        shape = "圆润"
+    else:
+        shape = ""
+
+    return {
+        'brightness': brightness,
+        'color_tone': color_tone,
+        'dominant_color': dominant_color,
+        'texture': texture,
+        'shape': shape,
+        'brightness_val': brightness_val,
+        'warmth_val': warmth_val,
+        'complexity_val': complexity_val,
+    }
+
+
+def _build_visual_attribute_text(attrs: dict) -> str:
+    """将视觉属性拼接为自然的中文描述短语。
+
+    例如: "明亮的暖色调，纹理分明，棱角分明"
+    """
+    parts = []
+    if attrs.get('brightness'):
+        parts.append(attrs['brightness'])
+    if attrs.get('color_tone') and attrs['color_tone'] != '中性色调':
+        parts.append(attrs['color_tone'])
+    if attrs.get('dominant_color'):
+        parts.append(attrs['dominant_color'])
+    if attrs.get('texture'):
+        parts.append(attrs['texture'])
+    if attrs.get('shape'):
+        parts.append(attrs['shape'])
+    return "，".join(parts) if parts else ""
+
+
+def _visual_body_modulation(vis_vec: np.ndarray, body,
+                            intensity: float = 1.0) -> dict:
+    """视觉特征 → 身体通道调制 (Scene C: 视觉影响情感)。
+
+    根据视觉属性微调 body.b 通道，这些变化流入 F_body → valence/arousal。
+
+    映射:
+      - 暗场景 → b[2] 压力 ↑ (进化: 黑暗=危险)
+      - 暖色/红色 → b[1] 能量 ↑ + b[2] 压力 ↑ (血液/火焰=唤醒)
+      - 冷色/蓝色 → b[2] 压力 ↓ (天空/水=平静)
+      - 高复杂度 → b[7] 认知负荷 ↑
+      - 高饱和度 → b[5] 视觉刺激 ↑
+      - 亮度 → b[4] 专注度 ↑ (明亮=警觉)
+
+    Args:
+        vis_vec: (266,) 视觉特征
+        body: BodyVector 实例 (原地修改)
+        intensity: 调制强度 [0, 2], 1.0=默认
+
+    Returns:
+        dict: 调制信息 (用于日志)
+    """
+    attrs = _extract_visual_attributes(vis_vec)
+    brightness = attrs['brightness_val']
+    warmth = attrs['warmth_val']
+    complexity = attrs['complexity_val']
+
+    mods = {}
+
+    # b[2] 压力: 暗 + 暖(红) → 压力↑; 亮 + 冷 → 压力↓
+    # 调制幅度 ~0.03-0.08 (足以产生可测量的 F_body 变化)
+    stress_mod = intensity * 0.06 * (
+        -brightness * 0.6          # 暗 → 压力
+        + warmth * 0.4             # 红色 → 压力
+        - (1.0 - abs(warmth)) * 0.1  # 中性色 → 轻微平静
+    )
+    body.b[2] = float(np.clip(body.b[2] + stress_mod, 0.0, 1.0))
+    mods['stress'] = stress_mod
+
+    # b[1] 能量: 亮度 + 暖色 → 能量↑
+    energy_mod = intensity * 0.05 * (
+        brightness * 0.5           # 亮 → 精力充沛
+        + abs(warmth) * 0.3        # 强色调 → 情绪激活
+        + complexity * 0.2         # 复杂 → 思维活跃
+    )
+    body.b[1] = float(np.clip(body.b[1] + energy_mod, 0.0, 1.0))
+    mods['energy'] = energy_mod
+
+    # b[5] 视觉刺激: 复杂度 + 饱和度
+    vis_stim_mod = intensity * 0.08 * (complexity * 0.7 + abs(warmth) * 0.3)
+    body.b[5] = float(np.clip(body.b[5] + vis_stim_mod, 0.0, 1.0))
+    mods['visual_stim'] = vis_stim_mod
+
+    # b[7] 认知负荷: 复杂度 → 负荷
+    cog_mod = intensity * 0.04 * complexity
+    body.b[7] = float(np.clip(body.b[7] + cog_mod, 0.0, 1.0))
+    mods['cognitive_load'] = cog_mod
+
+    # b[4] 专注度: 亮度 → 警觉
+    focus_mod = intensity * 0.03 * (brightness * 0.5 + complexity * 0.3)
+    body.b[4] = float(np.clip(body.b[4] + focus_mod, 0.0, 1.0))
+    mods['focus'] = focus_mod
+
+    # b[0] 社交: 中性偏正 (看到东西 = 与世界连接)
+    social_mod = intensity * 0.02
+    body.b[0] = float(np.clip(body.b[0] + social_mod, 0.0, 1.0))
+    mods['social'] = social_mod
+
+    return {
+        'modulations': mods,
+        'attributes': attrs,
+        'attribute_text': _build_visual_attribute_text(attrs),
+    }
+
+
 def run_dialogue():
     rng = np.random.default_rng(42)
     agent = Agent(rng=rng, agent_id=0, n_agents=1)
@@ -270,15 +710,18 @@ def run_dialogue():
     comprehension_vec = np.zeros(64, dtype=np.float32)     # Wernicke 理解向量
     emo_lexicon = get_emotional_lexicon()                  # Hebb 情感词汇网络
     t = 0; expr_cooldown = 0; inner_cooldown = 0
+    n_visual_inputs = 0    # Stage 3: 视觉输入计数
+    n_cross_modal = 0      # Stage 3: 跨模态补全计数
 
     print("=" * 60)
-    print("  自由能原理智能体 — Stage 6: 人机对话 (v6: 视觉)")
-    print("  v6: Wernicke 理解 + Hebb 词序链 + 响应评估 + 视觉通道")
+    print("  自由能原理智能体 — Stage 6: 人机对话 (v7: 多模态感知)")
+    print("  v7: Scene A 看图描述 | Scene B 文本→视觉联想 | Scene C 视觉→情感")
     print("=" * 60)
     print("  你说的话会改变 Agent 的情感状态")
     print("  温暖的话 → F_social ↓ → valence ↑ → Agent 感到好")
     print("  攻击的话 → F_social ↑ → valence ↓ → Agent 感到不好")
     print("  Agent 先理解，再回忆，然后用自己的话说出来")
+    print("  提到具体物体 → Agent 脑补视觉特征 → 回应更丰富")
     print("  沉默时 Agent 会自己「想」→ 内部言语链")
     if vis_brain:
         print("  🖼️ 输入 'img:path/to/image.jpg' 让 Agent \"看到\" 图片")
@@ -355,20 +798,56 @@ def run_dialogue():
                     last_human_vec = s[0:64].copy()
 
                     # 视觉通道: 填入 Gabor 特征
+                    vis_attrs = None; vis_attr_text = ""; body_mod = None
                     try:
                         vis_feat = img_enc.encode_from_path(img_path)
                         s_vis = build_visual_sensory(vis_feat)
                         s[64:330] = s_vis[64:330]
+
+                        # Stage 3: 合并像素统计 + Gabor 属性
+                        from PIL import Image
+                        img_np = np.array(Image.open(img_path).convert('RGB'))
+                        pixel_stats = _extract_image_stats(img_np)
+                        gabor_attrs = _extract_visual_attributes_from_raw(vis_feat)
+                        # 合并: 像素提供亮度/色调, Gabor 提供纹理/形状
+                        vis_attrs = {
+                            **pixel_stats,
+                            'texture': gabor_attrs['texture'],
+                            'shape': gabor_attrs['shape'],
+                            'complexity_val': gabor_attrs['complexity_val'],
+                        }
+                        vis_attr_text = _build_visual_attribute_text(vis_attrs)
+
+                        # 身体调制 (用归一化特征计算身体影响)
+                        body_mod = _visual_body_modulation(s[64:330], agent.body,
+                                                          intensity=1.0)
                     except Exception:
                         pass
 
-                    # 中性偏正情感编码 (看到东西通常是好奇/中性)
+                    # 情感编码: 视觉属性影响初始情感
+                    # 暗色场景 → 负效价倾向; 亮色场景 → 正效价倾向
+                    if vis_attrs:
+                        vis_valence_bias = (
+                            vis_attrs['brightness_val'] * 0.3
+                            - abs(vis_attrs['warmth_val']) * 0.1
+                        )
+                        vis_arousal_bias = (
+                            abs(vis_attrs['brightness_val']) * 0.2
+                            + vis_attrs['complexity_val'] * 0.3
+                        )
+                    else:
+                        vis_valence_bias = 0.2
+                        vis_arousal_bias = 0.3
                     s[80:88] = np.array(
-                        [0.2, 0.0, 0.0, 0.0, 0.3, 0.0, 0.1, 0.0],
+                        [vis_arousal_bias, 0.0, 0.0, 0.0,
+                         vis_arousal_bias, 0.0,
+                         float(np.clip(vis_valence_bias, -1.0, 1.0)), 0.0],
                         dtype=np.float32)
 
                     # 更新社会上下文
-                    social_ctx.update(0.2, 0.3)  # mildly positive, curious
+                    social_ctx.update(
+                        float(np.clip(vis_valence_bias, -1.0, 1.0)),
+                        float(np.clip(vis_arousal_bias, 0.0, 1.0)))
 
                     # Wernicke 理解
                     human_sent = s[80:88].astype(np.float32)
@@ -378,8 +857,16 @@ def run_dialogue():
                     # 显示
                     print(f"\n[You] 🖼️: {human_text.strip()}")
                     print(f"       → Agent 看到: {visual_context}")
+                    if vis_attr_text:
+                        print(f"       → 视觉属性: {vis_attr_text}")
                     if extra_text:
                         print(f"       → 附带问题: {extra_text}")
+                    if body_mod:
+                        mods = body_mod['modulations']
+                        print(f"       → 身体调制: stress={mods['stress']:+.3f} "
+                              f"energy={mods['energy']:+.3f} "
+                              f"vis={mods['visual_stim']:+.3f}")
+                    n_visual_inputs += 1
                     print(f"       vision_input=True "
                           f"understood={understanding['n_triggered_memories']}mem")
                 else:
@@ -400,6 +887,28 @@ def run_dialogue():
                     # 更新社会上下文
                     social_ctx.update(sentiment['valence'], sentiment['arousal'])
 
+                    # ---- Stage 3: 跨模态视觉补全 (Scene B) ----
+                    # 文本触发视觉联想: "苹果" → 脑补苹果的样子
+                    cross_modal_info = None
+                    if vis_brain is not None:
+                        cross_modal_info = _cross_modal_complete(
+                            vis_brain, human_text.strip(), min_similarity=0.25)
+                        if cross_modal_info is not None:
+                            # 填入视觉特征到 s[64:330]
+                            s[64:330] = cross_modal_info['visual_vec']
+                            # 视觉 → 身体调制 (Scene C: 情感影响)
+                            body_mod = _visual_body_modulation(
+                                cross_modal_info['visual_vec'], agent.body,
+                                intensity=0.6)  # 文本触发 = 弱调制
+                            # 视觉属性 → 情感信号微调 (Scene C)
+                            vis_attrs = cross_modal_info['visual_attrs']
+                            vis_v_bias = vis_attrs['brightness_val'] * 0.08
+                            vis_a_bias = vis_attrs['complexity_val'] * 0.1
+                            s[86] = float(np.clip(
+                                s[86] + vis_v_bias, -1.0, 1.0))
+                            s[81] = float(np.clip(
+                                s[81] + vis_a_bias, 0.0, 1.0))
+
                     # ---- Wernicke 区: 理解人类输入 ----
                     human_sent = social_signal[:8].astype(np.float32)
                     comprehension_vec, understanding = agent.comprehend(
@@ -416,6 +925,14 @@ def run_dialogue():
                           f"trust={social_ctx.trust_level:.2f} "
                           f"understood={understanding['n_triggered_memories']}mem "
                           f"emo_words={emo_lexicon.get_stats()['n_words']}")
+                    if cross_modal_info:
+                        n_cross_modal += 1
+                        vis_attrs = cross_modal_info['visual_attrs']
+                        attr_text = _build_visual_attribute_text(vis_attrs)
+                        print(f"       🧠 视觉联想: {cross_modal_info['zh_category']} "
+                              f"(sim={cross_modal_info['similarity']:.3f})")
+                        if attr_text:
+                            print(f"       → 视觉属性: {attr_text}")
 
             else:
                 # 沉默: 语料背景 + 10% 上一句人类残差
@@ -723,7 +1240,10 @@ def run_dialogue():
                       f"F={Fa:.3f} Fb={Fb:.3f} Fs={Fs:.3f} "
                       f"V={v:+.2f} A={a:.2f} "
                       f"self-V={sv:+.2f} coh={coh:.2f} "
-                      f"b0={agent.body.b[0]:.2f} C={agent.net.n_clusters} "
+                      f"b[0]={agent.body.b[0]:.2f} b[1]={agent.body.b[1]:.2f} "
+                      f"b[2]={agent.body.b[2]:.2f} b[5]={agent.body.b[5]:.2f} "
+                      f"C={agent.net.n_clusters} "
+                      f"vis={n_visual_inputs} x={n_cross_modal} "
                       f"mem={dc.n_turns()} self={sm.n_experiences}{cb_str}")
 
             t += 1
@@ -751,7 +1271,9 @@ def run_dialogue():
     print(f"  Steps: {t}  |  Clusters: {agent.net.n_clusters}")
     print(f"  Final valence: {v_final:+.2f}")
     print(f"  Final trust:   {trust_final:.2f}")
-    print(f"  Body b0:       {agent.body.b[0]:.2f}")
+    print(f"  Body: b0={agent.body.b[0]:.2f} b1={agent.body.b[1]:.2f} "
+          f"b2={agent.body.b[2]:.2f} b5={agent.body.b[5]:.2f} b7={agent.body.b[7]:.2f}")
+    print(f"  Visual inputs: {n_visual_inputs}  |  Cross-modal: {n_cross_modal}")
     print(f"  Interactions:  {social_ctx.n_interactions}")
     print(f"  Self-model:    {agent.self_model.n_experiences} exp, "
           f"{agent.self_model.net.n_clusters} clusters{cb_info}")
