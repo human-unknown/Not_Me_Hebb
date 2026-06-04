@@ -1,0 +1,89 @@
+<h2>Module B 详细设计: Divisive Normalization 亮度/颜色恒常性</h2>
+<p class="subtitle">修改文件: layer0_visual.py (GaborFilterBank 类)</p>
+
+<div class="section">
+  <h3>新增内容</h3>
+
+  <div class="mockup" style="margin-bottom:16px;">
+    <div class="mockup-header">新增方法: _divisive_normalize(response_map, filter_idx) → normalized_map</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:13px;padding:12px;">
+<strong>输入:</strong> 单个 Gabor 滤波器的响应图 (64×64)<br>
+<strong>输出:</strong> 归一化后的响应图<br><br>
+
+<strong>计算步骤:</strong><br>
+1. 构建 surround 高斯核 (σ=image_size/16, radius=image_size/16)<br>
+2. 对响应取绝对值 → 用 surround 核卷积 → 得到局部能量估计<br>
+3. normalized = response / (semi_saturation² + local_energy)<br>
+4. 对颜色通道: 额外做跨通道归一化 (RG 和 BY 互除)<br><br>
+
+<strong>参数 (硬编码, 不加入 Theta):</strong><br>
+  semi_saturation = 0.1  (仿 V1 的 σ² 半饱和常数)<br>
+  surround_sigma = image_size / 16  (≈4 像素 for 64×64)<br>
+  surround_radius = image_size // 16  (≈4 像素)
+    </div>
+  </div>
+
+  <div class="mockup" style="margin-bottom:16px;">
+    <div class="mockup-header">修改方法: encode(), encode_v2(), encode_v4(), encode_color()</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:13px;padding:12px;">
+<strong>在现有管线中的插入点:</strong><br><br>
+
+encode():<br>
+  for i in range(n_filters):<br>
+    response = ifft2(image_fft * kernel_ffts[i])  <span style="color:#888;">← 现有</span><br>
+    <span style="background:#c8e6c9;padding:1px 4px;">response = _divisive_normalize(response, i)  ← 新增</span><br>
+    modulated = response * gains[i]               <span style="color:#888;">← 现有</span><br><br>
+
+encode_color():<br>
+  for each opponent channel (RG, BY):<br>
+    ... Gabor 卷积 ...<br>
+    <span style="background:#c8e6c9;padding:1px 4px;">response = _divisive_normalize(response, i)  ← 新增</span><br>
+    <span style="background:#c8e6c9;padding:1px 4px;">跨通道归一化: RG_norm /= (1 + BY_local_energy)  ← 新增</span>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">预计算 (__init__ 中): surround 卷积核</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:13px;padding:12px;">
+# 在 __init__ 中新增:<br>
+surround_size = self.image_size // 16 * 2 + 1  # ≈9<br>
+self._surround_kernel = gaussian_2d(sigma=image_size/16, size=surround_size)<br>
+self._surround_kernel_fft = fft2(pad_to_fft_size(surround_kernel))  # 预计算 FFT<br><br>
+
+# _divisive_normalize 中用 FFT 卷积 (与现有 Gabor 卷积一致):<br>
+local_energy = |ifft2(fft2(|response|) * surround_kernel_fft)|<br>
+normed = response / (semi_sat² + local_energy)
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>验收标准</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <tr style="background:#e8f5e9;">
+      <th style="padding:10px;text-align:left;border:1px solid #c8e6c9;">#</th>
+      <th style="padding:10px;text-align:left;border:1px solid #c8e6c9;">测试</th>
+      <th style="padding:10px;text-align:left;border:1px solid #c8e6c9;">通过条件</th>
+    </tr>
+    <tr>
+      <td style="padding:10px;border:1px solid #e0e0e0;">B1</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">同一图像，亮度变暗 50% → 编码余弦相似度</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">cosine > 0.85 (归一化前基线 < 0.7)</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border:1px solid #e0e0e0;">B2</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">同一图像，色调偏移 (加蓝色滤镜) → 颜色编码相似度</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">color cosine > 0.75 (归一化前基线 < 0.6)</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border:1px solid #e0e0e0;">B3</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">Stage 2 COCO V→T top-5 retrieval</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">不退化 (保持在归一化前 ±2% 以内)</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border:1px solid #e0e0e0;">B4</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">编码速度</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">单张编码 < 1.5× 当前耗时</td>
+    </tr>
+  </table>
+</div>

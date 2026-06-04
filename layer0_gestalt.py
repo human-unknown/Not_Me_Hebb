@@ -505,23 +505,19 @@ class GestaltGrouping:
         # 5. 图底分离
         _, fg_features = self.figure_ground_mask(rmap)
 
-        # 拼接 — 每组独立 L2 归一化后拼接, 保证各组等权重
-        def _norm(v):
-            n = np.linalg.norm(v)
-            return v / (n + 1e-8) if n > 1e-8 else v
-
+        # 拼接 — 保留各组原始尺度, 不强制等权重
+        # 不同图像的 gestalt 特征应有不同的范数, 否则会支配质心相似度
         grouping_vector = np.concatenate([
-            _norm(proximity),    # 4
-            _norm(contours),     # 4
-            _norm(similarity),   # 4
-            _norm(symmetry),     # 3
-            _norm(fg_features),  # 4
+            proximity,    # 4
+            contours,     # 4
+            similarity,   # 4
+            symmetry,     # 3
+            fg_features,  # 4
         ])  # total = 19
 
-        # 全局 L2 归一化
-        norm = np.linalg.norm(grouping_vector)
-        if norm > 1e-8:
-            grouping_vector /= norm
+        # 温和归一化: 缩放到单位方差, 不强制单位范数
+        # 使用全局统计标准化而非 per-sample L2
+        grouping_vector = np.tanh(grouping_vector * 0.5)
 
         return grouping_vector.astype(np.float32)
 

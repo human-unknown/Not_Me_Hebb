@@ -42,3 +42,6 @@ images/
 # Temporary
 *.tmp
 *.log
+
+# Claude Code plugin (superpowers)
+.claude/superpowers/

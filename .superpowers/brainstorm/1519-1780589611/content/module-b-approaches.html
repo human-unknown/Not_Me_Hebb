@@ -1,0 +1,83 @@
+<h2>Module B: 亮度/颜色恒常性 — 三种实现方式</h2>
+<p class="subtitle">目标: 同一物体在不同光照下产生一致的 Gabor 编码，减少集群碎片化</p>
+
+<div class="options">
+  <div class="option" data-choice="b-approach-1" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>前置归一化 (Pre-Gabor Normalization)</h3>
+      <p>在 Gabor 编码<strong>之前</strong>对原始图像做归一化：DoG 局部对比度 + Gray World 白平衡。类似相机 ISP 管线。</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>改动最小 — 只加一个 <code>_preprocess_constancy()</code> 方法</li>
+          <li>所有后续编码自动受益</li>
+          <li>计算快 (O(N) 线性)</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>不太"生物" — 视网膜/LGN 做的是局部增益控制，不是全局白平衡</li>
+          <li>Gray World 假设在某些场景失效（如纯色物体主导）</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b-approach-2" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>后置归一化 (Post-Gabor Gain Control) ★ 推荐</h3>
+      <p>在 Gabor 响应<strong>之后</strong>，对每个滤波器的响应做局部对比度归一化（divisive normalization）。模拟 V1 的 surround suppression / gain control。</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>生物精确 — V1 简单细胞确实有 surround suppression</li>
+          <li>与现有 Hebb gain 可以统一 (gain = 可塑性 + 归一化)</li>
+          <li>对局部和全局光照变化都鲁棒</li>
+          <li>符合 FEP — 归一化 = 降低冗余预测误差</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>需要修改 encode() 内部逻辑，比 A 复杂</li>
+          <li>需要调 surround 半径参数</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b-approach-3" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>双通路 (Dual-Path: Pre + Post)</h3>
+      <p>同时做前置全局白平衡 + 后置局部 divisive normalization。最完整但最重。</p>
+      <div class="pros-cons" style="margin-top:8px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>最鲁棒 — 覆盖全局和局部两种光照变化</li>
+          <li>类似生物双通路：Parvo(颜色) + Magno(亮度)</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>计算量最大</li>
+          <li>可能与现有 Hebb gain 产生交互副作用</li>
+          <li>过度归一化可能抹掉有用的亮度信息</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>B 方案细节 (推荐): 生物启发的 Divsive Normalization</h3>
+  <div class="mockup">
+    <div class="mockup-header">数学: R_norm[i,x,y] = R[i,x,y] / (σ² + Σ_j w(j) * R[j,x,y]²)</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:13px;padding:12px;">
+R[i,x,y] = |Gabor 响应|  (滤波器 i, 位置 x,y)<br>
+R_norm = R[i,x,y] / (σ² + Σ_{j∈neighborhood(i)} Σ_{dx,dy∈surround} w(j,dx,dy) × R[j,x+dx,y+dy]²)<br><br>
+其中:<br>
+  σ² = 半饱和常数 (默认 0.1)<br>
+  neighborhood(i) = 同尺度的 4 个相邻朝向滤波器<br>
+  surround = 3×3 空间邻域<br>
+  w = 高斯权重 (σ_surround = 1.5 像素)
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>对颜色通道的处理</h3>
+  <p>在 <code>encode_color()</code> 中额外加一步：对 RG/BY opponent 响应做相同的 divisive normalization，实现<strong>颜色恒常性</strong>——这是现有管线完全没有的。</p>
+</div>

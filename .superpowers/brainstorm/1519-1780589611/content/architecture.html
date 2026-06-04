@@ -1,0 +1,96 @@
+<h2>NotMe 视觉管线 — 现状 vs 拟新增模块</h2>
+<p class="subtitle">四个拟新增模块（绿）在现有管线（蓝）中的位置</p>
+
+<div class="section">
+  <h3>现有管线（蓝）</h3>
+  <div class="mockup">
+    <div class="mockup-header">当前: 图像 → Gabor → V1 → V2 → V4 → Color/Dorsal/Pulvinar → PCA → ClusterNetwork Hebb</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.8; padding: 16px;">
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">图像 (64×64 RGB)</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">GaborFilterBank<br>(32 filters, 4sc×8or)</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">V1 encode<br>4×4 grid pool</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">V2 encode<br>2×2 + 角点</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">V4 encode<br>1×1 + 曲率</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">Color/Dorsal/<br>Pulvinar</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">PCA → 64d</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">ClusterNetwork<br>.learn(s)</span>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>拟新增模块（绿）— 对应知觉律缺失</h3>
+  <div class="mockup">
+    <div class="mockup-header" style="background:#e8f5e9;">新管线: 预处理 → Gabor → Gestalt分组 → V1→V2→V4(预测编码) → 恒常性 → 显著性 → PCA → Hebb</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 13px; line-height: 1.8; padding: 16px;">
+      <span style="background:#c8e6c9;padding:2px 8px;border-radius:3px;font-weight:bold;">🅑 亮度/颜色恒常性<br>DoG + GrayWorld</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">GaborFilterBank</span> →
+      <span style="background:#c8e6c9;padding:2px 8px;border-radius:3px;font-weight:bold;">🅐 格式塔分组<br>邻近+共线+相似<br>+对称+图底分离</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">V1→V2→V4<br></span>
+      <span style="background:#fff3e0;padding:2px 8px;border-radius:3px;font-weight:bold;">🅓 视觉预测编码<br>层间预测误差</span> →
+      <span style="background:#c8e6c9;padding:2px 8px;border-radius:3px;font-weight:bold;">🅒 视觉显著性图<br>Center-surround<br>+ 注意精度调制</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">PCA → 64d</span> →
+      <span style="background:#e3f2fd;padding:2px 8px;border-radius:3px;">ClusterNetwork</span>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>四个模块概览</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px;">
+    <tr style="background:#e8f5e9;">
+      <th style="padding:10px;text-align:left;border:1px solid #c8e6c9;">模块</th>
+      <th style="padding:10px;text-align:left;border:1px solid #c8e6c9;">文件</th>
+      <th style="padding:10px;text-align:left;border:1px solid #c8e6c9;">弥补的知觉律</th>
+      <th style="padding:10px;text-align:left;border:1px solid #c8e6c9;">复杂度</th>
+    </tr>
+    <tr>
+      <td style="padding:10px;border:1px solid #e0e0e0;"><strong>🅐 格式塔分组层</strong></td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">layer0_gestalt.py (新)</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">邻近律、连续律、相似律、对称律、闭合律、图底分离</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">高 ⭐⭐⭐</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border:1px solid #e0e0e0;"><strong>🅑 亮度/颜色恒常性</strong></td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">layer0_visual.py (修改)</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">亮度恒常性、颜色恒常性、同时对比</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">低 ⭐</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border:1px solid #e0e0e0;"><strong>🅒 视觉显著性图</strong></td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">layer0_visual.py (修改)</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">自底向上显著性、IOR、注意精度调制</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">中 ⭐⭐</td>
+    </tr>
+    <tr>
+      <td style="padding:10px;border:1px solid #e0e0e0;"><strong>🅓 视觉预测编码</strong></td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">layer1_free_energy.py (修改)</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">层级预测误差、精度加权、V1↔V2↔V4交互</td>
+      <td style="padding:10px;border:1px solid #e0e0e0;">中 ⭐⭐</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>与项目核心原则的兼容性</h3>
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>✅ 不违反的原则</h4>
+      <ul>
+        <li>纯数学/信号处理，零训练参数（除 Hebb gain 外）</li>
+        <li>基于 FEP：分组 = 降低预测误差，显著性 = 精度调制</li>
+        <li>基于 Hebb：分组响应共激活 → wire together</li>
+        <li>不依赖 LLM，不预设符号</li>
+        <li>所有机制有明确的生物对应脑区</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>⚠️ 需注意的风险</h4>
+      <ul>
+        <li>四个模块同时加 → 管线变长，编码速度可能下降</li>
+        <li>格式塔分组需要仔细的参数调校</li>
+        <li>预测编码需要与现有 F_accuracy 机制整合</li>
+      </ul>
+    </div>
+  </div>
+</div>

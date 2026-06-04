@@ -236,12 +236,14 @@ class COCOLoader:
         self.images = self.coco_data['images'][:n_images]
         self.n_images = len(self.images)
 
-        # ---- 视觉特征编码 (Gabor V1+V2+V4+Color) ----
+        # ---- 视觉特征编码 (Gabor V1+V2+V4+Gestalt+Color) ----
         from layer0_visual import GaborFilterBank
+        from layer0_gestalt import compute_gestalt_from_image
         self._gabor = GaborFilterBank(image_size=image_size, grid_size=4)
 
         cache_dir = os.path.join(base, '.cache')
-        cache_key = f'coco_val2017_{self.n_images}_sz{image_size}_gabor_v1v2v4color'
+        cache_key = (f'coco_val2017_{self.n_images}_sz{image_size}'
+                     f'_gabor_v1v2v4gestaltcolor')
         cache_path = os.path.join(cache_dir, f'{cache_key}.npz')
 
         if os.path.exists(cache_path):
@@ -250,12 +252,18 @@ class COCOLoader:
             self.encodings_v1 = cached['v1']
             self.encodings_v2 = cached['v2']
             self.encodings_v4 = cached['v4']
+            self.encodings_gestalt = cached.get('gestalt', None)
             self.encodings_color = cached['color']
+            if self.encodings_gestalt is None:
+                # Old cache without gestalt → compute on the fly below
+                self.encodings_gestalt = np.zeros(
+                    (self.n_images, GESTALT_WIDTH), dtype=np.float32)
         else:
-            print(f"  Encoding {self.n_images} COCO images [Gabor V1+V2+V4+Color]...")
+            print(f"  Encoding {self.n_images} COCO images [Gabor V1+V2+V4+Gestalt+Color]...")
             self.encodings_v1 = np.zeros((self.n_images, V1_WIDTH), dtype=np.float32)
             self.encodings_v2 = np.zeros((self.n_images, V2_WIDTH), dtype=np.float32)
             self.encodings_v4 = np.zeros((self.n_images, V4_WIDTH), dtype=np.float32)
+            self.encodings_gestalt = np.zeros((self.n_images, GESTALT_WIDTH), dtype=np.float32)
             self.encodings_color = np.zeros((self.n_images, 64), dtype=np.float32)
 
             for i, img_info in enumerate(self.images):
@@ -269,26 +277,35 @@ class COCOLoader:
                     v2_raw = self._gabor.encode_v2(img_np)
                     v4_raw = self._gabor.encode_v4(img_np)
                     color_raw = self._gabor.encode_color(img_np)
+                    # Module A: gestalt features
+                    gestalt_raw = compute_gestalt_from_image(
+                        img_np, self._gabor)
 
                     self.encodings_v1[i, :] = v1_raw[:V1_WIDTH] if len(v1_raw) >= V1_WIDTH else np.pad(v1_raw, (0, V1_WIDTH - len(v1_raw)))
                     self.encodings_v2[i, :] = v2_raw[:V2_WIDTH] if len(v2_raw) >= V2_WIDTH else np.pad(v2_raw, (0, V2_WIDTH - len(v2_raw)))
                     self.encodings_v4[i, :] = v4_raw[:V4_WIDTH] if len(v4_raw) >= V4_WIDTH else np.pad(v4_raw, (0, V4_WIDTH - len(v4_raw)))
+                    self.encodings_gestalt[i, :] = gestalt_raw[:GESTALT_WIDTH] if len(gestalt_raw) >= GESTALT_WIDTH else np.pad(gestalt_raw, (0, GESTALT_WIDTH - len(gestalt_raw)))
                     self.encodings_color[i, :] = color_raw[:64] if len(color_raw) >= 64 else np.pad(color_raw, (0, 64 - len(color_raw)))
                 except Exception:
                     pass
 
             for arr in [self.encodings_v1, self.encodings_v2,
-                         self.encodings_v4, self.encodings_color]:
+                         self.encodings_v4, self.encodings_gestalt,
+                         self.encodings_color]:
                 norms = np.linalg.norm(arr, axis=1, keepdims=True)
                 arr[:] = arr / (norms + 1e-8)
 
             np.savez_compressed(cache_path,
                                v1=self.encodings_v1, v2=self.encodings_v2,
-                               v4=self.encodings_v4, color=self.encodings_color)
+                               v4=self.encodings_v4,
+                               gestalt=self.encodings_gestalt,
+                               color=self.encodings_color)
             print(f"  Cached: {cache_path}")
 
         print(f"  V1: {self.encodings_v1.shape}, V2: {self.encodings_v2.shape}, "
-              f"V4: {self.encodings_v4.shape}, Color: {self.encodings_color.shape}")
+              f"V4: {self.encodings_v4.shape}, "
+              f"Gestalt: {self.encodings_gestalt.shape}, "
+              f"Color: {self.encodings_color.shape}")
 
         # 每张图像分配 captions/类别 索引列表
         self.pairs = []  # [(image_idx, caption_text), ...]
@@ -326,12 +343,15 @@ class COCOLoader:
 
     def get_visual(self, idx: int) -> dict:
         """获取第 idx 张图像的视觉特征"""
-        return {
+        result = {
             'v1': self.encodings_v1[idx],
             'v2': self.encodings_v2[idx],
             'v4': self.encodings_v4[idx],
             'color': self.encodings_color[idx],
         }
+        if hasattr(self, 'encodings_gestalt') and self.encodings_gestalt is not None:
+            result['gestalt'] = self.encodings_gestalt[idx]
+        return result
 
     def get_all_captions(self) -> list[str]:
         """获取所有文本标签 (用于 PCA 拟合)"""
@@ -498,6 +518,23 @@ def make_visual_mask() -> np.ndarray:
     mask = np.zeros(D, dtype=bool)
     mask[V1_START:COLOR_END] = True
     return mask
+
+
+def _get_visual_parts(vis: dict) -> tuple:
+    """从 vis dict 提取 (v1, v2, v4, gestalt, color) 元组"""
+    return (
+        vis.get('v1'),
+        vis.get('v2'),
+        vis.get('v4'),
+        vis.get('gestalt'),
+        vis.get('color'),
+    )
+
+
+def _build_s_from_vis(text_emb: np.ndarray, vis: dict) -> np.ndarray:
+    """从 vis dict 构建 crossmodal sensory vector (便捷函数)"""
+    v1, v2, v4, gestalt, color = _get_visual_parts(vis)
+    return build_crossmodal_sensory(text_emb, v1, v2, v4, color, gestalt)
 
 
 def make_full_mask() -> np.ndarray:
@@ -1157,9 +1194,8 @@ def _quick_eval_epoch(net, coco: COCOLoader, text_encoder,
     for _ in range(n_sample):
         img_idx = rng.integers(0, coco.n_images)
         vis = coco.get_visual(img_idx)
-        s_query = build_crossmodal_sensory(
-            np.zeros(TEXT_WIDTH, dtype=np.float32),
-            vis['v1'], vis['v2'], vis['v4'], vis['color'])
+        s_query = _build_s_from_vis(
+            np.zeros(TEXT_WIDTH, dtype=np.float32), vis)
 
         c, sim = masked_recall(net, s_query, visual_mask,
                                 threshold_override=VISUAL_THRESHOLD)
@@ -1241,8 +1277,7 @@ def train_crossmodal_coco(coco: COCOLoader, text_encoder,
             text_emb = text_encoder.encode(caption)
             vis = coco.get_visual(img_idx)
 
-            s = build_crossmodal_sensory(
-                text_emb, vis['v1'], vis['v2'], vis['v4'], vis['color'])
+            s = _build_s_from_vis(text_emb, vis)
 
             net.learn(s)
 
@@ -1360,7 +1395,7 @@ def evaluate_crossmodal_coco(result: dict, coco: COCOLoader,
 
     def _build_vis_query(vis):
         txt = np.zeros(TEXT_WIDTH, dtype=np.float32)
-        return build_crossmodal_sensory(txt, vis['v1'], vis['v2'], vis['v4'], vis['color'])
+        return _build_s_from_vis(txt, vis)
 
     def _build_text_query(text_emb):
         return build_crossmodal_sensory(
