@@ -38,7 +38,7 @@ import numpy as np
 from collections import defaultdict
 
 from data_types import D, Theta
-from layer0_model import ClusterNetwork, sleep_cycle, _masked_cosine, _auto_mask
+from layer0_model import ClusterNetwork, sleep_cycle, sleep_replay, _masked_cosine, _auto_mask
 from layer3_meta import create_default_theta
 
 
@@ -1248,13 +1248,13 @@ def train_crossmodal_coco(coco: COCOLoader, text_encoder,
                 print(f"  Epoch {epoch}: {step+1}/{n_pairs} ({ips:.0f} p/s) "
                       f"| clusters={net.n_clusters}")
 
-        # ---- Epoch end: sleep consolidate ----
-        total_removed = 0
-        for _ in range(5):
-            removed = sleep_cycle(net, net.theta)
-            total_removed += removed
-            if removed == 0:
-                break
+        # ---- Epoch end: sleep replay consolidate ----
+        # 海马重放 + 跨簇关联: 主动强化近期记忆，而非仅衰减
+        sr_stats = sleep_replay(net, net.theta,
+                                replay_lr=0.04,
+                                n_replay_cycles=1,
+                                cross_link_strength=0.005)
+        total_removed = sr_stats['n_removed']
 
         epoch_time = time.perf_counter() - t_epoch
 
@@ -1301,6 +1301,7 @@ def train_crossmodal_coco(coco: COCOLoader, text_encoder,
         pe_label = f"decay={effective_decay:.3f} anneal={effective_anneal:+.3f}" if pe_lr_scale > 1e-6 else ""
         print(f"  ── Epoch {epoch} done: {epoch_time:.1f}s | "
               f"clusters={net.n_clusters} (removed {total_removed}) | "
+              f"replay={sr_stats['n_replayed']} sep={sr_stats['n_linked']} | "
               f"thr={theta.cluster_threshold:.2f} lr={theta.learn_rate_l0:.4f} "
               f"{pe_label} | "
               f"V→T hit={qe['hit_rate']:.2f} rank={qe['avg_rank']:.0f} "
@@ -1310,6 +1311,9 @@ def train_crossmodal_coco(coco: COCOLoader, text_encoder,
             'epoch': epoch,
             'n_clusters': net.n_clusters,
             'epoch_time_s': epoch_time,
+            'replay_n': sr_stats['n_replayed'],
+            'replay_sep': sr_stats['n_linked'],  # 模式分离对数
+            'replay_boost': sr_stats['replay_boost'],
             **qe,
         })
 

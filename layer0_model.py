@@ -131,7 +131,7 @@ class ClusterNetwork:
         active_ratio = float(np.sum(mask)) / max(len(mask), 1)
         eff_threshold = self.theta.cluster_threshold * (0.4 + 0.6 * active_ratio)
         if best_c is not None and best_sim >= eff_threshold:
-            best_c.activation += 0.1
+            best_c.activation = min(1.0, best_c.activation + 0.1)
             best_c.age += 1
             return best_c
         return None
@@ -279,6 +279,16 @@ class ClusterNetwork:
         self.buckets.setdefault(new_key, []).append(oldest)
         return oldest
 
+    # ----- 桶迁移 -----
+    def _migrate_bucket(self, cluster: Cluster, old_centroid: np.ndarray):
+        """如果簇的 centroid 改变导致桶变化，迁移到新桶"""
+        old_key = self._hash_to_bucket(old_centroid)
+        new_key = self._hash_to_bucket(cluster.centroid)
+        if new_key != old_key and old_key in self.buckets:
+            self.buckets[old_key] = [
+                c for c in self.buckets[old_key] if c is not cluster]
+            self.buckets.setdefault(new_key, []).append(cluster)
+
     # ----- 衰减 -----
     def decay(self):
         """衰减所有簇的激活值
@@ -346,3 +356,190 @@ def sleep_cycle(net: ClusterNetwork, theta: Theta) -> int:
                 x for x in net.buckets[key] if x is not c]
     n_removed = n_before - len(net.clusters)
     return n_removed
+
+
+# ============================================================
+# 睡眠回放巩固 (Sleep Replay Consolidation)
+# ============================================================
+
+def sleep_replay(net: ClusterNetwork, theta: Theta,
+                 replay_lr: float = 0.04,
+                 n_replay_cycles: int = 1,
+                 cross_link_strength: float = 0.005,
+                 replay_noise: float = 0.006,
+                 min_activation_for_replay: float = 0.03) -> dict:
+    """睡眠回放巩固 —— 部分模式重放 + 模式分离
+
+    神经科学基础：
+    - **Sharp-wave ripples** (海马): 用部分线索重放，锻炼模式补全
+    - **Pattern separation** (齿状回): 推离过于相似的记忆，增加可辨别性
+    - **Slow-wave sleep** (皮层): 衰减 + 清理弱记忆
+
+    算法：
+    1. 选择近期活跃簇 (activation > threshold) 作为重放候选
+    2. 对每个候选簇，用部分维度 (纯视觉/纯文本/随机子集) 触发 recall
+       → 锻炼跨模态模式补全能力 (这正是 V→T 检索需要的)
+    3. 模式分离: 找到过于相似的簇 (cos>0.85)，在差异维度上推离
+       → 防止表示坍缩，增加簇间可辨别性
+    4. 衰减 + 移除死簇
+
+    这替代了旧的"跨簇拉近"方式——拉近相似簇会降低可辨别性，恶化检索。
+    正确的睡眠巩固应该: 内部一致化 (模式补全) + 外部区分化 (模式分离)。
+
+    Args:
+        net: ClusterNetwork 实例
+        theta: 参数配置
+        replay_lr: 未使用 (保留兼容)
+        n_replay_cycles: 重放轮数
+        cross_link_strength: 模式分离强度 (旧名保留兼容)
+        replay_noise: 未使用 (保留兼容)
+        min_activation_for_replay: 重放候选的最低激活值
+
+    Returns:
+        stats dict:
+            n_replayed:     总重放次数 (partial recall 调用数)
+            n_linked:       模式分离对数
+            n_removed:      移除的簇数
+            replay_boost:   总激活增量
+            n_clusters:     巩固后簇数
+            n_candidates:   重放候选数
+            mean_activation: 平均激活值
+    """
+    if net.n_clusters == 0:
+        return {'n_replayed': 0, 'n_linked': 0, 'n_removed': 0,
+                'replay_boost': 0.0, 'n_clusters': 0,
+                'n_candidates': 0, 'mean_activation': 0.0}
+
+    # ---- Step 1: 选择重放候选 ----
+    # 激活值高于阈值的簇参与重放 (近期使用过的记忆)
+    mean_act = sum(c.activation for c in net.clusters) / net.n_clusters
+    replay_threshold = max(min_activation_for_replay, mean_act * 0.4)
+
+    candidates = [c for c in net.clusters if c.activation > replay_threshold]
+
+    if not candidates:
+        # Fallback: 至少重放 top 20% 最活跃簇
+        sorted_clusters = sorted(net.clusters, key=lambda c: c.activation,
+                                 reverse=True)
+        n_top = max(3, net.n_clusters // 5)
+        candidates = sorted_clusters[:n_top]
+
+    # ---- Step 2: 海马重放 + 模式分离 ----
+    n_replayed = 0
+    total_boost = 0.0
+    n_separated = 0
+
+    for cycle in range(n_replay_cycles):
+        cycle_decay = 0.8 ** cycle
+
+        # --- 2a. 部分模式重放 (Partial Pattern Replay) ---
+        # 用部分维度 (纯视觉 or 纯文本) 触发 recall，
+        # 锻炼跨模态模式补全能力。不直接修改 centroid，
+        # 让 Hebb recall 的 activation 增强自然选择内部一致的簇。
+        for c in candidates:
+            salience = 0.3 + 0.7 * c.activation
+            n_replays = int(1 + salience * 1.5)  # 1-2 次/簇/轮
+
+            centroid = c.centroid
+            for ri in range(n_replays):
+                # 交替: 纯视觉查询、纯文本查询、随机子集
+                partial = np.zeros_like(centroid)
+                mode_idx = (n_replayed + ri) % 3
+                if mode_idx == 0:
+                    # Visual → Text: 只保留视觉通道 [64:192]
+                    partial[64:192] = centroid[64:192]
+                elif mode_idx == 1:
+                    # Text → Visual: 只保留文本通道 [0:64]
+                    partial[0:64] = centroid[0:64]
+                else:
+                    # 随机 60% 维度 (模拟不完整记忆)
+                    keep = np.random.random(len(centroid)) > 0.4
+                    partial[keep] = centroid[keep]
+
+                # Recall 用部分输入 → 激活匹配簇 → Hebb 强化
+                # 不加噪声、不直接改 centroid；
+                # recall 的 activation boost 自然选择跨模态一致的簇
+                net.recall(partial)
+                n_replayed += 1
+
+            # 温和的激活增强 (模拟记忆巩固，远小于 recall 的 0.1)
+            boost = 0.005 * salience * cycle_decay
+            c.activation = min(1.0, c.activation + boost)
+            total_boost += boost
+
+        # --- 2b. 模式分离 (Pattern Separation) ---
+        # 找到过于相似的簇 (cos > 0.85)，在差异最大的维度上推离
+        # 模拟齿状回功能: 增加簇间可辨别性，防止表示坍缩
+        C = np.stack([c.centroid for c in net.clusters])
+        cid_to_idx = {id(c): i for i, c in enumerate(net.clusters)}
+        candidate_indices = [cid_to_idx[id(c)] for c in candidates]
+
+        # 跟踪已处理的配对 (避免重复推离)
+        separated_pairs = set()
+
+        for ci in candidate_indices:
+            cur = C[ci]
+            cur_norm = np.linalg.norm(cur)
+            dot = C @ cur
+            norms = np.linalg.norm(C, axis=1)
+            sims = dot / (norms * cur_norm + 1e-8)
+            sims[ci] = -1.0
+
+            # 只关注最相似的邻居
+            best_j = int(np.argmax(sims))
+            best_sim = float(sims[best_j])
+
+            # 过于相似 → 推离 (模式分离)
+            if best_sim > 0.85:
+                pair_key = tuple(sorted([ci, best_j]))
+                if pair_key in separated_pairs:
+                    continue
+                separated_pairs.add(pair_key)
+
+                # 找到差异最大的维度 (这些是区分的依据)
+                diff = np.abs(cur - C[best_j])
+                top_diff_dims = np.argsort(diff)[-32:]  # top 10% dims
+
+                # 在差异维度上温和推离 (分离强度)
+                sep_strength = cross_link_strength * (best_sim - 0.85) * cycle_decay
+                push = sep_strength * 0.5
+
+                old_ci = net.clusters[ci].centroid.copy()
+                old_best = net.clusters[best_j].centroid.copy()
+
+                # 互相推离 (只在差异最大的维度)
+                net.clusters[ci].centroid[top_diff_dims] += push * diff[top_diff_dims]
+                net.clusters[best_j].centroid[top_diff_dims] -= push * diff[top_diff_dims]
+
+                net._migrate_bucket(net.clusters[ci], old_ci)
+                net._migrate_bucket(net.clusters[best_j], old_best)
+                n_separated += 1
+
+        # 更新质心矩阵
+        if cycle < n_replay_cycles - 1:
+            C = np.stack([c.centroid for c in net.clusters])
+
+    # ---- Step 3: 衰减 (自然遗忘) ----
+    net.decay()
+
+    # ---- Step 4: 清理死簇 ----
+    n_before = net.n_clusters
+    removed = [c for c in net.clusters if c.activation <= 0.01]
+    net.clusters = [c for c in net.clusters if c.activation > 0.01]
+    # 同步桶
+    for c in removed:
+        key = net._hash_to_bucket(c.centroid)
+        if key in net.buckets:
+            net.buckets[key] = [x for x in net.buckets[key] if x is not c]
+    n_removed = n_before - net.n_clusters
+
+    return {
+        'n_replayed': n_replayed,
+        'n_linked': n_separated,   # 模式分离对数 (兼容旧字段名)
+        'n_removed': n_removed,
+        'replay_boost': float(total_boost),
+        'n_clusters': net.n_clusters,
+        'n_candidates': len(candidates),
+        'mean_activation': float(
+            sum(c.activation for c in net.clusters) / max(net.n_clusters, 1)),
+    }
