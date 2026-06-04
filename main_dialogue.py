@@ -1,11 +1,14 @@
 """
-main_dialogue.py —— Stage 6: 人机对话闭环 (v2: 社会情感回路)
+main_dialogue.py —— Stage 6: 人机对话闭环 (v3: 视觉通道)
 自由能原理智能体
 
 持续流模式: Agent 不等人类，10 FPS 持续循环。
 人类输入 → 语义编码 s[0:64] + 情感编码 s[80:88] → Agent 被对话改变。
+
+v3: 视觉通道 — 输入 img:<path> 让 Agent ""看到"" 图片并描述。
+     管线: 图像 → Gabor 编码 → 跨模态模型 V→T recall → 中文标签 → 对话。
 """
-import sys, time, queue, numpy as np
+import sys, time, queue, pickle, os as _os, numpy as np
 from data_types import D, BodyVector, Action, ACTION_DIRECTIONS
 from agent import Agent
 from text_interface import TextEnvironment
@@ -14,6 +17,8 @@ from broca import Broca
 from stdin_reader import StdinReader
 from sentiment import analyze_sentiment, sentiment_to_social_signal, get_emotional_lexicon
 from layer1_free_energy import SocialContext
+from image_encoder import (ImageEncoder, build_visual_sensory,
+                           make_visual_mask, make_text_mask)
 
 
 def _safe_str(s: str) -> str:
@@ -22,6 +27,205 @@ def _safe_str(s: str) -> str:
         s.encode('gbk'); return s
     except UnicodeEncodeError:
         return s.encode('gbk', errors='replace').decode('gbk')
+
+
+# ================================================================
+# COCO 80 类别中英文映射 (用于视觉→文本→中文对话桥接)
+# ================================================================
+
+COCO_CATEGORIES_ZH = {
+    'person': '人', 'bicycle': '自行车', 'car': '汽车',
+    'motorcycle': '摩托车', 'airplane': '飞机', 'bus': '公共汽车',
+    'train': '火车', 'truck': '卡车', 'boat': '船',
+    'traffic light': '红绿灯', 'fire hydrant': '消防栓',
+    'stop sign': '停车标志', 'parking meter': '停车计时器', 'bench': '长椅',
+    'bird': '鸟', 'cat': '猫', 'dog': '狗', 'horse': '马',
+    'sheep': '羊', 'cow': '牛', 'elephant': '大象', 'bear': '熊',
+    'zebra': '斑马', 'giraffe': '长颈鹿',
+    'backpack': '背包', 'umbrella': '雨伞', 'handbag': '手提包', 'tie': '领带',
+    'suitcase': '行李箱', 'frisbee': '飞盘', 'skis': '滑雪板',
+    'snowboard': '滑雪板', 'sports ball': '球', 'kite': '风筝',
+    'baseball bat': '棒球棒', 'baseball glove': '棒球手套',
+    'skateboard': '滑板', 'surfboard': '冲浪板', 'tennis racket': '网球拍',
+    'bottle': '瓶子', 'wine glass': '酒杯', 'cup': '杯子',
+    'fork': '叉子', 'knife': '刀', 'spoon': '勺子', 'bowl': '碗',
+    'banana': '香蕉', 'apple': '苹果', 'sandwich': '三明治',
+    'orange': '橙子', 'broccoli': '西兰花', 'carrot': '胡萝卜',
+    'hot dog': '热狗', 'pizza': '披萨', 'donut': '甜甜圈', 'cake': '蛋糕',
+    'chair': '椅子', 'couch': '沙发', 'potted plant': '盆栽',
+    'bed': '床', 'dining table': '餐桌', 'toilet': '马桶',
+    'tv': '电视', 'laptop': '笔记本电脑', 'mouse': '鼠标',
+    'remote': '遥控器', 'keyboard': '键盘', 'cell phone': '手机',
+    'microwave': '微波炉', 'oven': '烤箱', 'toaster': '烤面包机',
+    'sink': '水槽', 'refrigerator': '冰箱',
+    'book': '书', 'clock': '时钟', 'vase': '花瓶',
+    'scissors': '剪刀', 'teddy bear': '泰迪熊', 'hair drier': '吹风机',
+    'toothbrush': '牙刷',
+}
+"""COCO 80 类别 → 中文 (用于 Agent 对话)"""
+
+
+def _channel_normalize_visual(vis_part: np.ndarray) -> np.ndarray:
+    """逐通道 L2 归一化视觉特征 [V1|V2|V4|Color]。
+
+    防止 V4 (norm ~1.0) 主导 V1 (norm ~0.01)。
+    布局: V1[0:96] | V2[96:160] | V4[160:224] | Color[224:266]
+    """
+    result = vis_part.copy().astype(np.float32)
+    for start, end in [(0, 96), (96, 160), (160, 224), (224, 266)]:
+        n = np.linalg.norm(result[start:end])
+        if n > 1e-8:
+            result[start:end] /= n
+    # L2 normalize the whole thing too
+    total_n = np.linalg.norm(result)
+    if total_n > 1e-8:
+        result /= total_n
+    return result
+
+
+def _setup_visual_brain(model_path: str = '.cache/stage2_crossmodal_coco_5000_s42.pkl'):
+    """加载跨模态视觉模型 + 构建 COCO 文本编码器。
+
+    Returns:
+        (vis_net, coco_embs, coco_captions_zh, coco_captions_en)
+        或 None (若模型未找到)
+    """
+    if not _os.path.exists(model_path):
+        print(f"  [Vision] 未找到跨模态模型: {model_path}")
+        print(f"  [Vision] 请先运行: python stage2_crossmodal.py --dataset coco --n 5000 --mode all")
+        return None
+
+    print(f"  [Vision] 加载跨模态模型: {model_path}")
+    with open(model_path, 'rb') as f:
+        vis_model = pickle.load(f)
+    vis_net = vis_model['net']
+    print(f"  [Vision] {vis_net.n_clusters} 跨模态集群已加载")
+
+    # ---- 构建 COCO 文本编码器 (与 stage2 相同的 pipeline) ----
+    from sentence_transformers import SentenceTransformer
+    from sklearn.decomposition import PCA
+
+    # 英文模板 (与训练时一致，用于 PCA 匹配)
+    EN_TEMPLATES = ['a photo of a {}', 'a {} in the scene',
+                    'an image containing a {}']
+    # 中文自然描述模板 (用于对话 Agent)
+    ZH_TEMPLATES = ['一张{}的照片', '场景中的{}', '包含{}的图像']
+
+    coco_captions_en = []
+    coco_captions_zh = []  # 用于显示 + 对话输入
+    coco_categories_zh = []  # 纯类别名 (用于去重)
+    for en_name, zh_name in COCO_CATEGORIES_ZH.items():
+        for en_tmpl, zh_tmpl in zip(EN_TEMPLATES, ZH_TEMPLATES):
+            coco_captions_en.append(en_tmpl.format(en_name))
+            coco_captions_zh.append(zh_tmpl.format(zh_name))
+            coco_categories_zh.append(zh_name)  # 存纯类别名用于去重
+
+    print(f"  [Vision] 拟合文本编码器 ({len(coco_captions_en)} 条)...")
+    st_model = SentenceTransformer('all-MiniLM-L6-v2')
+    full_embs = st_model.encode(coco_captions_en, show_progress_bar=False,
+                                batch_size=64)
+    pca = PCA(n_components=64, random_state=42)
+    pca.fit(full_embs)
+    coco_embs = pca.transform(full_embs).astype(np.float32)
+    # L2 归一化
+    norms = np.linalg.norm(coco_embs, axis=1, keepdims=True)
+    coco_embs /= (norms + 1e-8)
+    print(f"  [Vision] 文本编码器就绪: {full_embs.shape[1]}d → 64d, "
+          f"explained={pca.explained_variance_ratio_.sum():.1%}")
+
+    # 预计算所有簇的逐通道归一化视觉特征 (用于快速视觉检索)
+    coco_vis_normed = np.zeros((vis_net.n_clusters, 266), dtype=np.float32)
+    for i, cl in enumerate(vis_net.clusters):
+        coco_vis_normed[i] = _channel_normalize_visual(cl.centroid[64:330])
+
+    vis_brain = {
+        'net': vis_net,
+        'coco_embs': coco_embs,
+        'coco_captions_zh': coco_captions_zh,
+        'coco_captions_en': coco_captions_en,
+        'coco_categories_zh': coco_categories_zh,
+        'coco_vis_normed': coco_vis_normed,
+        'st_model': st_model,
+        'pca': pca,
+    }
+    return vis_brain
+
+
+def _visual_recall(vis_brain: dict, image_path: str,
+                   img_enc: ImageEncoder,
+                   top_k: int = 3) -> list[dict]:
+    """视觉→文本 recall: 图像 → Gabor 编码 → 跨模态检索 → 中文描述。
+
+    使用逐通道 L2 归一化: V1/V2/V4/Color 各自归一化，
+    防止 V4 (norm ~1.0) 主导 V1/V2/Color (norm ~0.01)。
+
+    Returns:
+        [{zh_caption, en_caption, similarity, rank}, ...]
+    """
+    # 编码图像 (build_visual_sensory 默认 normalize_channels=True)
+    try:
+        vis_feat = img_enc.encode_from_path(image_path)
+    except Exception as e:
+        print(f"  [Vision] 无法加载图像: {e}")
+        return []
+
+    s_vis = build_visual_sensory(vis_feat)  # 通道归一化的 query
+    query_vis = s_vis[64:330].astype(np.float32)
+    # 与 centroids 使用相同的归一化: 逐通道 + 整体 L2
+    query_vis = _channel_normalize_visual(query_vis)
+
+    net = vis_brain['net']
+    coco_embs = vis_brain['coco_embs']
+
+    # 与所有簇的预归一化视觉特征比较
+    if 'coco_vis_normed' in vis_brain:
+        # 快速路径: 使用预归一化的 centroid 视觉特征
+        centroid_vis_normed = vis_brain['coco_vis_normed']  # (N, 266)
+        sims = np.dot(centroid_vis_normed, query_vis)
+        best_idx = int(np.argmax(sims))
+        best_c = net.clusters[best_idx]
+    else:
+        # 慢速路径: 逐簇归一化比较
+        best_sim = -1.0
+        best_c = None
+        for cl in net.clusters:
+            c_vis = _channel_normalize_visual(cl.centroid[64:330])
+            sim = float(np.dot(c_vis, query_vis))
+            if sim > best_sim:
+                best_sim = sim
+                best_c = cl
+
+    if best_c is None:
+        return []
+
+    # 从 centroid 提取文本部分 → 匹配 COCO 标签
+    text_vec = best_c.centroid[:64].astype(np.float32)
+
+    # 归一化
+    text_vec = text_vec / (np.linalg.norm(text_vec) + 1e-8)
+
+    # 计算与所有 COCO caption 的余弦相似度
+    sims = np.dot(coco_embs, text_vec)
+
+    results = []
+    seen_cats = set()  # 按类别名去重
+    for rank, idx in enumerate(np.argsort(sims)[::-1]):
+        zh_cat = vis_brain['coco_categories_zh'][idx]
+        if zh_cat in seen_cats:
+            continue
+        seen_cats.add(zh_cat)
+
+        results.append({
+            'zh_caption': vis_brain['coco_captions_zh'][idx],
+            'zh_category': zh_cat,
+            'en_caption': vis_brain['coco_captions_en'][idx],
+            'similarity': float(sims[idx]),
+            'rank': rank,
+        })
+        if len(results) >= top_k:
+            break
+
+    return results
 
 
 def run_dialogue():
@@ -49,6 +253,14 @@ def run_dialogue():
     print(f"  L0 warmup: {agent.net.n_clusters} initial clusters "
           f"(sampled from corpus)")
 
+    # ---- 视觉大脑: 加载跨模态模型 (可选) ----
+    vis_brain = _setup_visual_brain()
+    img_enc = ImageEncoder(image_size=128) if vis_brain else None
+    if vis_brain:
+        print(f"  [Vision] 视觉通道就绪 — 输入 'img:path/to/image.jpg' 让 Agent ""看到"" 图片")
+    else:
+        print(f"  [Vision] 视觉通道未启用 — 运行 stage2_crossmodal.py 训练跨模态模型")
+
     # ---- 社会情感上下文 ----
     social_ctx = SocialContext(tau=15.0)  # tau 越小，情感越容易被改变
 
@@ -60,20 +272,23 @@ def run_dialogue():
     t = 0; expr_cooldown = 0; inner_cooldown = 0
 
     print("=" * 60)
-    print("  自由能原理智能体 — Stage 6: 人机对话")
-    print("  v5.1: Wernicke 理解回路 + Hebb 词序链生成 + 响应评估")
+    print("  自由能原理智能体 — Stage 6: 人机对话 (v6: 视觉)")
+    print("  v6: Wernicke 理解 + Hebb 词序链 + 响应评估 + 视觉通道")
     print("=" * 60)
     print("  你说的话会改变 Agent 的情感状态")
     print("  温暖的话 → F_social ↓ → valence ↑ → Agent 感到好")
     print("  攻击的话 → F_social ↑ → valence ↓ → Agent 感到不好")
     print("  Agent 先理解，再回忆，然后用自己的话说出来")
     print("  沉默时 Agent 会自己「想」→ 内部言语链")
+    if vis_brain:
+        print("  🖼️ 输入 'img:path/to/image.jpg' 让 Agent \"看到\" 图片")
     print("-" * 60)
     print("  输入文字后回车 · 输入 'exit' 退出 · Ctrl+C 退出")
     print("-" * 60)
 
     try:
         while True:
+            img_path = None; extra_text = None  # 视觉输入变量
             # ---- 1. 非阻塞读人类输入 ----
             human_text = None
             try:
@@ -85,42 +300,122 @@ def run_dialogue():
                 print("\n[System]: 退出")
                 break
 
+            # ---- 视觉输入处理: img:<path> ----
+            visual_context = None  # 视觉理解结果 (用于注入对话)
+            if (human_text and human_text.strip().startswith('img:')
+                    and vis_brain is not None):
+                img_path = human_text.strip()[4:].strip()
+                # 支持 img:path 和 img:path 额外文本
+                extra_text = None
+                if ' ' in img_path:
+                    parts = img_path.split(' ', 1)
+                    img_path = parts[0]
+                    extra_text = parts[1] if len(parts) > 1 else None
+
+                # 去除引号
+                img_path = img_path.strip('"\'')
+
+                if not _os.path.exists(img_path):
+                    print(f"\n[Vision] 文件未找到: {img_path}")
+                    continue
+
+                print(f"\n[Vision] 正在看: {img_path} ...")
+                results = _visual_recall(vis_brain, img_path, img_enc, top_k=3)
+
+                if results:
+                    top = results[0]
+                    print(f"  [Vision] 看到: {top['zh_caption']} "
+                          f"(sim={top['similarity']:.3f})")
+                    if len(results) > 1:
+                        others = ', '.join(r['zh_caption'] for r in results[1:])
+                        print(f"  [Vision]   其他可能: {others}")
+
+                    # 构建视觉上下文: 用最匹配的中文描述作为"看到的内容"
+                    visual_context = top['zh_caption']
+                else:
+                    print(f"  [Vision] 未找到匹配 — 视觉识别失败")
+                    continue
+
             # ---- 2. 构建感觉向量 ----
             s = np.zeros(D)
 
             if human_text and human_text.strip():
-                # 语义编码
-                try:
-                    s[0:64] = text_env.encode_text(human_text.strip())
+                # 检查是否是视觉输入
+                is_visual_input = (human_text.strip().startswith('img:')
+                                   and visual_context is not None)
+
+                if is_visual_input:
+                    # ---- 视觉输入: 用识别到的中文描述替代 img: 命令 ----
+                    display_text = f"[看到 {visual_context}]"
+                    # 编码视觉描述为语义向量
+                    try:
+                        s[0:64] = text_env.encode_text(visual_context)
+                    except Exception:
+                        s[0:64] = np.zeros(64)
                     last_human_vec = s[0:64].copy()
-                except Exception:
-                    s[0:64] = text_env.embeddings[t % len(text_env.embeddings)]
 
-                # 情感编码 → s[80:88] (v2: Hebb 学习, 无手标词典)
-                sentiment = analyze_sentiment(human_text.strip(),
-                                             lexicon=emo_lexicon)
-                social_signal = sentiment_to_social_signal(sentiment)
-                s[80:88] = social_signal
+                    # 视觉通道: 填入 Gabor 特征
+                    try:
+                        vis_feat = img_enc.encode_from_path(img_path)
+                        s_vis = build_visual_sensory(vis_feat)
+                        s[64:330] = s_vis[64:330]
+                    except Exception:
+                        pass
 
-                # 更新社会上下文
-                social_ctx.update(sentiment['valence'], sentiment['arousal'])
+                    # 中性偏正情感编码 (看到东西通常是好奇/中性)
+                    s[80:88] = np.array(
+                        [0.2, 0.0, 0.0, 0.0, 0.3, 0.0, 0.1, 0.0],
+                        dtype=np.float32)
 
-                # ---- Wernicke 区: 理解人类输入 ----
-                human_sent = social_signal[:8].astype(np.float32)
-                comprehension_vec, understanding = agent.comprehend(
-                    last_human_vec, human_sent)
+                    # 更新社会上下文
+                    social_ctx.update(0.2, 0.3)  # mildly positive, curious
 
-                # 显示
-                valence_icon = ':)' if sentiment['valence'] > 0.3 else (
-                    ':(' if sentiment['valence'] < -0.3 else ':|')
-                print(f"\n[You] {valence_icon}: {human_text.strip()}")
-                print(f"       sentiment: v={sentiment['valence']:+.2f} "
-                      f"a={sentiment['arousal']:.2f} "
-                      f"intensity={sentiment['intensity']:.2f} "
-                      f"learned={sentiment.get('learned', False)} "
-                      f"trust={social_ctx.trust_level:.2f} "
-                      f"understood={understanding['n_triggered_memories']}mem "
-                      f"emo_words={emo_lexicon.get_stats()['n_words']}")
+                    # Wernicke 理解
+                    human_sent = s[80:88].astype(np.float32)
+                    comprehension_vec, understanding = agent.comprehend(
+                        last_human_vec, human_sent)
+
+                    # 显示
+                    print(f"\n[You] 🖼️: {human_text.strip()}")
+                    print(f"       → Agent 看到: {visual_context}")
+                    if extra_text:
+                        print(f"       → 附带问题: {extra_text}")
+                    print(f"       vision_input=True "
+                          f"understood={understanding['n_triggered_memories']}mem")
+                else:
+                    # ---- 正常文本输入 ----
+                    # 语义编码
+                    try:
+                        s[0:64] = text_env.encode_text(human_text.strip())
+                        last_human_vec = s[0:64].copy()
+                    except Exception:
+                        s[0:64] = text_env.embeddings[t % len(text_env.embeddings)]
+
+                    # 情感编码 → s[80:88] (v2: Hebb 学习, 无手标词典)
+                    sentiment = analyze_sentiment(human_text.strip(),
+                                                 lexicon=emo_lexicon)
+                    social_signal = sentiment_to_social_signal(sentiment)
+                    s[80:88] = social_signal
+
+                    # 更新社会上下文
+                    social_ctx.update(sentiment['valence'], sentiment['arousal'])
+
+                    # ---- Wernicke 区: 理解人类输入 ----
+                    human_sent = social_signal[:8].astype(np.float32)
+                    comprehension_vec, understanding = agent.comprehend(
+                        last_human_vec, human_sent)
+
+                    # 显示
+                    valence_icon = ':)' if sentiment['valence'] > 0.3 else (
+                        ':(' if sentiment['valence'] < -0.3 else ':|')
+                    print(f"\n[You] {valence_icon}: {human_text.strip()}")
+                    print(f"       sentiment: v={sentiment['valence']:+.2f} "
+                          f"a={sentiment['arousal']:.2f} "
+                          f"intensity={sentiment['intensity']:.2f} "
+                          f"learned={sentiment.get('learned', False)} "
+                          f"trust={social_ctx.trust_level:.2f} "
+                          f"understood={understanding['n_triggered_memories']}mem "
+                          f"emo_words={emo_lexicon.get_stats()['n_words']}")
 
             else:
                 # 沉默: 语料背景 + 10% 上一句人类残差
