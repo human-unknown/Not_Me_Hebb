@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Cache & generated
+.cache/
+
+# Audio output (generated TTS)
+audio_output/
+word_audio/
+_*.wav
+
+# Large binary data (generated)
+*.npy
+*.pkl
+*.pt
+*.pth
+
+# Raw corpus data
+b_corpus_raw/
+
+# Dashboards (generated)
+dashboards/
+
+# Images (dataset)
+images/
+
+# Temporary
+*.tmp
+*.log
