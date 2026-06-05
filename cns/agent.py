@@ -148,6 +148,21 @@ class Agent:
         self._current_pain_input: float = 0.0     # 当前痛觉输入强度 (由外部/环境设置)
         self._current_abeta_input: float = 0.0    # 当前Aβ触觉输入 (按摩/触摸)
 
+        # v5.5: 下丘脑稳态调节 (SetpointModel + DriveSystem → BodyVector homeostasis)
+        from cerebrum.limbic_system.hypothalamus import Hypothalamus
+        self.hypothalamus: Hypothalamus = Hypothalamus()
+        self._hypo_result: dict = {}              # 存本次 step 的下丘脑调节结果
+
+        # v5.5: VTA 奖赏预测误差 → 事件驱动学习率
+        from brainstem_cerebellum.midbrain.vta import VTA
+        self.vta: VTA = VTA()
+        self._vta_result: dict = {}               # 存本次 step 的 VTA 结果
+
+        # v5.5: 蓝斑核 NE 唤醒度调制 (phasic/tonic NE + SNR + explore/exploit)
+        from brainstem_cerebellum.pons.locus_coeruleus import LocusCoeruleus
+        self.locus_coeruleus: LocusCoeruleus = LocusCoeruleus()
+        self._lc_result: dict = {}                # 存本次 step 的 LC 结果
+
         # v5.1: 自听回路状态 (从 sensory 向量中移出, 变为 Agent 内部状态)
         self._audio_semantic: np.ndarray = np.zeros(64, dtype=np.float32)
         self._self_sentiment: np.ndarray = np.zeros(8, dtype=np.float32)
@@ -366,8 +381,101 @@ class Agent:
                     'pain_intensity': 0.0, 'diagnostics': {},
                 }
 
+        # ---- v5.5 Phase 0d: 下丘脑稳态调节 (动态调定点 + 驱力 + HPA轴) ----
+        if hasattr(self, 'hypothalamus'):
+            try:
+                latest_arousal = self.arousal_history[-1] if self.arousal_history else 0.5
+                stress_level = float(self.body.b[2]) if self.body is not None else 0.0
+                hypo_result = self.hypothalamus.process(
+                    body_vector=self.body,
+                    time_of_day=(step_count % 1440) / 1440.0,
+                    stress_level=stress_level,
+                    arousal=latest_arousal,
+                )
+                # HPA激活 → 压力/疲劳维度调制 (b[2])
+                if hypo_result['hpa_activation'] > 0.5 and self.body is not None:
+                    self.body.b[2] = min(1.0,
+                        self.body.b[2] + 0.002 * hypo_result['hpa_activation'])
+                # 自主神经平衡 → 能量调制 (b[1])
+                if hypo_result['sympathetic_dominant'] and self.body is not None:
+                    self.body.b[1] = max(0.1,
+                        self.body.b[1] - 0.001 * abs(hypo_result['autonomic_balance']))
+                elif hypo_result['parasympathetic_dominant'] and self.body is not None:
+                    self.body.b[1] = min(1.0,
+                        self.body.b[1] + 0.001 * abs(hypo_result['autonomic_balance']))
+                self._hypo_result = hypo_result
+            except Exception:
+                self._hypo_result = {'total_drive': 0.0, 'hpa_activation': 0.0,
+                                    'autonomic_balance': 0.0, 'regulatory_urgency': 0.0}
+
+        # ---- v5.5 Phase 0e: VTA 奖赏预测误差 → 事件驱动学习率调制 ----
+        if hasattr(self, 'vta'):
+            try:
+                v = self.valence_history[-1] if self.valence_history else 0.0
+                f_body = self.F_body_history[-1] if self.F_body_history else 0.0
+                # Δvalence (改善=正), ΔF_body (下降=改善, 所以取负)
+                delta_v = v - (self.valence_history[-2]
+                               if len(self.valence_history) >= 2 else v)
+                delta_f = ((self.F_body_history[-2] - f_body)
+                           if len(self.F_body_history) >= 2 else 0.0)
+                # 社会奖赏: 互动质量 (信任度高 → 社会奖赏高)
+                social_r = 0.0
+                if social_ctx is not None:
+                    social_r = float(np.clip(social_ctx.trust_level, 0.0, 1.0))
+                # 新颖性: 来自 TPN salience (在下面TPN段计算, 此处预估值)
+                novelty_est = 0.0
+                if len(self.F_accuracy_history) >= 2:
+                    acc_change = abs(self.F_accuracy_history[-1]
+                                    - self.F_accuracy_history[-2])
+                    novelty_est = float(np.tanh(acc_change * 5.0))
+
+                vta_result = self.vta.process(
+                    valence=v, delta_valence=delta_v,
+                    F_body=f_body, delta_F_body=delta_f,
+                    social_reward=social_r,
+                    novelty=novelty_est,
+                    arousal=latest_arousal if 'latest_arousal' in dir() else 0.5,
+                    base_learn_rate=self.theta.learn_rate_l0,
+                )
+                # VTA RPE → 海马学习率调制
+                self.net.learn_rate_modifier = vta_result['learn_rate_multiplier']
+                self._vta_result = vta_result
+            except Exception:
+                self.net.learn_rate_modifier = 1.0
+                self._vta_result = {'rpe': 0.0, 'learn_rate_multiplier': 1.0,
+                                   'total_da': 0.3, 'motivation': 0.5}
+
+        # ---- v5.5 Phase 0f: 蓝斑核 NE 调制 (唤醒度 + SNR + 探索/利用) ----
+        if hasattr(self, 'locus_coeruleus'):
+            try:
+                latest_arousal_lc = self.arousal_history[-1] if self.arousal_history else 0.5
+                f_body_now_lc = self.F_body_history[-1] if self.F_body_history else 0.0
+                stress_lc = stress_level if 'stress_level' in dir() else 0.0
+                novelty_lc = novelty_est if 'novelty_est' in dir() else 0.0
+                task_eng = self.tpn.tpn_activation if hasattr(self, 'tpn') else 0.3
+
+                lc_result = self.locus_coeruleus.process(
+                    arousal=latest_arousal_lc,
+                    novelty=novelty_lc,
+                    stress=stress_lc,
+                    F_body=f_body_now_lc,
+                    task_engagement=task_eng,
+                    # sensory SNR will be applied after FPN attention gate
+                )
+                # Wire LC → RVM (v5.4 reserved NE interface)
+                if hasattr(self, 'nociception_hierarchy'):
+                    self.nociception_hierarchy.rvm._norepinephrine_tone = float(
+                        lc_result['tonic_ne'])
+                self._lc_result = lc_result
+            except Exception:
+                self._lc_result = {'tonic_ne': 0.2, 'phasic_ne': 0.0,
+                                  'total_ne': 0.2, 'snr_gain': 1.0,
+                                  'yd_performance': 0.5, 'exploration_bias': 0.0}
+
         # ---- L0: 学习感知 + 周期性睡眠 ----
         self.net.learn(sensory)
+        # v5.5: 学习后重置 VTA 学习率调制 (避免跨步累积)
+        self.net.learn_rate_modifier = 1.0
 
         if step_count > 0 and step_count % 100 == 0:
             # Phase 1: 对话记忆巩固 (海马 → 皮层, 在衰减前)
@@ -470,6 +578,14 @@ class Agent:
 
         # 应用探照灯: 增益调制感觉输入 (自下而上信号的增益调制)
         attended_sensory = self.fpn.gate_attention(sensory)
+
+        # v5.5: LC NE → SNR增强 (Yerkes-Dodson倒U曲线调制)
+        if hasattr(self, '_lc_result') and self._lc_result:
+            lc_snr = float(self._lc_result.get('snr_gain', 1.0))
+            if lc_snr != 1.0:
+                # 增益 >1 → 增强信号, <1 → 噪声放大
+                attended_sensory = attended_sensory * lc_snr
+
         self.attended_sensory = attended_sensory  # v4.4: 存储供dashboard/debug
 
         # v4.4: FPN/TPN 状态追踪

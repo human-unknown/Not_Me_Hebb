@@ -13,7 +13,7 @@
 └── 红核 (Red Nucleus)            — 运动协调
 
 子模块:
-├── vta.py                    VTA — 多巴胺奖赏通路、预期奖赏值更新 [待实现]
+├── vta.py                    VTA — 多巴胺奖赏通路、RPE、学习率调制 ★v5.5
 ├── substantia_nigra.py       黑质 — SNc 多巴胺供给、SNr 输出门控 [待实现]
 ├── superior_colliculus.py    上丘 — 视觉反射、快速定向 [待实现]
 └── inferor_colliculus.py     下丘 — 听觉整合 + 新颖性检测 ★v5.2

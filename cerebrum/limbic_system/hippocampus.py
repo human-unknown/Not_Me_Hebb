@@ -70,6 +70,7 @@ class ClusterNetwork:
         self.buckets: dict = {}  # {hash_key → list[Cluster]}
         self.theta = theta
         self.hash_offset = hash_offset  # 用于视觉/音频等非文本通道的哈希偏移
+        self.learn_rate_modifier: float = 1.0  # v5.5: VTA RPE → 事件驱动学习率调制
 
     # ----- 特征哈希 -----
     def hash_features(self, s: np.ndarray) -> np.ndarray:
@@ -240,7 +241,7 @@ class ClusterNetwork:
             # 匹配越强 (activation 越高) → 学习率越大 → 更强的 Hebb 强化
             # 这比纯 EMA 更接近生物 Hebb 规则: fire together → wire together
             old_key = self._hash_to_bucket(existing.centroid)
-            lr = self.theta.learn_rate_l0
+            lr = self.theta.learn_rate_l0 * self.learn_rate_modifier  # v5.5: VTA RPE 调制
             # 激活调制: 更强的匹配 → 更强的学习 (Hebb 机制)
             activation_factor = 0.3 + 0.7 * existing.activation  # [0.3, 1.0]
             effective_lr = lr * activation_factor

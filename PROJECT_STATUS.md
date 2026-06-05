@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v5.4 — 痛觉系统 + 7条知觉规律 + 闸门控制 + 下行调控闭环
+> **版本**: v5.5 — 神经调节系统: 下丘脑稳态 + VTA RPE + 蓝斑核 NE
 > **日期**: 2026-06-05
-> **基于**: 图1-4 人脑结构调查可视化图表集 + 听觉系统综述 + 感官知觉规律调查 + 痛觉生理学综述
+> **基于**: 图1-4 人脑结构调查可视化图表集 + 听觉系统综述 + 感官知觉规律调查 + 痛觉生理学综述 + 神经调节系统综述
 
 ---
 
@@ -20,6 +20,7 @@
 | **v5.2** | **2026-06-05** | **听觉层级全接入 — 耳蜗核→SOC→IC→MGB→听皮层, D=468, 15条知觉规律** |
 | **v5.3** | **2026-06-05** | **真实音频输入 — 替换语义代理模式, AudioInput(WAV/MP3/FLAC/麦克风), Mel频谱驱动全听觉管线** |
 | **v5.4** | **2026-06-05** | **痛觉系统 — 7条知觉规律, 闸门控制, 双通路, 下行调控PAG→RVM闭环, D=516, 8个新增/升级脑区** |
+| **v5.5** | **2026-06-05** | **神经调节系统 — 下丘脑稳态调节(SetpointModel+DriveSystem+HPA轴) + VTA RPE(事件驱动学习率) + 蓝斑核NE(phasic/tonic+SNR+RVM连接)** |
 
 ---
 
@@ -29,8 +30,8 @@
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ★ 已实现 (含 v5.0/v5.2/v5.3/v5.4 新增) | 43 | 57% |
-| ○ 占位 (接口设计完成, 待实现代码) | 21 | 28% |
+| ★ 已实现 (含 v5.0/v5.2/v5.3/v5.4/v5.5 新增) | 46 | 61% |
+| ○ 占位 (接口设计完成, 待实现代码) | 18 | 24% |
 | — 配置/工具/入口 (无类定义但功能完备) | 11 | 15% |
 | **合计** | **75** | **100%** |
 
@@ -70,7 +71,7 @@
 | 杏仁核 | `limbic_system/amygdala.py` | ★ 已实现 (情感词汇) |
 | 扣带回/ACC | `limbic_system/cingulate.py` | ★ 已实现 (自由能计算) |
 | **岛叶 (BA13-16)** | `limbic_system/insula.py` | **★ NEW v5.4** (后岛叶内感受+前岛叶情感评估+突显网络) |
-| 下丘脑 | `limbic_system/hypothalamus.py` | ○ 占位 |
+| 下丘脑 | `limbic_system/hypothalamus.py` | **★ NEW v5.5** (SetpointModel+DriveSystem+HPA轴+自主神经平衡) |
 | 嗅皮层 | `limbic_system/olfactory.py` | ○ 占位 |
 | **基底神经节** | | |
 | 动作门控 (MoE) | `basal_ganglia/action_gating.py` | ★ 已实现 |
@@ -94,13 +95,13 @@
 | 脑区 | 模块 | 状态 |
 |------|------|------|
 | **中脑** | | |
-| VTA (多巴胺) | `midbrain/vta.py` | ○ 占位 |
+| VTA (多巴胺) | `midbrain/vta.py` | **★ NEW v5.5** (RPEModel+DopamineDynamics+事件驱动学习率调制) |
 | 黑质 (SNc/SNr) | `midbrain/substantia_nigra.py` | ○ 占位 |
 | 上丘 | `midbrain/superior_colliculus.py` | **★ v5.0** (显著性图+新颖性检测+空间定向) |
 | **下丘 (IC)** | `midbrain/inferior_colliculus.py` | **★ NEW v5.2** (中央核/背皮层/外皮层, 频率×空间×时间整合+新颖性检测) |
 | **PAG (导水管周围灰质)** | `midbrain/pag.py` | **★ NEW v5.4** (下行痛觉调节总枢纽, 4功能柱, 内啡肽释放+SIΑ+安慰剂镇痛) |
 | **脑桥** | | |
-| 蓝斑核 (NE) | `pons/locus_coeruleus.py` | ○ 占位 |
+| 蓝斑核 (NE) | `pons/locus_coeruleus.py` | **★ NEW v5.5** (NEDynamics phasic/tonic+SNREnhancer+RVM NE连接) |
 | 网状结构 | `pons/reticular_formation.py` | ○ 占位 |
 | **耳蜗核** | `pons/cochlear_nucleus.py` | **★ NEW v5.2** (AVCN/PVCN/DCN, 频谱分解, 相位锁定, 声反射) |
 | **上橄榄复合体 (SOC)** | `pons/superior_olivary.py` | **★ NEW v5.2** (MSO/LSO/MNTB, ITD/ILD双耳定位, 双重理论) |
@@ -164,7 +165,7 @@
 7. **跨模态模型需重训**: D=330→372→468 布局变更导致已保存的 .pkl 模型不兼容, 需运行 `stage2_crossmodal.py` 重新训练
 8. ~~**听觉管线为语义代理模式**~~: ✅ **v5.3 已解决** — AudioInput 模块支持 WAV/MP3/FLAC 加载 + 麦克风录制, 真实 Mel 频谱驱动全听觉管线, 语义代理仅作为无音频时的回退
 9. **小脑内部模型未实现**: 前向/逆向模型预留但无代码
-10. **VTA RPE未实现**: 事件驱动学习率, 奖赏预测误差
+10. ~~**VTA RPE未实现**~~: ✅ **v5.5 已实现** — RPEModel + DopamineDynamics + 事件驱动 learn_rate 调制
 
 ---
 
@@ -177,16 +178,16 @@
 4. ✅ **M/P/K 并行通路 + 10脑区视觉层级管线 + 预测编码闭环 (v5.0)**
 5. ✅ **听觉6核团层级管线 + 15条知觉规律 + 视听双模态并行 (v5.2)**
 
-### P1 — 功能扩展
+### P1 — 功能扩展 ✅ v5.5 全部完成
 5. ~~丘脑感觉门控实现~~ ✅ v5.0 LGN 6层主动门控
 6. ~~全视觉管线接入 agent.step() 主循环~~ ✅ v5.1
 7. ~~感知向量 D=330 → D_V5=372 全局切换~~ ✅ v5.1
 8. ~~**听觉系统 15条知觉规律 + 6核团层级管线**~~ ✅ v5.2
 9. ~~真实音频输入支持 (替换语义代理模式)~~ ✅ v5.3
 10. ~~**痛觉系统 7条知觉规律 + 闸门控制 + 下行调控闭环**~~ ✅ v5.4
-11. 下丘脑稳态调节 (从 BodyVector 提取 setpoint)
-12. VTA RPE (事件驱动学习率)
-13. 蓝斑核 NE 唤醒度调制 (RVM 已预留接口)
+11. ~~下丘脑稳态调节 (从 BodyVector 提取 setpoint)~~ ✅ v5.5
+12. ~~VTA RPE (事件驱动学习率)~~ ✅ v5.5
+13. ~~蓝斑核 NE 唤醒度调制 (RVM 已预留接口)~~ ✅ v5.5
 
 ### P2 — 社会认知
 14. 小脑内部模型 (前向/逆向)
@@ -200,7 +201,7 @@
 
 ---
 
-## 技术参数 (v5.4 当前)
+## 技术参数 (v5.5 当前)
 
 | 参数 | 值 |
 |------|-----|
@@ -215,17 +216,18 @@
 | 词表规模 | 12,000 词 |
 | 视觉通路数 | **3 并行** (M/P/K) + 1 快速 (SC→Pulvinar) |
 | 听觉核团数 | **6** (CN, SOC, LL, IC, MGB, AC) |
-| **痛觉核团数** | **6** (DorsalHorn, Spinothalamic, Thalamus-VPL/CM-Pf/MD/Po, Insula, PAG, RVM) |
+| 痛觉核团数 | **6** (DorsalHorn, Spinothalamic, Thalamus-VPL/CM-Pf/MD/Po, Insula, PAG, RVM) |
+| **神经调节模块** | **3** (Hypothalamus, VTA, LocusCoeruleus) — ★v5.5 |
 | 视觉脑区模块 | **10** (LGN, V1, V2, V4, MT, MST, IT, SC, Pulvinar, FPN-Binding) |
 | 模块总数 | **75** |
-| 已实现核心模块 | **43** (57%) |
+| 已实现核心模块 | **46** (61%) |
 | v5.2 新增代码 | **~1,500 行** (7 files) |
-| v5.2 知觉规律 | **15 条** (音调拓扑/双重理论/ASA/预测编码/... ) |
 | v5.3 新增 | **AudioInput 模块** (~330 行) — 真实音频加载/录制/Mel频谱/立体声支持 |
-| **v5.4 新增代码** | **~1,800 行** (8 files) |
-| **v5.4 新增脑区** | **5 新建** (DorsalHorn, Insula, PAG, RVM, NociceptionHierarchy) **+ 3 升级** (Somatosensory, Thalamus, BodyVector) |
-| **v5.4 知觉规律** | **7 条** (闸门控制/非适应/双通路/下行调控/中枢致敏/痛觉情感/韦伯变式) |
+| v5.4 新增代码 | **~1,800 行** (8 files) |
+| v5.4 新增脑区 | **5 新建** (DorsalHorn, Insula, PAG, RVM, NociceptionHierarchy) **+ 3 升级** (Somatosensory, Thalamus, BodyVector) |
+| **v5.5 新增代码** | **~800 行** (3 files) |
+| **v5.5 新增脑区** | **3 新建** (Hypothalamus, VTA, LocusCoeruleus) |
 
 ---
 
-*由 v5.4 痛觉系统自动更新 · 基于 痛觉生理学综述 + 感官知觉规律调查(文件1 Section 8) + 闸门控制理论*
+*由 v5.5 神经调节系统自动更新 · 基于 神经调节系统综述 + 下丘脑稳态 + VTA RPE (Schultz 1997) + LC-NE (Aston-Jones & Cohen 2005)*

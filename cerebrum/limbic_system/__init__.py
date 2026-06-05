@@ -47,6 +47,11 @@ from cerebrum.limbic_system.cingulate import (
     SocialContext, compute_F_body,
 )
 
+# 下丘脑 —— 稳态调节 (v5.5)
+from cerebrum.limbic_system.hypothalamus import (
+    Hypothalamus, SetpointModel, DriveSystem,
+)
+
 __all__ = [
     # Hippocampus
     'predict_sensations', 'ClusterNetwork', 'sleep_cycle',
@@ -57,4 +62,6 @@ __all__ = [
     # Cingulate
     'compute_free_energy', 'HabituationTracker',
     'SocialContext', 'compute_F_body',
+    # Hypothalamus
+    'Hypothalamus', 'SetpointModel', 'DriveSystem',
 ]

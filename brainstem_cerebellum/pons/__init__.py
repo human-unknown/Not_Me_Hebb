@@ -14,7 +14,7 @@
 └── 外侧丘系核 (LL Nuclei)       — v5.2: 时间模式 + 双耳GABA抑制
 
 子模块:
-├── locus_coeruleus.py       蓝斑核 — NE 调控、唤醒度调制 [待实现]
+├── locus_coeruleus.py       蓝斑核 — NE 调控、唤醒度调制、SNR增强 ★v5.5
 ├── reticular_formation.py   网状结构 — 觉醒/睡眠状态机 [待实现]
 ├── cochlear_nucleus.py      耳蜗核 — 听觉频谱分解 + 相位锁定 ★v5.2
 ├── superior_olivary.py      上橄榄复合体 — 双耳定位 (MSO/LSO/MNTB) ★v5.2
