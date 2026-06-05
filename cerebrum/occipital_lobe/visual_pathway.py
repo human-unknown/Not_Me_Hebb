@@ -53,6 +53,27 @@ class GaborFilterBank:
         self.thetas = np.linspace(0, np.pi, n_orientations,
                                   endpoint=False, dtype=np.float32)
 
+        # ---- M/P/K 通路参数 (v5.0) ----
+        # M 通路 (parasol): 大 σ, 低空间频率, 高时间频率 → 运动/粗略空间
+        self.M_sigmas = np.array([4.0, 6.0, 8.0, 12.0], dtype=np.float32)
+        self.M_thetas = np.linspace(0, np.pi, n_orientations,
+                                      endpoint=False, dtype=np.float32)
+
+        # P 通路 (midget): 小 σ, 高空间频率 → 精细形状/纹理
+        self.P_sigmas = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+        self.P_thetas = np.linspace(0, np.pi, n_orientations,
+                                      endpoint=False, dtype=np.float32)
+
+        # K 通路 (bistratified): 中 σ, 中空间频率 → 颜色
+        self.K_sigmas = np.array([2.0, 3.0, 5.0, 7.0], dtype=np.float32)
+        self.K_thetas = np.linspace(0, np.pi, n_orientations,
+                                      endpoint=False, dtype=np.float32)
+
+        # M/P/K 滤波器核 (lazy built)
+        self._M_kernels = None
+        self._P_kernels = None
+        self._K_kernels = None
+
         # ---- Hebb 可塑性 ----
         self.gains = np.ones(self.n_filters, dtype=np.float32)
         self.gain_lr: float = 0.005
@@ -143,6 +164,39 @@ class GaborFilterBank:
             self._kernel_ffts.append(fft2(padded).conj())
 
         return kernels
+
+    def _build_kernels_for(self, sigmas, thetas) -> list[np.ndarray]:
+        """Build Gabor kernels for a given (sigmas, thetas) parameter set.
+
+        Follows the same pattern as _build_kernels() but accepts custom
+        sigma/theta arrays for M/P/K pathway-specific tuning.
+
+        Args:
+            sigmas: array of Gaussian envelope widths
+            thetas: array of preferred orientations (radians)
+
+        Returns:
+            list of Gabor kernels (cos-phase, ψ=0)
+        """
+        kernels = []
+        for sigma in sigmas:
+            ksize = int(sigma * 5)
+            ksize = max(5, min(41, ksize))
+            if ksize % 2 == 0:
+                ksize += 1
+            for theta in thetas:
+                kernel = self._gabor_kernel(sigma, theta, ksize, psi=0.0)
+                kernels.append(kernel)
+        return kernels
+
+    def _ensure_channel_kernels(self):
+        """Lazy-build M/P/K channel kernels if not yet built."""
+        if self._M_kernels is None:
+            self._M_kernels = self._build_kernels_for(self.M_sigmas, self.M_thetas)
+        if self._P_kernels is None:
+            self._P_kernels = self._build_kernels_for(self.P_sigmas, self.P_thetas)
+        if self._K_kernels is None:
+            self._K_kernels = self._build_kernels_for(self.K_sigmas, self.K_thetas)
 
     # ================================================================
     # Divisive Normalization (Module B: brightness/color constancy)
