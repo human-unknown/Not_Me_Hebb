@@ -1,38 +1,53 @@
 """
-image_encoder.py —— 单图像 Gabor 视觉编码器
+retina_lgn.py —— 视网膜→LGN 图像编码器 (v5.1: V5 感知布局)
 自由能原理智能体
 
-管线 (与 stage2_crossmodal.py 完全一致):
-  图像 (H×W×3 RGB) → GaborFilterBank (image_size=128, grid=4)
-    → V1[0:96] + V2[0:64] + V4[0:64] + Color[0:42]
-    → build_crossmodal_sensory() → D-dim 感知向量
+v5.1 更新:
+  - build_visual_sensory() 输出 D=372 V5 布局 (M/P/K × 脑区)
+  - make_visual_mask() 覆盖 V5 视觉范围 s[64:372]
+  - ImageEncoder 保留用于图像加载, M/P/K raw 输出供下游使用
+  - 全视觉管线推荐使用 VisualHierarchy.process()
 
-用途: 为 main_dialogue.py 提供"看到图片"能力。
+管线:
+  图像 (H×W×3 RGB) → GaborFilterBank (image_size=128, grid=4)
+    → M_raw[1024] / P_raw[1024] / K_raw[1024]  (视网膜分型输出)
+    → build_visual_sensory() → D-dim (372) V5 感知向量
 """
 
 import numpy as np
 from PIL import Image
 from typing import Optional
 
-from cns.data_types import D
+from cns.data_types import (
+    D,
+    TEXT_V5_WIDTH, TEXT_V5_START,
+    M_V1_WIDTH, M_V2_WIDTH, MT_WIDTH, MST_WIDTH,
+    M_V1_START, M_V1_END, M_V2_START, M_V2_END,
+    MT_START, MT_END, MST_START, MST_END,
+    P_V1_WIDTH, P_V2_WIDTH, V4_SHAPE_WIDTH,
+    P_V1_START, P_V1_END, P_V2_START, P_V2_END,
+    V4_SHAPE_START, V4_SHAPE_END,
+    K_V1_WIDTH, K_V2_WIDTH, V4_COLOR_WIDTH,
+    K_V1_START, K_V1_END, K_V2_START, K_V2_END,
+    V4_COLOR_START, V4_COLOR_END,
+    IT_WIDTH, IT_START, IT_END,
+    SC_WIDTH, SC_START, SC_END,
+    PULVINAR_WIDTH, PULVINAR_START, PULVINAR_END,
+    BINDING_WIDTH, BINDING_START, BINDING_END,
+)
 from cerebrum.occipital_lobe.visual_pathway import GaborFilterBank
 
-# 与 stage2_crossmodal.py 保持一致的布局常量
-TEXT_WIDTH  = 64
-V1_WIDTH    = 96
-V2_WIDTH    = 64
-V4_WIDTH    = 64
-COLOR_WIDTH = 42
 
-TEXT_START,  TEXT_END  = 0,   64
-V1_START,    V1_END    = 64,  64 + 96
-V2_START,    V2_END    = 160, 160 + 64
-V4_START,    V4_END    = 224, 224 + 64
-COLOR_START, COLOR_END = 288, 288 + 42
+# ---- v5.0 compatible aliases (ImageEncoder legacy keys use these widths) ----
+# Old V1 = M_V1 + P_V1 + K_V1 (non-contiguous in V5, but summed width for truncation)
+_V1_LEGACY_WIDTH = M_V1_WIDTH + P_V1_WIDTH + K_V1_WIDTH   # 96
+_V2_LEGACY_WIDTH = M_V2_WIDTH + P_V2_WIDTH + K_V2_WIDTH   # 64
+_V4_LEGACY_WIDTH = V4_SHAPE_WIDTH + V4_COLOR_WIDTH         # 48
+_COLOR_LEGACY_WIDTH = V4_COLOR_WIDTH                        # 16
 
 
 class ImageEncoder:
-    """单图像 Gabor 视觉编码器。
+    """单图像 Gabor 视觉编码器 (v5.1: 推荐用 VisualHierarchy 替代).
 
     GaborFilterBank 是全局共享的 (无状态)——多次编码之间
     只累积 Hebb gain 统计，不影响正确性。
@@ -49,21 +64,23 @@ class ImageEncoder:
         return self._gabor
 
     def encode_from_path(self, image_path: str) -> dict:
-        """从文件路径编码图像。
+        """从文件路径编码图像.
 
         Returns:
-            dict with keys: v1 (96d), v2 (64d), v4 (64d), color (42d)
+            dict with keys: M (1024d), P (1024d), K (1024d),
+                 v1, v2, v4, color (legacy, deprecated)
         """
         img = Image.open(image_path).convert('RGB')
         img_np = np.array(img, dtype=np.uint8)
         return self.encode(img_np)
 
     def encode(self, image: np.ndarray) -> dict:
-        """编码单张图像 (uint8 H×W×3 或 float [0,255])。
+        """编码单张图像 (uint8 H×W×3 或 float [0,255]).
 
         Returns:
-            dict with keys: v1 (96d), v2 (64d), v4 (64d), color (42d),
-                 M (1024d), P (1024d), K (1024d) — v5.0 M/P/K pathway outputs
+            dict with keys:
+                M (1024d), P (1024d), K (1024d) — v5.0 M/P/K pathway raw outputs
+                v1, v2, v4, color — legacy (deprecated, for backward compat)
         """
         if image.dtype != np.uint8:
             img_np = np.clip(image, 0, 255).astype(np.uint8)
@@ -82,10 +99,10 @@ class ImageEncoder:
         color_raw = self.gabor.encode_color(img_np)
 
         return {
-            'v1':    v1_raw[:V1_WIDTH].astype(np.float32),
-            'v2':    v2_raw[:V2_WIDTH].astype(np.float32),
-            'v4':    v4_raw[:V4_WIDTH].astype(np.float32),
-            'color': color_raw[:COLOR_WIDTH].astype(np.float32),
+            'v1':    v1_raw[:_V1_LEGACY_WIDTH].astype(np.float32),
+            'v2':    v2_raw[:_V2_LEGACY_WIDTH].astype(np.float32),
+            'v4':    v4_raw[:_V4_LEGACY_WIDTH].astype(np.float32),
+            'color': color_raw[:_COLOR_LEGACY_WIDTH].astype(np.float32),
             # v5.0 M/P/K channel outputs (1024d raw each)
             'M':     M_raw.astype(np.float32),
             'P':     P_raw.astype(np.float32),
@@ -93,82 +110,115 @@ class ImageEncoder:
         }
 
 
+def _pool_to(raw: np.ndarray, target_len: int, offset: int = 0) -> np.ndarray:
+    """从 raw 向量中取切片 + 零填充到 target_len."""
+    segment = raw[offset:offset + target_len]
+    if len(segment) < target_len:
+        out = np.zeros(target_len, dtype=np.float32)
+        out[:len(segment)] = segment
+        return out
+    return segment.astype(np.float32)
+
+
+def _place_segment(s: np.ndarray, start: int, vec: np.ndarray,
+                   normalize: bool = True):
+    """Place a normalized segment into sensory vector at start index."""
+    v = vec.copy()
+    if normalize:
+        n = np.linalg.norm(v)
+        if n > 1e-8:
+            v = v / n
+    flen = min(len(v), len(s) - start)
+    s[start:start + flen] = v[:flen]
+
+
 def build_visual_sensory(vis_features: dict,
                          text_emb: np.ndarray = None,
                          normalize_channels: bool = True) -> np.ndarray:
-    """构建包含视觉特征的感知向量 (与 stage2_crossmodal 相同布局)。
+    """构建包含视觉特征的感知向量 (v5.1 V5 布局: D=372).
 
-    s[0:64]    = text embedding (optional, 默认 zeros)
-    s[64:160]  = V1 Gabor
-    s[160:224] = V2 Gabor
-    s[224:288] = V4 Gabor
-    s[288:330] = Color opponent
+    M/P/K 三通路 × 脑区层级:
+      s[0:64]     = text embedding
+      s[64:96]    = M_V1 (32d)   — M通路 V1 层状输出
+      s[96:112]   = M_V2 (16d)   — M通路 V2 粗条纹
+      s[112:144]  = MT (32d)     — 中颞区方向能量
+      s[144:160]  = MST (16d)    — 内上颞区光流模式
+      s[160:208]  = P_V1 (48d)   — P通路 V1 层状输出
+      s[208:240]  = P_V2 (32d)   — P通路 V2 苍白条纹
+      s[240:272]  = V4_shape(32d)— V4 形状编码
+      s[272:288]  = K_V1 (16d)   — K通路 V1 斑块输出
+      s[288:304]  = K_V2 (16d)   — K通路 V2 细条纹
+      s[304:320]  = V4_color(16d)— V4 颜色编码
+      s[320:336]  = IT (16d)     — 下颞区物体编码
+      s[336:352]  = SC (16d)     — 上丘显著性图
+      s[352:364]  = Pulvinar(12d)— 丘脑枕快速通路
+      s[364:372]  = Binding (8d) — FPN 特征绑定
 
-    normalize_channels: 若 True，每个通道 L2 归一化，防止 V4 主导。
-                        V4 原始范数 ~1.0，V1/V2/Color ~0.01，
-                        不归一化时所有图像 cosine > 0.93 (无区分力)。
+    Args:
+        vis_features: ImageEncoder.encode() 的输出 dict
+        text_emb: 文本嵌入 (可选, 64d)
+        normalize_channels: 逐段 L2 归一化
+
+    Returns:
+        D-dim (372) 感知向量
     """
     s = np.zeros(D, dtype=np.float32)
 
     if text_emb is not None:
-        flen = min(len(text_emb), TEXT_WIDTH)
-        s[TEXT_START:TEXT_START + flen] = text_emb[:flen]
+        flen = min(len(text_emb), TEXT_V5_WIDTH)
+        s[TEXT_V5_START:TEXT_V5_START + flen] = text_emb[:flen]
 
-    v1 = vis_features.get('v1')
-    if v1 is not None:
-        flen = min(len(v1), V1_WIDTH)
-        vec = v1[:flen].copy()
-        if normalize_channels:
-            n = np.linalg.norm(vec)
-            if n > 1e-8:
-                vec = vec / n
-        s[V1_START:V1_START + flen] = vec
+    # ---- M 通路 (运动/空间): 从 M_raw 抽取各段 ----
+    M_raw = vis_features.get('M')
+    if M_raw is not None:
+        _place_segment(s, M_V1_START, _pool_to(M_raw, M_V1_WIDTH, 0),
+                       normalize_channels)
+        _place_segment(s, M_V2_START, _pool_to(M_raw, M_V2_WIDTH, 32),
+                       normalize_channels)
+        _place_segment(s, MT_START, _pool_to(M_raw, MT_WIDTH, 48),
+                       normalize_channels)
+        _place_segment(s, MST_START, _pool_to(M_raw, MST_WIDTH, 80),
+                       normalize_channels)
 
-    v2 = vis_features.get('v2')
-    if v2 is not None:
-        flen = min(len(v2), V2_WIDTH)
-        vec = v2[:flen].copy()
-        if normalize_channels:
-            n = np.linalg.norm(vec)
-            if n > 1e-8:
-                vec = vec / n
-        s[V2_START:V2_START + flen] = vec
+    # ---- P 通路 (形状/细节): 从 P_raw 抽取各段 ----
+    P_raw = vis_features.get('P')
+    if P_raw is not None:
+        _place_segment(s, P_V1_START, _pool_to(P_raw, P_V1_WIDTH, 0),
+                       normalize_channels)
+        _place_segment(s, P_V2_START, _pool_to(P_raw, P_V2_WIDTH, 48),
+                       normalize_channels)
+        _place_segment(s, V4_SHAPE_START, _pool_to(P_raw, V4_SHAPE_WIDTH, 80),
+                       normalize_channels)
 
-    v4 = vis_features.get('v4')
-    if v4 is not None:
-        flen = min(len(v4), V4_WIDTH)
-        vec = v4[:flen].copy()
-        if normalize_channels:
-            n = np.linalg.norm(vec)
-            if n > 1e-8:
-                vec = vec / n
-        s[V4_START:V4_START + flen] = vec
+    # ---- K 通路 (颜色): 从 K_raw 抽取各段 ----
+    K_raw = vis_features.get('K')
+    if K_raw is not None:
+        _place_segment(s, K_V1_START, _pool_to(K_raw, K_V1_WIDTH, 0),
+                       normalize_channels)
+        _place_segment(s, K_V2_START, _pool_to(K_raw, K_V2_WIDTH, 16),
+                       normalize_channels)
+        _place_segment(s, V4_COLOR_START, _pool_to(K_raw, V4_COLOR_WIDTH, 32),
+                       normalize_channels)
 
-    color = vis_features.get('color')
-    if color is not None:
-        flen = min(len(color), COLOR_WIDTH)
-        vec = color[:flen].copy()
-        if normalize_channels:
-            n = np.linalg.norm(vec)
-            if n > 1e-8:
-                vec = vec / n
-        s[COLOR_START:COLOR_START + flen] = vec
+    # ---- IT/SC/Pulvinar/Binding: 零初始化 (由 VisualHierarchy 补充) ----
+    # 在 build_visual_sensory 快速路径中这些段保持为零;
+    # 当使用 VisualHierarchy.process() 时会被真实值覆盖.
 
     return s
 
 
 def make_visual_mask() -> np.ndarray:
-    """视觉通道 mask: s[64:330]=True, 其余=False。
+    """视觉通道 mask: s[64:372]=True, 其余=False (v5.1 V5 范围).
 
-    用于 masked recall — 以纯视觉查询检索跨模态集群。
+    用于 masked recall — 以纯视觉查询检索跨模态集群.
     """
     mask = np.zeros(D, dtype=bool)
-    mask[64:330] = True
+    mask[M_V1_START:BINDING_END] = True
     return mask
 
 
 def make_text_mask() -> np.ndarray:
-    """文本通道 mask: s[0:64]=True, 其余=False。"""
+    """文本通道 mask: s[0:64]=True, 其余=False."""
     mask = np.zeros(D, dtype=bool)
-    mask[0:64] = True
+    mask[TEXT_V5_START:TEXT_V5_START + TEXT_V5_WIDTH] = True
     return mask

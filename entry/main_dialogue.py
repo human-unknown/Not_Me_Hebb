@@ -21,6 +21,7 @@ from cerebrum.limbic_system.amygdala import analyze_sentiment, sentiment_to_soci
 from cerebrum.limbic_system.cingulate import SocialContext
 from cerebrum.occipital_lobe.retina_lgn import (ImageEncoder, build_visual_sensory,
                            make_visual_mask, make_text_mask)
+from cns.data_types import (M_V1_START, BINDING_END, D_VISUAL_V5)
 
 
 def _safe_str(s: str) -> str:
@@ -68,16 +69,34 @@ COCO_CATEGORIES_ZH = {
 
 
 def _channel_normalize_visual(vis_part: np.ndarray) -> np.ndarray:
-    """逐通道 L2 归一化视觉特征 [V1|V2|V4|Color]。
+    """逐段 L2 归一化视觉特征 (v5.1: V5 M/P/K x area 布局).
 
-    防止 V4 (norm ~1.0) 主导 V1 (norm ~0.01)。
-    布局: V1[0:96] | V2[96:160] | V4[160:224] | Color[224:266]
+    防止大 norm 段主导小 norm 段。
+    V5 布局: M_V1[0:32]|M_V2[32:48]|MT[48:80]|MST[80:96]|
+             P_V1[96:144]|P_V2[144:176]|V4_shape[176:208]|
+             K_V1[208:224]|K_V2[224:240]|V4_color[240:256]|
+             IT[256:272]|SC[272:288]|Pulvinar[288:300]|Binding[300:308]
     """
+    from cns.data_types import (
+        M_V1_WIDTH, M_V2_WIDTH, MT_WIDTH, MST_WIDTH,
+        P_V1_WIDTH, P_V2_WIDTH, V4_SHAPE_WIDTH,
+        K_V1_WIDTH, K_V2_WIDTH, V4_COLOR_WIDTH,
+        IT_WIDTH, SC_WIDTH, PULVINAR_WIDTH, BINDING_WIDTH,
+    )
     result = vis_part.copy().astype(np.float32)
-    for start, end in [(0, 96), (96, 160), (160, 224), (224, 266)]:
-        n = np.linalg.norm(result[start:end])
-        if n > 1e-8:
-            result[start:end] /= n
+    seg_widths = [
+        M_V1_WIDTH, M_V2_WIDTH, MT_WIDTH, MST_WIDTH,
+        P_V1_WIDTH, P_V2_WIDTH, V4_SHAPE_WIDTH,
+        K_V1_WIDTH, K_V2_WIDTH, V4_COLOR_WIDTH,
+        IT_WIDTH, SC_WIDTH, PULVINAR_WIDTH, BINDING_WIDTH,
+    ]
+    offset = 0
+    for w in seg_widths:
+        if offset + w <= len(result):
+            n = np.linalg.norm(result[offset:offset + w])
+            if n > 1e-8:
+                result[offset:offset + w] /= n
+        offset += w
     # L2 normalize the whole thing too
     total_n = np.linalg.norm(result)
     if total_n > 1e-8:
@@ -135,10 +154,12 @@ def _setup_visual_brain(model_path: str = '.cache/stage2_crossmodal_coco_5000_s4
     print(f"  [Vision] 文本编码器就绪: {full_embs.shape[1]}d → 64d, "
           f"explained={pca.explained_variance_ratio_.sum():.1%}")
 
-    # 预计算所有簇的逐通道归一化视觉特征 (用于快速视觉检索)
-    coco_vis_normed = np.zeros((vis_net.n_clusters, 266), dtype=np.float32)
+    # 预计算所有簇的逐段归一化视觉特征 (v5.1: D_VISUAL_V5=308)
+    VIS_END_V5 = M_V1_START + D_VISUAL_V5
+    coco_vis_normed = np.zeros((vis_net.n_clusters, D_VISUAL_V5), dtype=np.float32)
     for i, cl in enumerate(vis_net.clusters):
-        coco_vis_normed[i] = _channel_normalize_visual(cl.centroid[64:330])
+        coco_vis_normed[i] = _channel_normalize_visual(
+            cl.centroid[M_V1_START:VIS_END_V5])
 
     vis_brain = {
         'net': vis_net,
@@ -171,9 +192,10 @@ def _visual_recall(vis_brain: dict, image_path: str,
         print(f"  [Vision] 无法加载图像: {e}")
         return []
 
-    s_vis = build_visual_sensory(vis_feat)  # 通道归一化的 query
-    query_vis = s_vis[64:330].astype(np.float32)
-    # 与 centroids 使用相同的归一化: 逐通道 + 整体 L2
+    s_vis = build_visual_sensory(vis_feat)  # 通道归一化的 query (D=372)
+    VIS_END_V5 = M_V1_START + D_VISUAL_V5  # = BINDING_END = 372
+    query_vis = s_vis[M_V1_START:VIS_END_V5].astype(np.float32)
+    # 与 centroids 使用相同的归一化: 逐段 + 整体 L2
     query_vis = _channel_normalize_visual(query_vis)
 
     net = vis_brain['net']
@@ -182,7 +204,7 @@ def _visual_recall(vis_brain: dict, image_path: str,
     # 与所有簇的预归一化视觉特征比较
     if 'coco_vis_normed' in vis_brain:
         # 快速路径: 使用预归一化的 centroid 视觉特征
-        centroid_vis_normed = vis_brain['coco_vis_normed']  # (N, 266)
+        centroid_vis_normed = vis_brain['coco_vis_normed']  # (N, D_VISUAL_V5)
         sims = np.dot(centroid_vis_normed, query_vis)
         best_idx = int(np.argmax(sims))
         best_c = net.clusters[best_idx]
@@ -191,7 +213,7 @@ def _visual_recall(vis_brain: dict, image_path: str,
         best_sim = -1.0
         best_c = None
         for cl in net.clusters:
-            c_vis = _channel_normalize_visual(cl.centroid[64:330])
+            c_vis = _channel_normalize_visual(cl.centroid[M_V1_START:VIS_END_V5])
             sim = float(np.dot(c_vis, query_vis))
             if sim > best_sim:
                 best_sim = sim
@@ -251,8 +273,8 @@ def _cross_modal_complete(vis_brain: dict, text_str: str,
 
     Returns:
         None (未找到匹配) 或 dict:
-            visual_vec: (266,) 补全的视觉特征 s[64:330]
-            centroid: (330,) 最佳匹配簇的完整 centroid
+            visual_vec: (D_VISUAL_V5,) 补全的视觉特征 s[64:372]
+            centroid: (D,) 最佳匹配簇的完整 centroid
             similarity: 文本相似度
             zh_category: 匹配到的中文类别
             visual_attrs: 视觉属性描述
@@ -309,8 +331,9 @@ def _cross_modal_complete(vis_brain: dict, text_str: str,
     if best_c is None or best_sim < min_similarity:
         return None
 
-    # ---- Step 3: 提取视觉特征 ----
-    visual_vec = best_c.centroid[64:330].copy().astype(np.float32)
+    # ---- Step 3: 提取视觉特征 (v5.1: V5 layout s[64:372]) ----
+    VIS_END_V5 = M_V1_START + D_VISUAL_V5
+    visual_vec = best_c.centroid[M_V1_START:VIS_END_V5].copy().astype(np.float32)
 
     # 提取视觉属性
     attrs = _extract_visual_attributes(visual_vec)
@@ -325,33 +348,41 @@ def _cross_modal_complete(vis_brain: dict, text_str: str,
 
 
 def _extract_visual_attributes(vis_vec: np.ndarray) -> dict:
-    """从 Gabor 视觉特征提取人类可读的视觉属性。
+    """从 V5 视觉特征提取人类可读的视觉属性 (v5.1).
 
-    vis_vec 布局: V1[0:96] | V2[96:160] | V4[160:224] | Color[224:266]
-
-    由于 features 已经过逐通道 L2 归一化，不使用 norm（总为 1），
-    而是用通道内统计量: 均值(亮度/色调)、方差(复杂度)、偏度(纹理)。
+    V5 布局 (D_VISUAL_V5=308):
+      M_V1[0:32]|M_V2[32:48]|MT[48:80]|MST[80:96]|
+      P_V1[96:144]|P_V2[144:176]|V4_shape[176:208]|
+      K_V1[208:224]|K_V2[224:240]|V4_color[240:256]|
+      IT[256:272]|SC[272:288]|Pulvinar[288:300]|Binding[300:308]
 
     Returns:
-        dict with keys:
-            brightness: str — "明亮的", "暗淡的", "黑暗的"
-            color_tone: str — "暖色调", "冷色调", "中性色调"
-            dominant_color: str — "偏红", "偏蓝", "偏绿", "偏黄"
-            texture: str — "纹理分明", "光滑"
-            shape: str — "棱角分明", "圆润"
-            brightness_val: float — [-1, 1]
-            warmth_val: float — [-1, 1]
-            complexity_val: float — [0, 1]
+        dict with: brightness, color_tone, dominant_color, texture, shape,
+                   brightness_val, warmth_val, complexity_val
     """
-    V1 = vis_vec[0:96]
-    V2 = vis_vec[96:160]
-    V4 = vis_vec[160:224]
-    Color = vis_vec[224:266]
+    from cns.data_types import (
+        M_V1_WIDTH, M_V2_WIDTH, MT_WIDTH, MST_WIDTH,
+        P_V1_WIDTH, P_V2_WIDTH, V4_SHAPE_WIDTH,
+        K_V1_WIDTH, K_V2_WIDTH, V4_COLOR_WIDTH,
+    )
+    def _seg(start, w):
+        return vis_vec[start:start + w]
 
-    # ---- 亮度: Color L 分量均值 (归一化后均值仍有信息) ----
-    color_l = Color[0:14]
-    brightness_raw = float(np.mean(color_l))
-    # 缩放: 归一化向量的均值范围约 [-1/sqrt(d), +1/sqrt(d)]
+    # V5 segment offsets within vis_vec (which is the visual part only, s[64:372])
+    off = 0
+    M_V1 = _seg(off, M_V1_WIDTH); off += M_V1_WIDTH
+    M_V2 = _seg(off, M_V2_WIDTH); off += M_V2_WIDTH
+    MT = _seg(off, MT_WIDTH); off += MT_WIDTH
+    MST = _seg(off, MST_WIDTH); off += MST_WIDTH
+    P_V1 = _seg(off, P_V1_WIDTH); off += P_V1_WIDTH
+    P_V2 = _seg(off, P_V2_WIDTH); off += P_V2_WIDTH
+    V4_shape = _seg(off, V4_SHAPE_WIDTH); off += V4_SHAPE_WIDTH
+    K_V1 = _seg(off, K_V1_WIDTH); off += K_V1_WIDTH
+    K_V2 = _seg(off, K_V2_WIDTH); off += K_V2_WIDTH
+    V4_color = _seg(off, V4_COLOR_WIDTH); off += V4_COLOR_WIDTH
+
+    # ---- 亮度: V4_color 前段均值 ----
+    brightness_raw = float(np.mean(V4_color[:8])) if len(V4_color) >= 8 else 0.0
     brightness_val = float(np.clip(brightness_raw * 4.0, -1.0, 1.0))
 
     if brightness_val > 0.2:
@@ -363,13 +394,13 @@ def _extract_visual_attributes(vis_vec: np.ndarray) -> dict:
     else:
         brightness = ""
 
-    # ---- 色调解码: R-G 和 B-Y 对手通道均值 ----
-    rg = Color[14:28]
-    by_ = Color[28:42]
-    rg_val = float(np.mean(rg))
-    by_val = float(np.mean(by_))
+    # ---- 色调解码: V4_color 后段 R-G / B-Y 对手通道 ----
+    mid = len(V4_color) // 2
+    rg_seg = V4_color[mid:mid + mid // 2]
+    by_seg = V4_color[mid + mid // 2:]
+    rg_val = float(np.mean(rg_seg)) if len(rg_seg) > 0 else 0.0
+    by_val = float(np.mean(by_seg)) if len(by_seg) > 0 else 0.0
 
-    # 放缩: 归一化后的均值范围较小
     warmth_val = float(np.clip(rg_val * 4.0, -1.0, 1.0))
 
     if warmth_val > 0.12:
@@ -394,11 +425,10 @@ def _extract_visual_attributes(vis_vec: np.ndarray) -> dict:
         color_tone = "中性色调"
         dominant_color = ""
 
-    # ---- 纹理复杂度: V1 通道内方差 (高方差 = 边缘分布不均匀 = 纹理分明) ----
-    v1_var = float(np.var(V1))
-    v4_var = float(np.var(V4))
+    # ---- 纹理复杂度: P_V1 + P_V2 方差 (高方差 = 边缘分布不均匀 = 纹理分明) ----
+    p_var = float(np.var(np.concatenate([P_V1, P_V2])))
     # 归一化向量的方差 ≈ 1/dim, 缩放使范围在 [0, 1]
-    complexity_val = float(np.clip((v1_var * 96 + v4_var * 64) / 2.0, 0.0, 1.0))
+    complexity_val = float(np.clip(p_var * 80.0, 0.0, 1.0))
 
     if complexity_val > 0.5:
         texture = "纹理分明"
@@ -407,10 +437,11 @@ def _extract_visual_attributes(vis_vec: np.ndarray) -> dict:
     else:
         texture = ""
 
-    # ---- 形状: V4 方差 (曲率选择性) ----
-    if v4_var * 64 > 0.6:
+    # ---- 形状: V4_shape 方差 (曲率选择性) ----
+    v4s_var = float(np.var(V4_shape))
+    if v4s_var * 32 > 0.6:
         shape = "棱角分明"
-    elif v4_var * 64 < 0.25:
+    elif v4s_var * 32 < 0.25:
         shape = "圆润"
     else:
         shape = ""
@@ -492,22 +523,22 @@ def _extract_image_stats(img_np: np.ndarray) -> dict:
 
 
 def _extract_visual_attributes_from_raw(raw_features: dict) -> dict:
-    """从 RAW Gabor 特征提取视觉属性 (未归一化, 用于真实图像)。
+    """从 RAW Gabor 特征提取视觉属性 (未归一化, 用于真实图像) [v5.1].
 
-    与 _extract_visual_attributes() 不同: 输入是 img_enc.encode_from_path()
-    返回的原始 dict, 在归一化之前提取属性, 变化更丰富。
+    输入是 img_enc.encode_from_path() 返回的原始 dict,
+    使用 M/P/K raw 输出提取属性.
 
-    raw_features: {'v1': (96,), 'v2': (64,), 'v4': (64,), 'color': (42,)}
+    raw_features: {'M': (1024,), 'P': (1024,), 'K': (1024,),
+                   'v1', 'v2', 'v4', 'color'} (legacy keys also present)
     """
-    V1 = raw_features['v1']
-    V2 = raw_features['v2']
-    V4 = raw_features['v4']
-    Color = raw_features['color']
+    V1 = raw_features.get('v1', np.zeros(96))
+    V4 = raw_features.get('v4', np.zeros(48))
+    # v5.1: K_raw 提供颜色信息 (Blue-Yellow opponent)
+    K_raw = raw_features.get('K', np.zeros(1024))
 
-    # ---- 亮度: Color[0:14] 原始均值 ----
-    color_l = Color[0:14]
-    brightness_raw = float(np.mean(color_l))
-    # 原始范围较大, 用 tanh 压缩
+    # ---- 亮度: K_raw 前段 (B-Y opponent 的亮度分量) ----
+    color_seg = K_raw[:48] if len(K_raw) >= 48 else K_raw
+    brightness_raw = float(np.mean(color_seg[:16])) if len(color_seg) >= 16 else 0.0
     brightness_val = float(np.tanh(brightness_raw * 0.3))
 
     if brightness_val > 0.15:
@@ -519,20 +550,20 @@ def _extract_visual_attributes_from_raw(raw_features: dict) -> dict:
     else:
         brightness = ""
 
-    # ---- 色调解码 ----
-    rg = Color[14:28]
-    by_ = Color[28:42]
-    rg_val = float(np.mean(rg))
-    by_val = float(np.mean(by_))
+    # ---- 色调解码: K_raw 中后段 (蓝-黄对手通道) ----
+    mid16 = color_seg[16:32] if len(color_seg) >= 32 else np.zeros(8)
+    hi16 = color_seg[32:48] if len(color_seg) >= 48 else np.zeros(8)
+    ry_val = float(np.mean(mid16)) if len(mid16) > 0 else 0.0  # approx R-Y
+    by_val = float(np.mean(hi16)) if len(hi16) > 0 else 0.0    # B-Y opponent
 
-    warmth_val = float(np.tanh(rg_val * 0.3))
+    warmth_val = float(np.tanh(ry_val * 0.3))
 
     if warmth_val > 0.1:
         color_tone = "暖色调"
-        dominant_color = "偏红" if abs(rg_val) > abs(by_val) else "偏黄"
+        dominant_color = "偏红" if abs(ry_val) > abs(by_val) else "偏黄"
     elif warmth_val < -0.1:
         color_tone = "冷色调"
-        dominant_color = "偏绿" if abs(rg_val) > abs(by_val) else "偏蓝"
+        dominant_color = "偏绿" if abs(ry_val) > abs(by_val) else "偏蓝"
     elif by_val > 0.05:
         color_tone = "暖色调"; dominant_color = "偏黄"
     elif by_val < -0.05:
@@ -797,16 +828,19 @@ def run_dialogue():
                         s[0:64] = np.zeros(64)
                     last_human_vec = s[0:64].copy()
 
-                    # 视觉通道: 填入 Gabor 特征
+                    # 视觉通道: 填入 Gabor 特征 (v5.1: V5 layout)
                     vis_attrs = None; vis_attr_text = ""; body_mod = None
+                    VIS_END_V5 = M_V1_START + D_VISUAL_V5
                     try:
                         vis_feat = img_enc.encode_from_path(img_path)
                         s_vis = build_visual_sensory(vis_feat)
-                        s[64:330] = s_vis[64:330]
+                        s[M_V1_START:VIS_END_V5] = s_vis[M_V1_START:VIS_END_V5]
 
-                        # Stage 3: 合并像素统计 + Gabor 属性
+                        # 设置当前图像帧 (供 agent.step() Phase 0 全管线使用)
                         from PIL import Image
                         img_np = np.array(Image.open(img_path).convert('RGB'))
+                        agent.set_current_image(img_np)
+
                         pixel_stats = _extract_image_stats(img_np)
                         gabor_attrs = _extract_visual_attributes_from_raw(vis_feat)
                         # 合并: 像素提供亮度/色调, Gabor 提供纹理/形状
@@ -818,9 +852,9 @@ def run_dialogue():
                         }
                         vis_attr_text = _build_visual_attribute_text(vis_attrs)
 
-                        # 身体调制 (用归一化特征计算身体影响)
-                        body_mod = _visual_body_modulation(s[64:330], agent.body,
-                                                          intensity=1.0)
+                        # 身体调制 (用 V5 视觉特征计算身体影响)
+                        body_mod = _visual_body_modulation(
+                            s[M_V1_START:VIS_END_V5], agent.body, intensity=1.0)
                     except Exception:
                         pass
 
@@ -894,8 +928,8 @@ def run_dialogue():
                         cross_modal_info = _cross_modal_complete(
                             vis_brain, human_text.strip(), min_similarity=0.25)
                         if cross_modal_info is not None:
-                            # 填入视觉特征到 s[64:330]
-                            s[64:330] = cross_modal_info['visual_vec']
+                            # 填入视觉特征到 s[64:372] (v5.1 V5 layout)
+                            s[M_V1_START:VIS_END_V5] = cross_modal_info['visual_vec']
                             # 视觉 → 身体调制 (Scene C: 情感影响)
                             body_mod = _visual_body_modulation(
                                 cross_modal_info['visual_vec'], agent.body,
@@ -941,12 +975,9 @@ def run_dialogue():
                 # 沉默时 s[80:88] 保持零（无人类社会信号）
                 social_ctx.tick()
 
-            # ---- 2b. 自听回路: 把自己上一轮说的话填入听觉通道 ----
-            # s[128:192] = 听觉通道 (自己说的话的语义)
-            # s[96:104]  = 输出反馈 (自己说的话的情感)
-            # 这形成了自感知闭环: 说话 → 听到 → 影响下一步状态
-            s[128:192] = last_self_semantic
-            s[96:104] = last_self_sentiment
+            # ---- 2b. 自听回路 (v5.1: 通过 agent 内部状态, 不写入 sensory) ----
+            # 自感知闭环: 说话 → 听到 → 影响下一步身体状态和情感
+            agent.set_self_audio(last_self_semantic, last_self_sentiment)
 
             # ---- 3. Agent 处理 ----
             F_before = agent.F_body_history[-1] if agent.F_body_history else 0.0

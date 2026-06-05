@@ -16,8 +16,8 @@ stage2_crossmodal.py — Stage 2: 跨模态 Hebb 绑定
   → 集群 centroid 同时编码文本和视觉模式
 
 跨模态检索 (已有 recall(mask=...) 原生支持):
-  文本 → 视觉: mask[0:64]=True, recall → centroid[64:330] = 视觉特征
-  视觉 → 文本: mask[64:330]=True, recall → centroid[0:64] = 文本特征
+  文本 → 视觉: mask[0:64]=True, recall → centroid[64:372] = 视觉特征
+  视觉 → 文本: mask[64:372]=True, recall → centroid[0:64] = 文本特征
 
 验收标准:
   [ ] 文本→视觉: 输入"猫"，recall 返回的视觉特征与真实猫图像 cosine > 0.5
@@ -43,22 +43,24 @@ from brainstem_cerebellum.neuromodulatory.meta_learning import create_default_th
 
 
 # ================================================================
-# Sensory Layout (D=330)
+# Sensory Layout (v5.1: D=372, expanded for V5 compatibility)
 # ================================================================
+# NOTE: v5.1 changes D from 330 to 372. Old .pkl models (D=330)
+# are incompatible. Retrain: python stage2_crossmodal.py --dataset coco --n 5000 --mode all
 
 TEXT_WIDTH  = 64
 V1_WIDTH    = 96
 V2_WIDTH    = 64
-V4_WIDTH    = 45       # reduced from 64 → 45 to fit gestalt
+V4_WIDTH    = 64       # v5.1: expanded 45->64 (V5 V4_shape + V4_color)
 GESTALT_WIDTH = 19     # Module A: Gestalt grouping features
-COLOR_WIDTH = 42       # truncated from 64
+COLOR_WIDTH = 65       # v5.1: expanded 42->65 (fill D=372)
 
 TEXT_START,    TEXT_END    = 0,   TEXT_WIDTH                          # s[0:64]
 V1_START,      V1_END      = 64,  64 + V1_WIDTH                       # s[64:160]
 V2_START,      V2_END      = 160, 160 + V2_WIDTH                      # s[160:224]
-V4_START,      V4_END      = 224, 224 + V4_WIDTH                      # s[224:269]
-GESTALT_START, GESTALT_END = 269, 269 + GESTALT_WIDTH                 # s[269:288]
-COLOR_START,   COLOR_END   = 288, 288 + COLOR_WIDTH                   # s[288:330]
+V4_START,      V4_END      = 224, 224 + V4_WIDTH                      # s[224:288]
+GESTALT_START, GESTALT_END = 288, 288 + GESTALT_WIDTH                 # s[288:307]
+COLOR_START,   COLOR_END   = 307, 307 + COLOR_WIDTH                   # s[307:372]
 
 assert COLOR_END == D, f"Layout ends at {COLOR_END}, expected {D}"
 
@@ -459,14 +461,14 @@ def build_crossmodal_sensory(text_emb: np.ndarray,
                                v4_feat: np.ndarray = None,
                                color_feat: np.ndarray = None,
                                gestalt_feat: np.ndarray = None) -> np.ndarray:
-    """构建跨模态感知向量 (D=330)。
+    """构建跨模态感知向量 (v5.1: D=372).
 
     s[0:64]    = text embedding
     s[64:160]  = V1 Gabor
     s[160:224] = V2 Gabor
-    s[224:269] = V4 Gabor
-    s[269:288] = Gestalt grouping (Module A)
-    s[288:330] = Color opponent
+    s[224:288] = V4 Gabor (expanded 45->64)
+    s[288:307] = Gestalt grouping (Module A)
+    s[307:372] = Color opponent (expanded 42->65)
     """
     s = np.zeros(D, dtype=np.float32)
 
@@ -514,7 +516,7 @@ def make_text_mask() -> np.ndarray:
 
 
 def make_visual_mask() -> np.ndarray:
-    """视觉通道 mask: s[64:330]=True, 其余=False"""
+    """视觉通道 mask: s[64:372]=True, 其余=False (v5.1: D=372)"""
     mask = np.zeros(D, dtype=bool)
     mask[V1_START:COLOR_END] = True
     return mask

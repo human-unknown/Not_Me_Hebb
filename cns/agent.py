@@ -99,10 +99,15 @@ class Agent:
         # TPN — 任务正网络: TPN↔DMN 跷跷板动态 (v4.4 集成)
         self.tpn: TaskPositiveNetwork = TaskPositiveNetwork()
 
-        # v5.0: 视觉层级管线 (full visual hierarchy)
+        # v5.1: 视觉层级管线 (full visual hierarchy, 替代旧 ImageEncoder)
         from cerebrum.occipital_lobe.visual_hierarchy import VisualHierarchy
         self.visual_hierarchy: VisualHierarchy = VisualHierarchy(image_size=64)
         self._current_visual_result: dict = {}  # 存本次 step 的视觉处理结果
+        self._current_image: np.ndarray = None  # 当前帧图像 (由外部设置)
+
+        # v5.1: 自听回路状态 (从 sensory 向量中移出, 变为 Agent 内部状态)
+        self._audio_semantic: np.ndarray = np.zeros(64, dtype=np.float32)
+        self._self_sentiment: np.ndarray = np.zeros(8, dtype=np.float32)
 
         # 睡眠巩固追踪
         self.consolidation_counter: int = 0      # 距离上次完整巩固的步数
@@ -143,14 +148,37 @@ class Agent:
         Returns:
             选定的 Action
         """
-        # ---- v5.0 Phase 0: 视觉层级处理 (如果有视觉输入) ----
-        vis_active = bool(np.any(np.abs(sensory[64:330]) > 0.01))
+        # ---- v5.1 Phase 0: 视觉层级处理 (全管线前馈+反馈+PE+绑定) ----
+        from cns.data_types import (M_V1_START, BINDING_END, D_VISUAL_V5)
+        VIS_START, VIS_END = M_V1_START, BINDING_END  # s[64:372]
+        vis_active = bool(np.any(np.abs(sensory[VIS_START:VIS_END]) > 0.01))
+
         if vis_active and hasattr(self, 'visual_hierarchy') and hasattr(self, 'fpn'):
-            self._current_visual_result = {
-                'F_accuracy': 0.0,  # F_accuracy 由 compute_free_energy 统一计算
-                'PE_total': 0.0,
-                'diagnostics': {},
-            }
+            # 如果有当前图像帧, 驱动全视觉层级管线
+            if self._current_image is not None:
+                try:
+                    # 估算脑干唤醒度 (从 arousal history)
+                    brainstem_arousal = float(np.clip(
+                        self.arousal_history[-1] if self.arousal_history else 0.5,
+                        0.1, 1.0))
+                    vis_result = self.visual_hierarchy.process(
+                        self._current_image,
+                        brainstem_arousal=brainstem_arousal,
+                        fpn=self.fpn,
+                        learn=True,
+                    )
+                    # 用全管线输出替换感知向量的视觉段
+                    sensory[VIS_START:VIS_END] = vis_result['sensory'][VIS_START:VIS_END]
+                    self._current_visual_result = vis_result
+                except Exception:
+                    # 视觉管线失败时保持旧路径的感知
+                    self._current_visual_result = {
+                        'F_accuracy': 0.0, 'PE_total': 0.0, 'diagnostics': {},
+                    }
+            else:
+                self._current_visual_result = {
+                    'F_accuracy': 0.0, 'PE_total': 0.0, 'diagnostics': {},
+                }
 
         # ---- L0: 学习感知 + 周期性睡眠 ----
         self.net.learn(sensory)
@@ -226,11 +254,11 @@ class Agent:
         if self.tpn.tpn_activation > 0.3:
             # 基于信念向量构建注意力目标掩码
             belief_norm = belief / (np.linalg.norm(belief) + 1e-8)
-            # 将信念(H-dim)映射到感知空间(D-dim): 视觉通道 [64:330]
+            # 将信念(H-dim)映射到感知空间(D-dim): 视觉通道 [VIS_START:VIS_END]
             goal_features = np.ones(self.fpn.input_dim, dtype=np.float32)
             # 前额叶信念主要投射到视觉区 → 增强视觉注意力
             vis_gain = 1.0 + 0.3 * float(np.tanh(np.mean(np.abs(belief_norm))))
-            goal_features[64:330] *= vis_gain
+            goal_features[VIS_START:VIS_END] *= vis_gain
             # 注意力精度调制探照灯亮度
             goal_features *= (0.5 + F.attention_precision * 0.5)
             self.fpn.update_template(goal_features, lr=0.05)
@@ -280,10 +308,10 @@ class Agent:
 
         # ---- Body ODE: 身体动力学 (v2) ----
         self.body.step(action.index)
-        # 多模态刺激累积 (b₅:视觉, b₆:音频)
+        # 多模态刺激累积 (b₅:视觉, b₆:音频) [v5.1: 使用 V5 布局 + agent 状态]
         if self.body.mode == 'text' and len(self.body.b) >= 8:
-            vis_norm = float(np.linalg.norm(sensory[64:128]))
-            aud_norm = float(np.linalg.norm(sensory[128:192]))
+            vis_norm = float(np.linalg.norm(sensory[VIS_START:VIS_END]))
+            aud_norm = float(np.linalg.norm(self._audio_semantic))
             self.body.b[5] = np.clip(self.body.b[5] - 0.003 + 0.01 * vis_norm, 0, 1)
             self.body.b[6] = np.clip(self.body.b[6] - 0.003 + 0.01 * aud_norm, 0, 1)
             # A₄ 恢复 b₅,b₆,b₇
@@ -292,9 +320,9 @@ class Agent:
                 self.body.b[6] = max(0.0, self.body.b[6] - 0.02)
                 self.body.b[7] = max(0.0, self.body.b[7] - 0.02)
 
-                # ---- 自听情感传染 (v2: 强化反馈) ----
-            # s[96:104] 携带上一轮自己回应/内部言语的情感编码
-            self_sent = sensory[96:104]
+            # ---- 自听情感传染 (v5.1: 从 agent 内部状态读取, 不再从 sensory 向量) ----
+            # self._self_sentiment 由外部 (main_dialogue) 通过 set_self_audio() 写入
+            self_sent = self._self_sentiment
             has_self = np.sum(np.abs(self_sent)) > 0.01
 
             if has_self:
@@ -483,6 +511,32 @@ class Agent:
                 self.net.learn(s)
             except Exception:
                 pass
+
+    def set_self_audio(self, audio_semantic: np.ndarray,
+                       self_sentiment: np.ndarray):
+        """v5.1: 设置自听回路状态 (替代旧 s[128:192] + s[96:104] 方案).
+
+        由 main_dialogue 在 agent.step() 之前调用,
+        将上一轮自己说话的语义和情感写入 agent 内部状态.
+
+        Args:
+            audio_semantic: 自听语义向量 (64,)
+            self_sentiment: 自听情感信号 (8,)
+        """
+        if audio_semantic is not None:
+            flen = min(len(audio_semantic), len(self._audio_semantic))
+            self._audio_semantic[:flen] = audio_semantic[:flen]
+        if self_sentiment is not None:
+            flen = min(len(self_sentiment), len(self._self_sentiment))
+            self._self_sentiment[:flen] = self_sentiment[:flen]
+
+    def set_current_image(self, image: np.ndarray = None):
+        """v5.1: 设置当前帧图像 (供 Phase 0 视觉层级管线使用).
+
+        Args:
+            image: (H, W, 3) uint8 图像, 或 None 清除
+        """
+        self._current_image = image
 
     def evaluate_own_response(self, response_vec: np.ndarray) -> dict:
         """ACC+OFC —— 评估自己刚生成的回应"""

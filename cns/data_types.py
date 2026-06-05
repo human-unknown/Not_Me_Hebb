@@ -10,8 +10,8 @@ import numpy as np
 # ============================================================
 # 全局常量
 # ============================================================
-D = 330         # 感知维度 (320 multimodal core + 5 F_context + 5 action_onehot)
-S_CORE = 320    # 感觉核心: text[64]|vision[64]|audio[64]|body[64]|meta[64]
+D = 372         # v5.1: 感知维度 = D_V5 (text[64] + visual[308])
+S_CORE = 362    # v5.1: 感觉核心 = D - 10 (F_context[5] + action_onehot[5])
 H = 16          # 隐藏状态维度
 K = 256         # 最大簇数 (multimodal 330-dim)
 A = 5           # 行动维度 (N,S,W,E,REST)
