@@ -62,13 +62,20 @@ class ImageEncoder:
         """编码单张图像 (uint8 H×W×3 或 float [0,255])。
 
         Returns:
-            dict with keys: v1 (96d), v2 (64d), v4 (64d), color (42d)
+            dict with keys: v1 (96d), v2 (64d), v4 (64d), color (42d),
+                 M (1024d), P (1024d), K (1024d) — v5.0 M/P/K pathway outputs
         """
         if image.dtype != np.uint8:
             img_np = np.clip(image, 0, 255).astype(np.uint8)
         else:
             img_np = image
 
+        # v5.0: M/P/K retinal ganglion cell-type outputs
+        M_raw = self.gabor.encode_M(img_np)
+        P_raw = self.gabor.encode_P(img_np)
+        K_raw = self.gabor.encode_K(img_np)
+
+        # Legacy encodings (preserved for backward compatibility)
         v1_raw = self.gabor.encode(img_np, learn=False)
         v2_raw = self.gabor.encode_v2(img_np)
         v4_raw = self.gabor.encode_v4(img_np)
@@ -79,6 +86,10 @@ class ImageEncoder:
             'v2':    v2_raw[:V2_WIDTH].astype(np.float32),
             'v4':    v4_raw[:V4_WIDTH].astype(np.float32),
             'color': color_raw[:COLOR_WIDTH].astype(np.float32),
+            # v5.0 M/P/K channel outputs (1024d raw each)
+            'M':     M_raw.astype(np.float32),
+            'P':     P_raw.astype(np.float32),
+            'K':     K_raw.astype(np.float32),
         }
 
 
