@@ -10,24 +10,26 @@ s → L0.learn(s) → L1.compute_F(z,s) → L2.select_action() → a
 """
 
 import numpy as np
-from data_types import Theta, Action, FreeEnergy, AgentBelief, BodyVector
-from layer0_model import (
+from cns.data_types import Theta, Action, FreeEnergy, AgentBelief, BodyVector
+from cerebrum.limbic_system.hippocampus import (
     predict_sensations, ClusterNetwork, sleep_cycle,
 )
-from layer1_free_energy import (
+from cerebrum.limbic_system.cingulate import (
     compute_free_energy, HabituationTracker,
 )
-from layer2_inference import (
+from cerebrum.frontal_lobe.prefrontal import (
     compute_G, select_action, predict_next_state,
     update_social_beliefs,
 )
-from layer2_5_moe import MoEGate
-from layer3_meta import create_default_theta, MetaLearner
-from dialogue_memory import (
+from cerebrum.basal_ganglia.action_gating import MoEGate
+from brainstem_cerebellum.neuromodulatory.meta_learning import (
+    create_default_theta, MetaLearner,
+)
+from cerebrum.temporal_lobe.wernicke import (
     DialogueContext, comprehend, evaluate_response,
     consolidate_dialogue_memory, micro_consolidation,
 )
-from self_model import SelfModel
+from cerebrum.association.dmn import SelfModel
 
 
 class Agent:
@@ -288,7 +290,7 @@ class Agent:
         激活度最高的集群的 centroid → 信念向量。
         无集群 → 零向量。
         """
-        from data_types import H
+        from cns.data_types import H
         if self.net.n_clusters == 0:
             return np.zeros(H)
         top = max(self.net.clusters, key=lambda c: c.activation)
@@ -320,7 +322,7 @@ class Agent:
         onehot = np.zeros(5)
         onehot[self.last_action.index] = 1.0
 
-        from data_types import D, S_CORE
+        from cns.data_types import D, S_CORE
         pattern = np.zeros(D)
         # 行动-后果集群: 只存 F_context(5) + action(5), 不存 s_next
         # s_next 会导致下一帧 raw sensory 命中此集群 → 全合并
@@ -390,7 +392,7 @@ class Agent:
             text_env: TextEnvironment (用于编码)
             n: 创建的集群数量上限
         """
-        from data_types import D
+        from cns.data_types import D
         for i, sent in enumerate(sentences[:n]):
             try:
                 vec = text_env.encode_text(sent)

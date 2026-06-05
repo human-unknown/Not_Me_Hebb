@@ -11,9 +11,9 @@ F = D_KL[q(z) || p(z)] - E_q[ln p(s|z)]
 """
 
 import numpy as np
-from data_types import D, H, Theta, FreeEnergy
-from layer0_model import predict_sensations, ClusterNetwork
-from utils import exp_moving_average
+from cns.data_types import D, H, Theta, FreeEnergy
+from cerebrum.limbic_system.hippocampus import predict_sensations, ClusterNetwork
+from cns.utils import exp_moving_average
 
 
 # ============================================================

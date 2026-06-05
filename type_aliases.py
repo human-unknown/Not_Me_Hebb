@@ -1,16 +1,10 @@
 """
-types.py —— 类型别名
-自由能原理智能体 — M1 单智能体生存
+type_aliases.py — 向后兼容 re-export shim (v4.1)
+实际代码位置: cns/type_aliases.py
 """
 
-import numpy as np
-
-# 向量与矩阵
-Vector = np.ndarray    # 1D array
-Matrix = np.ndarray    # 2D array
-
-# 复合类型（用于类型标注）
-from typing import Union, Optional
-from data_types import Cluster
-
-ClusterList = list     # list[Cluster]
+from cns.type_aliases import (
+    Vector,
+    Matrix,
+    ClusterList,
+)

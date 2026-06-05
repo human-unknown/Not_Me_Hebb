@@ -1,13 +1,14 @@
 """
 边缘系统 (Limbic System)  [Level 3]
 
-功能：记忆编码/巩固/提取 · 情绪评估 · 稳态调节 · 感觉中继
+功能：记忆编码/巩固/提取 · 情绪评估 · 稳态调节
+
+v4.1: 丘脑 (Thalamus) 按图2独立为 cerebrum/thalamus/ — 丘脑是感觉中继结构，非边缘系统成员。
 
 核心结构:
 ├── 海马 (Hippocampus)    — 情景记忆编码、模式补全/分离、睡眠巩固
 ├── 杏仁核 (Amygdala)      — 恐惧/情绪评估、情感学习
-├── 下丘脑 (Hypothalamus)  — 饥饿/体温/内分泌/昼夜节律
-├── 丘脑 (Thalamus)        — 感觉中继站/门控、意识与注意力调节
+├── 下丘脑 (Hypothalamus)  — 饥饿/体温/内分泌/昼夜节律 (注: 解剖属间脑，功能属边缘系统)
 ├── 扣带回 (Cingulate)     — ACC: 冲突监测/共情/疼痛; PCC: DMN节点
 ├── 嗅皮层 (Olfactory)     — 嗅觉处理、气味记忆
 ├── 隔区 (Septum)          — 奖赏中枢
@@ -25,7 +26,6 @@
 ├── amygdala.py       杏仁核 — Hebb 情感词汇网络、从 F_body 学习词的情感效应
 ├── cingulate.py      扣带回 — 自由能计算、效价/唤醒、习惯化、社会上下文 (L1)
 ├── hypothalamus.py   下丘脑 — 身体稳态调节 (BodyVector ODE) [待实现]
-├── thalamus.py       丘脑 — 感觉中继/门控、注意力调制 [待实现]
 └── olfactory.py      嗅皮层 — 嗅觉编码 [待实现]
 """
 

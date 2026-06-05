@@ -12,6 +12,7 @@ cerebrum — 大脑 (Cerebrum)  [Level 2a]
 ├── occipital_lobe/  枕叶 — 视觉处理
 ├── limbic_system/   边缘系统 — 记忆、情绪、稳态
 ├── basal_ganglia/   基底神经节 — 动作选择/门控、习惯、奖赏
+├── thalamus/        丘脑 — 感觉中继/门控、注意力调制 (v4.1 独立)
 └── association/     联合皮层 — DMN、跨模态整合
 
 设计原则 (CLAUE.md 五条核心原则):

@@ -2,6 +2,14 @@
 visual_interface.py —— 视觉环境 (阶段 0: 视觉基础)
 自由能原理智能体
 
+⚠️ v4.1 废弃说明: 本模块的视觉编码功能已被以下模块取代:
+  - cerebrum/occipital_lobe/retina_lgn.py  → ImageEncoder, Gabor 多尺度编码
+  - cerebrum/occipital_lobe/visual_pathway.py → V1+V2+V4+Color 视觉通路
+  - cerebrum/occipital_lobe/gestalt.py        → Gestalt 知觉分组层
+  - cerebrum/association/crossmodal.py        → 跨模态 Hebb 绑定
+
+保留本文件用于现有缓存和向后兼容。新代码请使用 cerebrum/ 层级模块。
+
 将图像数据集编码为 64-dim 视觉向量，填入 s[64:128] vision 通道。
 Gabor 滤波器组 = 生物"视网膜 + V1"，纯数学信号处理，零 ML 训练。
 

@@ -19,8 +19,8 @@ Agent 对"我是谁"的 Hebb 表征。
 """
 
 import numpy as np
-from data_types import D, Theta, Cluster
-from layer0_model import ClusterNetwork, _masked_cosine
+from cns.data_types import D, Theta, Cluster
+from cerebrum.limbic_system.hippocampus import ClusterNetwork, _masked_cosine
 
 
 class SelfModel:

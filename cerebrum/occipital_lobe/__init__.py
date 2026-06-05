@@ -20,7 +20,8 @@
 ├── v1.py               BA17 初级视皮层 — Gabor 滤波器组 [待实现]
 ├── v2.py               V2 — 轮廓整合、方向交互 [待实现]
 ├── v4.py               V4 — 全局形状、曲率、颜色 [待实现]
-└── retina_lgn.py       视网膜→LGN 编码 — 图像 Gabor 多尺度编码
+├── retina_lgn.py       视网膜→LGN 编码 — 图像 Gabor 多尺度编码
+└── gestalt.py          Gestalt 知觉分组 — 邻近/共线/相似/对称/图底分离 (v4.1)
 """
 
 # 视觉通路
@@ -30,8 +31,12 @@ from cerebrum.occipital_lobe.visual_pathway import (
 from cerebrum.occipital_lobe.retina_lgn import (
     ImageEncoder, build_visual_sensory,
 )
+from cerebrum.occipital_lobe.gestalt import (
+    GestaltGrouping, compute_gestalt_from_image,
+)
 
 __all__ = [
     'GaborFilterBank',
     'ImageEncoder', 'build_visual_sensory',
+    'GestaltGrouping', 'compute_gestalt_from_image',
 ]

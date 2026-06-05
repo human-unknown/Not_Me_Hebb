@@ -14,8 +14,8 @@ import numpy as np
 from PIL import Image
 from typing import Optional
 
-from data_types import D
-from layer0_visual import GaborFilterBank
+from cns.data_types import D
+from cerebrum.occipital_lobe.visual_pathway import GaborFilterBank
 
 # 与 stage2_crossmodal.py 保持一致的布局常量
 TEXT_WIDTH  = 64

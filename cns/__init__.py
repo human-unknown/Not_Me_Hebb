@@ -20,7 +20,7 @@ from cns.data_types import (
 )
 from cns.params import DEFAULT_THETA_DICT, PARAM_BOUNDS
 from cns.type_aliases import *
-from cns.utils import exp_moving_average, masked_cosine
+from cns.utils import exp_moving_average
 from cns.agent import Agent
 
 __all__ = [

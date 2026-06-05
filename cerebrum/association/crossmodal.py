@@ -37,9 +37,9 @@ import pickle
 import numpy as np
 from collections import defaultdict
 
-from data_types import D, Theta
-from layer0_model import ClusterNetwork, sleep_cycle, sleep_replay, _masked_cosine, _auto_mask
-from layer3_meta import create_default_theta
+from cns.data_types import D, Theta
+from cerebrum.limbic_system.hippocampus import ClusterNetwork, sleep_cycle, sleep_replay, _masked_cosine, _auto_mask
+from brainstem_cerebellum.neuromodulatory.meta_learning import create_default_theta
 
 
 # ================================================================

@@ -13,7 +13,7 @@ layer3_meta.py —— L3 元参数管理 (M5 激活)
 """
 
 import numpy as np
-from data_types import Theta, FreeEnergy
+from cns.data_types import Theta, FreeEnergy
 
 
 # ============================================================

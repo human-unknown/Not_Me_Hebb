@@ -14,12 +14,12 @@ layer2_inference.py —— L2 主动推理 + 行动选择
 """
 
 import numpy as np
-from data_types import (
+from cns.data_types import (
     D, H, A, Theta, Action, AgentBelief,
     ACTION_DIRECTIONS,
 )
-from layer0_model import predict_sensations, ClusterNetwork
-from layer2_5_moe import MoEGate
+from cerebrum.limbic_system.hippocampus import predict_sensations, ClusterNetwork
+from cerebrum.basal_ganglia.action_gating import MoEGate
 
 
 # ============================================================

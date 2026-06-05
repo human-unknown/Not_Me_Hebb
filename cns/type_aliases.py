@@ -11,6 +11,6 @@ Matrix = np.ndarray    # 2D array
 
 # 复合类型（用于类型标注）
 from typing import Union, Optional
-from data_types import Cluster
+from cns.data_types import Cluster
 
 ClusterList = list     # list[Cluster]

@@ -8,8 +8,8 @@ layer2_5_moe.py —— L2.5 混合专家门控 (MoE)
 """
 
 import numpy as np
-from data_types import AgentBelief
-from utils import softmax
+from cns.data_types import AgentBelief
+from cns.utils import softmax
 
 
 class MoEGate:
