@@ -19,6 +19,67 @@ N_AGENTS = 3    # 最大智能体数（M3+）
 
 
 # ============================================================
+# v5.0 视觉通路布局 (按通路 × 层级组织)
+# ============================================================
+# 文本段
+TEXT_V5_WIDTH = 64
+TEXT_V5_START, TEXT_V5_END = 0, 64
+
+# M 通路 (运动/空间): M-V1, M-V2, MT, MST
+M_V1_WIDTH = 32
+M_V2_WIDTH = 16
+MT_WIDTH = 32
+MST_WIDTH = 16
+M_PATHWAY_WIDTH = M_V1_WIDTH + M_V2_WIDTH + MT_WIDTH + MST_WIDTH  # 96
+
+M_V1_START, M_V1_END = TEXT_V5_END, TEXT_V5_END + M_V1_WIDTH
+M_V2_START, M_V2_END = M_V1_END, M_V1_END + M_V2_WIDTH
+MT_START, MT_END = M_V2_END, M_V2_END + MT_WIDTH
+MST_START, MST_END = MT_END, MT_END + MST_WIDTH
+
+# P 通路 (形状/细节): P-V1, P-V2, V4-shape
+P_V1_WIDTH = 48
+P_V2_WIDTH = 32
+V4_SHAPE_WIDTH = 32
+P_PATHWAY_WIDTH = P_V1_WIDTH + P_V2_WIDTH + V4_SHAPE_WIDTH  # 112
+
+P_V1_START, P_V1_END = MST_END, MST_END + P_V1_WIDTH
+P_V2_START, P_V2_END = P_V1_END, P_V1_END + P_V2_WIDTH
+V4_SHAPE_START, V4_SHAPE_END = P_V2_END, P_V2_END + V4_SHAPE_WIDTH
+
+# K 通路 (颜色): K-V1, K-V2, V4-color
+K_V1_WIDTH = 16
+K_V2_WIDTH = 16
+V4_COLOR_WIDTH = 16
+K_PATHWAY_WIDTH = K_V1_WIDTH + K_V2_WIDTH + V4_COLOR_WIDTH  # 48
+
+K_V1_START, K_V1_END = V4_SHAPE_END, V4_SHAPE_END + K_V1_WIDTH
+K_V2_START, K_V2_END = K_V1_END, K_V1_END + K_V2_WIDTH
+V4_COLOR_START, V4_COLOR_END = K_V2_END, K_V2_END + V4_COLOR_WIDTH
+
+# IT 物体
+IT_WIDTH = 16
+IT_START, IT_END = V4_COLOR_END, V4_COLOR_END + IT_WIDTH
+
+# 快速通路 (SC + Pulvinar)
+SC_WIDTH = 16
+PULVINAR_WIDTH = 12
+SC_START, SC_END = IT_END, IT_END + SC_WIDTH
+PULVINAR_START, PULVINAR_END = SC_END, SC_END + PULVINAR_WIDTH
+
+# 绑定信号
+BINDING_WIDTH = 8
+BINDING_START, BINDING_END = PULVINAR_END, PULVINAR_END + BINDING_WIDTH
+
+# 总视觉维度 (v5.0)
+D_VISUAL_V5 = (M_PATHWAY_WIDTH + P_PATHWAY_WIDTH + K_PATHWAY_WIDTH +
+               IT_WIDTH + SC_WIDTH + PULVINAR_WIDTH + BINDING_WIDTH)
+
+# 总感知维度 (v5.0)
+D_V5 = TEXT_V5_WIDTH + D_VISUAL_V5  # 64 + 308 = 372
+
+
+# ============================================================
 # 核心数据结构
 # ============================================================
 
