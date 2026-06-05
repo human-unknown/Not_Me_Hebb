@@ -1,8 +1,8 @@
 # NotMe v4.0 — 人脑层级结构架构
 
-> **版本**: v4.0-人脑层级结构
+> **版本**: v4.3 — 规则更新 (自 v4.0 人脑层级结构)
 > **日期**: 2026-06-05
-> **原则**: 按照人脑真实层级结构组织项目架构，布罗德曼分区作为备注标注
+> **原则**: 按照人脑真实层级结构组织项目架构，布罗德曼分区作为备注标注；v4.3 对齐图3六大运行规则
 
 ---
 
@@ -82,9 +82,11 @@ NotMe/
 │   │   ├── pallidum.py              # [待实现] 苍白球
 │   │   └── subthalamic.py           # [待实现] 底丘脑核
 │   │
-│   └── association/                 # 联合皮层 + DMN
+│   └── association/                 # 联合皮层 + DMN + FPN + TPN (v4.3)
 │       ├── __init__.py
 │       ├── dmn.py                    # ★ 默认模式网络 — 自我模型 (was self_model)
+│       ├── fpn.py                    # ★ NEW v4.3 额顶网络 — 选择性注意探照灯
+│       ├── tpn.py                    # ★ NEW v4.3 任务正网络 — DMN跷跷板对立
 │       └── crossmodal.py             # ★ 跨模态整合 (was stage2_crossmodal)
 │
 ├── brainstem_cerebellum/            # Level 2b: 脑干 + 小脑
@@ -169,42 +171,85 @@ NotMe/
 | `text_interface.py` | `environments/text_interface.py` | 环境 |
 | `main.py` | `entry/main.py` | M1-M5 入口 |
 | `main_dialogue.py` | `entry/main_dialogue.py` | Stage 6 入口 |
+| **NEW v4.3** | `cerebrum/association/fpn.py` | 额顶网络 — 选择性注意探照灯 |
+| **NEW v4.3** | `cerebrum/association/tpn.py` | 任务正网络 — TPN↔DMN 跷跷板 |
 
 ---
 
-## 数据流 (脑区视角)
+## v4.3 新增结构 (图3驱动)
+
+### 额顶网络 FPN (`cerebrum/association/fpn.py`)
+- **对应图3规则**: 规则4 (注意力瓶颈)
+- **核心节点**: dlPFC(BA9/46) · PPC(BA7/40) · FEF(BA8)
+- **功能**: 选择性注意"探照灯" — 增强目标特征，抑制干扰；工作记忆维护
+- **接口**: `attention_searchlight()` · `maintain_working_memory()` · `filter_distractors()`
+
+### 任务正网络 TPN (`cerebrum/association/tpn.py`)
+- **对应图3规则**: 规则4 (注意力瓶颈)
+- **核心节点**: dlPFC · dACC · PPC · AI · pre-SMA
+- **功能**: TPN↔DMN 跷跷板动态 — 任务时 TPN↑/DMN↓，突显网络切换
+- **接口**: `update_seesaw()` · `compute_effort()` · `receive_salience()`
+
+### 三大网络动态
+```
+突显网络 (dACC+AI) → 检测显著事件
+    ↓ 切换信号
+TPN ←→ DMN (跷跷板互相抑制)
+    ↓ TPN激活时
+FPN (探照灯增强目标信号)
+    ↓
+感觉皮层 (增益调制)
+```
+
+---
+
+## 数据流 (脑区视角, v4.3 更新)
 
 ```
-视网膜 → LGN → V1 → V2 → V4 → IT (物体识别)
-                ↓                    ↓
-           Pulvinar捷径        Amygdala (情绪标注)
-                                    ↓
-    耳蜗 → MGN → A1 → Wernicke ←→ Hippocampus (记忆)
-                              ↓
-                        ACC/Insula (F_body → Valence/Arousal)
-                              ↓
-                        dlPFC (EFE → Action Selection)
-                              ↓
-                        Basal Ganglia (Action Gating)
-                        ↙              ↘
-                 Direct (Go)      Indirect (NoGo)
-                        ↓
-                 Motor Cortex / SMA
-                        ↓
-                  Brainstem → Spinal → Body
-                        ↓
-                   Environment ← Body Action
-                        ↓
-              Sensory Feedback ← (close loop)
+自下而上 (Bottom-up, ~30ms/层, 快速粗糙):
+  视网膜 → LGN → V1 → V2 → V4 → IT (物体识别)
+                  ↓                    ↓
+             Pulvinar捷径        Amygdala (情绪标注)
+                                      ↓
+      耳蜗 → MGN → A1 → Wernicke ←→ Hippocampus (记忆)
+                                ↓
+                          ACC/Insula (F_body → Valence/Arousal)
+                                ↓
+                          dlPFC (EFE → Action Selection)
+                                ↓
+                          Basal Ganglia (Action Gating)
+                          ↙              ↘
+                   Direct (Go)      Indirect (NoGo)
+                          ↓
+                   Motor Cortex / SMA
+                          ↓
+                    Brainstem → Spinal → Body
+                          ↓
+                     Environment ← Body Action
+                          ↓
+                Sensory Feedback ← (close loop)
 
-并行通路:
+自上而下 (Top-down, 慢速精确, 携带预期/注意 — 图3 规则2):
+  dlPFC → FPN (探照灯) → V4 (预期颜色/形状) → V2 (轮廓预期) → V1 (方向增益)
+  海马 → 皮层 (记忆回放/情景模拟)
+  ACC → 岛叶 → 身体 (内感受预期)
+
+注意力瓶颈 (图3 规则4 — v4.3 新增):
+  突显网络 (dACC + AI) ──→ 检测冲突/新颖/紧迫
+       ↓
+  TPN ⟷ DMN 跷跷板: 任务时 TPN↑/DMN↓, 走神时 DMN↑/TPN↓
+       ↓
+  FPN 探照灯: 增强目标特征, 抑制干扰 (dmn 被抑制时)
+
+并行通路 (图3 规则3 — 分布式处理):
+  6条视觉子通路: V1 / V2 / V4 / Color / Pulvinar / Dorsal
   VTA/SNc → DA → Striatum/PFC (learning modulation)
   LC → NE → Whole Brain (arousal/attention)
   Raphe → 5-HT → Limbic/PFC (mood/emotion)
 
-睡眠巩固:
-  Hippocampus ←→ Cortex (NREM replay)
-  Weak cluster pruning (synaptic homeostasis)
+睡眠巩固 (图3 规则5 — Hebb LTP/LTD):
+  Hippocampus ←→ Cortex (NREM replay) → LTP 类比: 回放强化突触连接
+  Weak cluster pruning (synaptic homeostasis) → LTD 类比: 弱连接修剪
   Cross-association (temporal + semantic)
   DMN self-model integration
 ```
@@ -222,6 +267,8 @@ NotMe/
 4. 小脑内部模型 (前向/逆向模型)
 5. 蓝斑核 NE 唤醒度调制
 6. 内感受通路 (岛叶层级)
+7. FPN 探照灯实现 (attention_searchlight → 实际增益调制) ← v4.3 新增接口
+8. TPN 跷跷板集成 (Cingulate → TPN.receive_salience → DMN suppression) ← v4.3 新增接口
 
 ### P2 — 社会认知
 7. TPJ 心理理论 (二阶信念)
