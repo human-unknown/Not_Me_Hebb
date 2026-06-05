@@ -1,8 +1,8 @@
 # NotMe v4.0 — 人脑层级结构架构
 
-> **版本**: v4.3 — 规则更新 (自 v4.0 人脑层级结构)
+> **版本**: v4.4 — 核心完善 (自 v4.0 人脑层级结构)
 > **日期**: 2026-06-05
-> **原则**: 按照人脑真实层级结构组织项目架构，布罗德曼分区作为备注标注；v4.3 对齐图3六大运行规则
+> **原则**: 按照人脑真实层级结构组织项目架构，布罗德曼分区作为备注标注；v4.3 对齐图3六大运行规则；v4.4 FPN/TPN 集成
 
 ---
 
@@ -85,8 +85,8 @@ NotMe/
 │   └── association/                 # 联合皮层 + DMN + FPN + TPN (v4.3)
 │       ├── __init__.py
 │       ├── dmn.py                    # ★ 默认模式网络 — 自我模型 (was self_model)
-│       ├── fpn.py                    # ★ NEW v4.3 额顶网络 — 选择性注意探照灯
-│       ├── tpn.py                    # ★ NEW v4.3 任务正网络 — DMN跷跷板对立
+│       ├── fpn.py                    # ★ v4.3 新增, v4.4 集成 — 注意力探照灯
+│       ├── tpn.py                    # ★ v4.3 新增, v4.4 集成 — TPN↔DMN跷跷板
 │       └── crossmodal.py             # ★ 跨模态整合 (was stage2_crossmodal)
 │
 ├── brainstem_cerebellum/            # Level 2b: 脑干 + 小脑
@@ -171,24 +171,55 @@ NotMe/
 | `text_interface.py` | `environments/text_interface.py` | 环境 |
 | `main.py` | `entry/main.py` | M1-M5 入口 |
 | `main_dialogue.py` | `entry/main_dialogue.py` | Stage 6 入口 |
-| **NEW v4.3** | `cerebrum/association/fpn.py` | 额顶网络 — 选择性注意探照灯 |
-| **NEW v4.3** | `cerebrum/association/tpn.py` | 任务正网络 — TPN↔DMN 跷跷板 |
+| **v4.3 新增, v4.4 集成** | `cerebrum/association/fpn.py` | 额顶网络 — 选择性注意探照灯 |
+| **v4.3 新增, v4.4 集成** | `cerebrum/association/tpn.py` | 任务正网络 — TPN↔DMN 跷跷板 |
 
 ---
 
 ## v4.3 新增结构 (图3驱动)
 
-### 额顶网络 FPN (`cerebrum/association/fpn.py`)
+### 额顶网络 FPN (`cerebrum/association/fpn.py`) — v4.4 已集成
 - **对应图3规则**: 规则4 (注意力瓶颈)
 - **核心节点**: dlPFC(BA9/46) · PPC(BA7/40) · FEF(BA8)
 - **功能**: 选择性注意"探照灯" — 增强目标特征，抑制干扰；工作记忆维护
-- **接口**: `attention_searchlight()` · `maintain_working_memory()` · `filter_distractors()`
+- **接口**: `gate_attention()` · `update_template()` · `maintain_wm()` · `filter_distractors()`
+- **v4.4 集成**: `agent.step()` 中 ACC 计算 F → TPN 信号 → FPN 模板更新 → `gate_attention(s)` → 增益调制感觉输入
 
-### 任务正网络 TPN (`cerebrum/association/tpn.py`)
+### 任务正网络 TPN (`cerebrum/association/tpn.py`) — v4.4 已集成
 - **对应图3规则**: 规则4 (注意力瓶颈)
 - **核心节点**: dlPFC · dACC · PPC · AI · pre-SMA
 - **功能**: TPN↔DMN 跷跷板动态 — 任务时 TPN↑/DMN↓，突显网络切换
 - **接口**: `update_seesaw()` · `compute_effort()` · `receive_salience()`
+- **v4.4 集成**: `agent.step()` 中 ACC conflict/novelty/urgency → `tpn.receive_salience()` → `tpn.update_seesaw()` → DMN 抑制信号
+
+---
+
+## v4.4 核心完善 (2026-06-05)
+
+### 变更内容
+1. **FPN 探照灯集成**: `FrontoparietalNetwork.gate_attention()` 接入 `agent.step()`
+   - 突显信号 (ACC conflict/novelty/urgency) → FPN 模板朝向任务目标
+   - 探照灯增益调制感觉输入 (attended_sensory = fpn.gate_attention(sensory))
+   - 门控后的感觉输入用于 DMN 耦合 (自我模型更新)
+
+2. **TPN 跷跷板集成**: `TaskPositiveNetwork` 接入 `agent.step()`
+   - ACC 冲突信号 (F vs habituation)、新颖性 (F_accuracy spike)、紧迫性 (body deviation) → `tpn.receive_salience()`
+   - 跷跷板动态: `tpn.update_seesaw(task_demand, mind_wandering, salience)` 
+   - TPN/DMN 激活度追踪 + 认知努力 + 任务疲劳
+
+3. **循环导入修复**: `cns/__init__.py` 使用 `__getattr__` 延迟加载 Agent
+   - 修复 `from cerebrum.association import *` 的循环导入错误
+
+### 数据流更新
+```
+s → L0.learn(s) → L1.compute_F(z,s)
+  → TPN.receive_salience(conflict, novelty, urgency)  [v4.4]
+  → TPN.update_seesaw(task_demand, mind_wandering)     [v4.4]
+  → FPN.update_template(goal_features)                 [v4.4]
+  → attended_s = FPN.gate_attention(s)                 [v4.4]
+  → L2.select_action() → a → L3.meta.update(F)
+  → DMN coupling with attended_s                       [v4.4]
+```
 
 ### 三大网络动态
 ```
@@ -258,25 +289,26 @@ FPN (探照灯增强目标信号)
 
 ## 待实现优先级
 
-### P0 — 核心完善 (当前功能的脑区解耦)
-1. 下丘脑稳态 (从 BodyVector 中提取 setpoint 逻辑)
-2. 丘脑感觉门控 (从直通改为 gated)
-3. VTA RPE (事件驱动的学习率调制)
+### P0 — 核心完善 ✅ v4.4 全部完成
+1. ✅ FPN 探照灯集成 (attention_searchlight → 增益调制) — v4.4
+2. ✅ TPN 跷跷板集成 (Cingulate → TPN.receive_salience → DMN suppression) — v4.4
+3. ✅ 循环导入修复 (cns/__init__.py lazy getattr) — v4.4
 
 ### P1 — 功能扩展
-4. 小脑内部模型 (前向/逆向模型)
-5. 蓝斑核 NE 唤醒度调制
-6. 内感受通路 (岛叶层级)
-7. FPN 探照灯实现 (attention_searchlight → 实际增益调制) ← v4.3 新增接口
-8. TPN 跷跷板集成 (Cingulate → TPN.receive_salience → DMN suppression) ← v4.3 新增接口
+4. 下丘脑稳态 (从 BodyVector 中提取 setpoint 逻辑)
+5. 丘脑感觉门控 (从直通改为 gated)
+6. VTA RPE (事件驱动的学习率调制)
+7. 小脑内部模型 (前向/逆向模型)
+8. 蓝斑核 NE 唤醒度调制
 
 ### P2 — 社会认知
-7. TPJ 心理理论 (二阶信念)
-8. 梭状回面孔识别
-9. 纹状体习惯学习
+9. TPJ 心理理论 (二阶信念)
+10. 内感受通路 (岛叶层级)
+11. 梭状回面孔识别
+12. 纹状体习惯学习
 
 ### P3 — 完整化
-10. 自主神经系统
-11. 脊髓运动输出
-12. 上丘皮层下视觉
+13. 自主神经系统
+14. 脊髓运动输出
+15. 上丘皮层下视觉
 """

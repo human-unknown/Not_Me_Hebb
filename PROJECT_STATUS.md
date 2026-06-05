@@ -1,6 +1,6 @@
 # NotMe 项目状态报告
 
-> **版本**: v4.3 — 规则更新
+> **版本**: v4.4 — 核心完善
 > **日期**: 2026-06-05
 > **基于**: 图1-4 人脑结构调查可视化图表集
 
@@ -13,7 +13,8 @@
 | v4.0 | 2026-06-05 | 人脑层级结构架构重组 |
 | v4.1 | 2026-06-05 | 大脑功能细分 + 丘脑独立 + Gestalt恢复 |
 | v4.2 | 2026-06-05 | V1/V2/V4独立模块 + shim消除 + 0 flat import |
-| **v4.3** | **2026-06-05** | **图3六大运行规则对齐 + FPN/TPN新增 + LTP/LTD** |
+| v4.3 | 2026-06-05 | 图3六大运行规则对齐 + FPN/TPN新增接口 + LTP/LTD |
+| **v4.4** | **2026-06-05** | **FPN探照灯集成 + TPN跷跷板集成 + 循环导入修复** |
 
 ---
 
@@ -70,8 +71,8 @@
 | 丘脑 | `thalamus/thalamus.py` | ○ 占位 (接口完整) |
 | **联合皮层 + 三大网络** | | |
 | DMN | `association/dmn.py` | ★ 已实现 (自我模型) |
-| **FPN** | `association/fpn.py` | **★ NEW v4.3** (注意力探照灯) |
-| **TPN** | `association/tpn.py` | **★ NEW v4.3** (跷跷板动态) |
+| **FPN** | `association/fpn.py` | **★ NEW v4.3, 集成 v4.4** (注意力探照灯) |
+| **TPN** | `association/tpn.py` | **★ NEW v4.3, 集成 v4.4** (跷跷板动态) |
 | 跨模态联合 | `association/crossmodal.py` | ★ 已实现 (COCO Visual↔Text) |
 
 #### 脑干 + 小脑 (Brainstem + Cerebellum)
@@ -111,11 +112,11 @@
 | **1. 分层处理** | V1→V2→V4→IT 层级 | ✅ 部分 (视觉已实现, 听觉/运动待) | `visual_pathway.py` |
 | **2. 双向加工** | 自下而上 + 自上而下 | ✅ 部分 (上行已实现, FPN下行v4.3新增) | `visual_pathway.py`, `fpn.py` |
 | **3. 并行分布式** | 分布式表征 + 6条子通路 | ✅ 已实现 | `crossmodal.py`, 感知向量R^330 |
-| **4. 注意力瓶颈** | FPN探照灯 + TPN↔DMN跷跷板 | ✅ 接口已定义 (v4.3) | `fpn.py`, `tpn.py`, `dmn.py` |
+| **4. 注意力瓶颈** | FPN探照灯 + TPN↔DMN跷跷板 | ✅ **已实现 (v4.4)** | `fpn.py`(集成), `tpn.py`(集成), `dmn.py` |
 | **5. 赫布可塑性** | LTP/LTD + 睡眠巩固 | ✅ 已实现 | `hippocampus.py`, `wernicke.py` |
 | **6. 预测编码** | 自由能最小化 | ✅ 已实现 | `cingulate.py`, `prefrontal.py` |
 
-### 规则实现度: 5/6 有代码支撑, 1/6 接口就绪 (规则4 v4.3新增)
+### 规则实现度: 6/6 有代码支撑 (v4.4 全部六条规则已实现)
 
 ---
 
@@ -132,8 +133,8 @@
 
 ## 已知问题
 
-1. **循环导入**: `cns/__init__.py` → `cns/agent.py` → `cerebrum/association/dmn.py` → `cns/data_types.py` 存在循环依赖。不影响直接脚本运行但阻止 `from cerebrum.association import *` 式的导入
-2. **FPN/TPN 接口就绪但未集成**: v4.3 定义了完整接口，但未接入 `agent.step()` 主循环
+1. ~~**循环导入**~~: ✅ **v4.4 已修复** — `cns/__init__.py` 使用 `__getattr__` 延迟加载 Agent
+2. ~~**FPN/TPN 接口就绪但未集成**~~: ✅ **v4.4 已集成** — FPN 探照灯 + TPN 跷跷板已接入 `agent.step()` 主循环
 3. **丘脑门控未实现**: 感觉信息目前直通 L0，无门控层
 4. **小脑内部模型未实现**: 前向/逆向模型预留但无代码
 
@@ -141,10 +142,10 @@
 
 ## 下一优先级 (P0 → P3)
 
-### P0 — 核心完善
-1. FPN 探照灯集成: `fpn.gate_attention()` → 调制 V1/V2/V4 增益
-2. TPN 跷跷板集成: `cingulate` 冲突信号 → `tpn.receive_salience()` → DMN 抑制
-3. 修复 cns 循环导入
+### P0 — 核心完善 ✅ v4.4 全部完成
+1. ✅ FPN 探照灯集成: `fpn.gate_attention()` → 调制感觉输入增益 (v4.4)
+2. ✅ TPN 跷跷板集成: `cingulate` 冲突信号 → `tpn.receive_salience()` → DMN 抑制 (v4.4)
+3. ✅ 修复 cns 循环导入 (v4.4)
 
 ### P1 — 功能扩展
 4. 丘脑感觉门控实现

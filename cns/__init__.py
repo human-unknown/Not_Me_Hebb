@@ -21,7 +21,6 @@ from cns.data_types import (
 from cns.params import DEFAULT_THETA_DICT, PARAM_BOUNDS
 from cns.type_aliases import *
 from cns.utils import exp_moving_average
-from cns.agent import Agent
 
 __all__ = [
     'D', 'H', 'K', 'A', 'S_CORE', 'N_AGENTS',
@@ -30,3 +29,18 @@ __all__ = [
     'DEFAULT_THETA_DICT', 'PARAM_BOUNDS',
     'Agent',
 ]
+
+# v4.4: lazy import for Agent to break circular import chain
+# The cycle: cns/__init__.py → agent.py → dmn.py → cns/data_types.py → cns/__init__.py
+# Lazy loading defers Agent import until it's actually accessed via attribute lookup.
+_AGENT = None
+
+
+def __getattr__(name: str):
+    if name == 'Agent':
+        global _AGENT
+        if _AGENT is None:
+            from cns.agent import Agent as _AgentCls
+            _AGENT = _AgentCls
+        return _AGENT
+    raise AttributeError(f"module 'cns' has no attribute {name!r}")

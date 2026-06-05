@@ -30,6 +30,8 @@ from cerebrum.temporal_lobe.wernicke import (
     consolidate_dialogue_memory, micro_consolidation,
 )
 from cerebrum.association.dmn import SelfModel
+from cerebrum.association.fpn import FrontoparietalNetwork
+from cerebrum.association.tpn import TaskPositiveNetwork
 
 
 class Agent:
@@ -91,6 +93,12 @@ class Agent:
         # 自我模型 (Default Mode Network / vmPFC)
         self.self_model: SelfModel = SelfModel(max_clusters=256)
 
+        # FPN — 额顶网络: 选择性注意"探照灯" (v4.4 集成)
+        self.fpn: FrontoparietalNetwork = FrontoparietalNetwork()
+
+        # TPN — 任务正网络: TPN↔DMN 跷跷板动态 (v4.4 集成)
+        self.tpn: TaskPositiveNetwork = TaskPositiveNetwork()
+
         # 睡眠巩固追踪
         self.consolidation_counter: int = 0      # 距离上次完整巩固的步数
         self.consolidation_interval: int = 100   # 完整巩固间隔 (步)
@@ -110,6 +118,11 @@ class Agent:
         self.reward_history: list[float] = []
         self.theta_snapshots: list[dict] = []  # 参数快照 (面板4)
         self.last_action: Action = None
+
+        # v4.4: FPN/TPN 状态追踪
+        self.tpn_state_history: list[dict] = []       # TPN 每次 update_seesaw() 后快照
+        self.fpn_gain_mean_history: list[float] = []   # FPN 注意力模板平均增益
+        self.attended_sensory: np.ndarray = None       # 最新 FPN 门控后的感知
 
     def step(self, sensory: np.ndarray, step_count: int,
              my_pos: np.ndarray = None,
@@ -169,6 +182,55 @@ class Agent:
         # ---- 社会信念更新 (M3) ----
         if my_pos is not None and self.n_agents > 1:
             update_social_beliefs(sensory, self.beliefs, my_pos, self.theta)
+
+        # ---- TPN ↔ DMN 跷跷板: 突显信号驱动注意力切换 (v4.4 图3 规则4) ----
+        # 1. 突显网络 (dACC+AI): 从 ACC 自由能信号提取冲突/新颖/紧迫
+        conflict = float(np.tanh(abs(F.total - self.hab.running_F) * 2.0))
+        novelty = 0.0
+        if len(self.F_accuracy_history) >= 2:
+            # 新颖性: F_accuracy 的突增 — "世界不再符合预期"
+            acc_change = abs(self.F_accuracy_history[-1] - self.F_accuracy_history[-2])
+            novelty = float(np.tanh(acc_change * 5.0))
+        urgency = float(np.tanh(self.body.compute_deviation() * 3.0)) if self.body is not None else 0.0
+
+        self.tpn.receive_salience(conflict_signal=conflict, novelty_signal=novelty, urgency=urgency)
+
+        # 2. 跷跷板动态: 任务需求 vs 走神基线
+        task_demand = conflict + 0.3 * novelty  # 冲突/新颖 → 需要 TPN 介入
+        mind_wandering = max(0.05, 1.0 - F.arousal)  # 低唤醒 → 走神倾向
+        tpn_act, dmn_act = self.tpn.update_seesaw(
+            task_demand=float(np.clip(task_demand, 0.0, 1.0)),
+            mind_wandering_baseline=mind_wandering,
+            salience=self.tpn.salience_signal,
+        )
+        # TPN 激活度反馈给 DMN (跷跷板对面)
+        self.self_model.tpn_suppression = max(0.0, 1.0 - dmn_act)
+
+        # ---- FPN 探照灯: 注意力增益调制感觉输入 (v4.4 图3 规则4) ----
+        # FPN 模板朝向当前任务目标 — 由 TPN 激活度和 F 结构共同定义
+        # 目标特征 = 感觉通道中与当前自由能梯度相关的维度
+        if self.tpn.tpn_activation > 0.3:
+            # 基于信念向量构建注意力目标掩码
+            belief_norm = belief / (np.linalg.norm(belief) + 1e-8)
+            # 将信念(H-dim)映射到感知空间(D-dim): 视觉通道 [64:330]
+            goal_features = np.ones(self.fpn.input_dim, dtype=np.float32)
+            # 前额叶信念主要投射到视觉区 → 增强视觉注意力
+            vis_gain = 1.0 + 0.3 * float(np.tanh(np.mean(np.abs(belief_norm))))
+            goal_features[64:330] *= vis_gain
+            # 注意力精度调制探照灯亮度
+            goal_features *= (0.5 + F.attention_precision * 0.5)
+            self.fpn.update_template(goal_features, lr=0.05)
+        else:
+            # TPN 低时 → 探照灯缩回，均匀注意力
+            self.fpn.attention_template = np.ones_like(self.fpn.attention_template)
+
+        # 应用探照灯: 增益调制感觉输入 (自下而上信号的增益调制)
+        attended_sensory = self.fpn.gate_attention(sensory)
+        self.attended_sensory = attended_sensory  # v4.4: 存储供dashboard/debug
+
+        # v4.4: FPN/TPN 状态追踪
+        self.tpn_state_history.append(self.tpn.get_state())
+        self.fpn_gain_mean_history.append(float(np.mean(self.fpn.attention_template)))
 
         # ---- 信念已在 recall() 侧抑制中更新 (Phase 3) ----
         # z 仅作为 legacy fallback 保留，不执行显式更新
@@ -266,7 +328,7 @@ class Agent:
             else:
                 coupling_prob = 0.5 * arousal_now  # 冷启动: 只用唤醒
             if coupling_prob > 0.5:
-                self._auto_update_self_model(sensory, F, arousal_now, valence_now)
+                self._auto_update_self_model(attended_sensory, F, arousal_now, valence_now)
 
         # ---- L3: 元学习 (M5 真实有限差分) ----
         self.meta.update(F.total, self._last_belief, sensory, self.net,
@@ -341,6 +403,12 @@ class Agent:
             'arousal': 0.0,
             'meta_step': self.meta.step_count,
             'is_critical': self.meta.is_critical,
+            # v4.4: FPN/TPN 状态
+            'tpn_activation': self.tpn.tpn_activation,
+            'dmn_activation': self.tpn.dmn_activation,
+            'cognitive_effort': self.tpn.cognitive_effort,
+            'task_fatigue': self.tpn.task_fatigue,
+            'fpn_gain_mean': self.fpn_gain_mean_history[-1] if self.fpn_gain_mean_history else 1.0,
         }
 
     # ================================================================
