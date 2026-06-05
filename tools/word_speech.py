@@ -8,14 +8,23 @@ import numpy as np, os
 class WordSpeaker:
     def __init__(self):
         base = os.path.dirname(__file__)
+        root = os.path.join(base, '..')  # project root fallback
         # 优先使用扩展词表 (12,000 词), 回退到原始词表 (543 词)
         expanded_path = os.path.join(base, 'word_spectrum_dataset_expanded.npy')
         original_path = os.path.join(base, 'word_spectrum_dataset.npy')
         if os.path.exists(expanded_path):
             raw = np.load(expanded_path, allow_pickle=True)
             print(f"  Using expanded vocabulary ({len(raw)} words)")
-        else:
+        elif os.path.exists(original_path):
             raw = np.load(original_path, allow_pickle=True)
+        else:
+            # Fallback to project root
+            expanded_path = os.path.join(root, 'word_spectrum_dataset_expanded.npy')
+            original_path = os.path.join(root, 'word_spectrum_dataset.npy')
+            if os.path.exists(expanded_path):
+                raw = np.load(expanded_path, allow_pickle=True)
+            else:
+                raw = np.load(original_path, allow_pickle=True)
         self.words = [r[2] for r in raw]
         self.word_vecs = np.stack([r[0] for r in raw])
         self.word_norms = np.linalg.norm(self.word_vecs, axis=1)
