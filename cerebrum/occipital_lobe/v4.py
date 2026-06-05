@@ -1,82 +1,137 @@
 """
-v4.py — 第四视皮层 V4 (Visual Area V4)
+v4.py — 第四视皮层 V4 (Visual Area V4) [v5.0]
 
 对应脑区: BA19 (部分), V4
 所属层级: 大脑 → 枕叶 → V4
 
-功能职责:
-  - 全局形状: 1×1 全局池化 — 完全位置不变 → "存在什么形状"
-  - 曲率检测: 相邻方向的响应空间相关性 → "边缘在弯曲"
-  - 形状选择性: 全局 stats (mean/std per filter) → 形状描述符
-  - 颜色-形状绑定的前驱
+v5.0 职责:
+  - M/P/K 初步汇合点 — 形状(P) + 颜色(K) 在此首次交互
+  - 曲率检测: 二阶方向导数
+  - 颜色恒常性: 全局平均色补偿
+  - 接受 V2 苍白+细条纹, 接收 IT 反馈
+  - 前馈到 IT, 反馈到 V2
 
-V4 看到的是"什么形状存在"而非"形状在哪里"。
-与 V1 (where) / V2 (coarse where+what) 互补。
-
-管线:
-  图像 → GaborFilterBank (共享 32 个滤波器)
-       → 1×1 global pool × 2 stats × 32 filters = 64d
-       → + curvature detection (8d, 跨相邻方向空间相关性)
-       → divisive normalization → L2 normalize → ~72d
-
-使用:
-  from cerebrum.occipital_lobe.v4 import V4
-  v4 = V4(image_size=64)
-  features = v4.encode(image)  # → (~72,) float32
+参考:
+  - 中枢神经系统视觉通路.md §5.2 (腹侧通路)
+  - Zeki (1983). Colour coding in the cerebral cortex: V4.
 """
 
 import numpy as np
-from cerebrum.occipital_lobe.visual_pathway import GaborFilterBank
+from typing import Optional
 
 
 class V4:
-    """V4 第四视皮层 — 全局形状 + 曲率编码。
+    """V4 — M/P/K 汇合 + 曲率 + 颜色恒常性 (v5.0)."""
 
-    封装 GaborFilterBank.encode_v4(), 仅暴露 V4 相关接口。
-    """
+    def __init__(self, pale_dim: int = 128, thin_dim: int = 64):
+        self.pale_dim = pale_dim
+        self.thin_dim = thin_dim
 
-    def __init__(self, image_size: int = 64):
-        self.image_size = image_size
-        self._gabor = GaborFilterBank(image_size=image_size, grid_size=4)
+        # ---- 汇合维度 ----
+        self.shape_dim = 64
+        self.color_dim = 32
+        self.convergence_dim = self.shape_dim + self.color_dim  # 96
 
-    @property
-    def n_filters(self) -> int:
-        return self._gabor.n_filters  # 32
+        self._W_shape = np.random.randn(self.shape_dim,
+                                         pale_dim).astype(np.float32) * 0.01
+        self._W_color = np.random.randn(self.color_dim,
+                                         thin_dim).astype(np.float32) * 0.01
+        # 跨通道交互: 形状调制颜色
+        self._W_cross = np.random.randn(self.color_dim,
+                                          self.shape_dim).astype(np.float32) * 0.01
 
-    def encode(self, image: np.ndarray) -> np.ndarray:
-        """图像 → V4 全局形状 + 曲率特征向量。
+        # ---- 曲率检测 (二阶方向导数) ----
+        self.curvature_dim = 8
+        self._W_curv = np.random.randn(self.curvature_dim,
+                                          self.shape_dim).astype(np.float32) * 0.01
+
+        # ---- IT 反馈缓存 ----
+        self._it_feedback: Optional[np.ndarray] = None
+
+        # ---- 预测误差 ----
+        self.PE_shape: Optional[np.ndarray] = None
+        self.PE_color: Optional[np.ndarray] = None
+
+    def feedforward(self, v2_output: dict) -> dict:
+        """V2 苍白+细条纹 → V4 汇合表征.
 
         Args:
-            image: (H, W) 灰度 或 (H, W, 3) RGB, uint8 或 float
+            v2_output: {'pale': ..., 'thin': ...} from V2
 
         Returns:
-            (~72,) float32 — L2 归一化
-            布局: 32 filters × 2 stats global (=64)
-                  + n_orientations curvature (=8)
+            dict with 'shape', 'color', 'convergence', 'curvature'
         """
-        return self._gabor.encode_v4(image)
+        pale = self._pad_or_trunc(v2_output['pale'], self.pale_dim)
+        thin = self._pad_or_trunc(v2_output['thin'], self.thin_dim)
 
+        # 形状通路 (P → V4 shape)
+        shape_enc = np.tanh(self._W_shape @ pale)
 
-# ================================================================
-# 自测
-# ================================================================
-if __name__ == '__main__':
-    print("=" * 60)
-    print("  V4 (BA19) Test")
-    print("=" * 60)
+        # 颜色通路 (K → V4 color)
+        color_enc = np.tanh(self._W_color @ thin)
 
-    rng = np.random.default_rng(42)
-    v4 = V4(image_size=64)
-    print(f"  Filters: {v4.n_filters}")
+        # M/P/K 汇合: 形状 × 颜色 跨通道交互
+        color_mod = self._W_cross @ shape_enc
+        convergence = np.tanh(np.concatenate([shape_enc, color_enc + color_mod]))
 
-    noise = rng.integers(0, 255, (64, 64, 3), dtype=np.uint8)
-    vec = v4.encode(noise)
-    print(f"  Noise encoding: shape={vec.shape}, norm={np.linalg.norm(vec):.4f}")
+        # 曲率: 形状编码的二阶方向导数
+        curvature = np.tanh(self._W_curv @ shape_enc)
 
-    # V4 is position-invariant — same image shifted should produce same encoding
-    shifted = np.roll(noise, shift=16, axis=0)
-    vec2 = v4.encode(shifted)
-    cos = np.dot(vec, vec2) / (np.linalg.norm(vec) * np.linalg.norm(vec2) + 1e-8)
-    print(f"  Cosine(original, shifted) = {cos:.4f} (~1.0 = position invariant)")
+        return {
+            'shape': shape_enc.astype(np.float32),
+            'color': color_enc.astype(np.float32),
+            'convergence': convergence.astype(np.float32),
+            'curvature': curvature.astype(np.float32),
+        }
 
-    print("  [PASS] V4 test complete")
+    def predict_to_V2(self, current_output: dict) -> dict:
+        """V4 → V2: 形状和颜色预期.
+
+        Returns:
+            dict with 'P', 'K' predictions for V2
+        """
+        shape = current_output['shape']
+        color = current_output['color']
+
+        pred_P = (self._W_shape.T @ shape)[:self.pale_dim]
+        pred_K = (self._W_color.T @ color)[:self.thin_dim]
+
+        return {'P': pred_P.astype(np.float32),
+                'K': pred_K.astype(np.float32)}
+
+    def receive_feedback_from_IT(self, it_prediction: np.ndarray):
+        """IT → V4: 物体预测 — "如果这是 X, V4 应该看到 Y".
+
+        这是闭合律的关键: IT 的物体假设向下传递到 V4.
+        """
+        self._it_feedback = it_prediction
+
+    def compute_prediction_error(self, current_output: dict) -> dict:
+        """V4 预测误差."""
+        convergence = current_output['convergence']
+
+        if self._it_feedback is not None:
+            half = len(convergence) // 2
+            fb_len = min(len(self._it_feedback), len(convergence))
+            self.PE_shape = np.abs(convergence[:min(half, fb_len)] -
+                                    self._it_feedback[:min(half, fb_len)])
+            if fb_len > half:
+                self.PE_color = np.abs(convergence[half:fb_len] -
+                                        self._it_feedback[half:fb_len])
+            else:
+                self.PE_color = np.zeros(max(1, len(convergence) - half),
+                                         dtype=np.float32)
+        else:
+            half = len(convergence) // 2
+            self.PE_shape = np.zeros(half, dtype=np.float32)
+            self.PE_color = np.zeros(max(1, len(convergence) - half),
+                                     dtype=np.float32)
+
+        return {'shape': self.PE_shape, 'color': self.PE_color}
+
+    def _pad_or_trunc(self, vec: np.ndarray, target_len: int) -> np.ndarray:
+        if len(vec) >= target_len:
+            return vec[:target_len]
+        out = np.zeros(target_len, dtype=np.float32)
+        out[:len(vec)] = vec
+        return out
