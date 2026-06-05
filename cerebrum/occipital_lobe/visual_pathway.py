@@ -306,6 +306,159 @@ class GaborFilterBank:
         return features.astype(np.float32)
 
     # ================================================================
+    # M/P/K 通路编码 (v5.0) — 三条并行通路的独立编码
+    # ================================================================
+
+    def _encode_channel(self, image: np.ndarray, kernels: list,
+                        learn: bool = False) -> np.ndarray:
+        """Generic channel encoder: convolve image with kernels, pool, normalize.
+
+        Used by encode_M(), encode_P(), encode_K() to produce pathway-specific
+        feature vectors. Follows the same pipeline as encode() but uses
+        channel-specific kernel sets.
+
+        Args:
+            image: (H, W) uint8 grayscale or opponent-channel image
+            kernels: list of Gabor kernels (pre-built for this channel)
+            learn: whether to update Hebb gains
+
+        Returns:
+            (n_kernels × n_cells × 2,) float32 — L2 normalized
+        """
+        gray = self._preprocess(image)
+        fft_size = self.fft_size
+        gray_padded = np.zeros((fft_size, fft_size), dtype=np.float32)
+        gray_padded[:self.image_size, :self.image_size] = gray
+        image_fft = fft2(gray_padded)
+
+        # Precompute FFTs for these kernels if not cached
+        n_k = len(kernels)
+        kernel_ffts = []
+        for kernel in kernels:
+            k_h, k_w = kernel.shape
+            padded = np.zeros((fft_size, fft_size), dtype=np.float32)
+            start_h = (fft_size - k_h) // 2
+            start_w = (fft_size - k_w) // 2
+            padded[start_h:start_h + k_h, start_w:start_w + k_w] = kernel
+            kernel_ffts.append(fft2(padded).conj())
+
+        n_cells = self.grid_size * self.grid_size  # 16
+        features = np.zeros(n_k * n_cells * 2, dtype=np.float32)
+        raw_means = np.zeros(n_k, dtype=np.float32)
+
+        for i in range(n_k):
+            resp_full = np.real(ifft2(image_fft * kernel_ffts[i]))
+            response = resp_full[:self.image_size, :self.image_size]
+            response = self._divisive_normalize(response)
+            raw_means[i] = float(np.mean(np.abs(response)))
+
+            # Use shared gains if available (first n_k entries)
+            if i < len(self.gains):
+                gain = self.gains[i]
+            else:
+                gain = 1.0
+            modulated = response * gain
+
+            for ci, (sy, sx) in enumerate(self._grid_slices):
+                cell = modulated[sy, sx]
+                features[i * n_cells * 2 + ci * 2] = float(np.mean(cell))
+                features[i * n_cells * 2 + ci * 2 + 1] = float(np.std(cell))
+
+        self.n_encodes += 1
+        if learn:
+            self._hebb_update(raw_means)
+
+        norm = np.linalg.norm(features)
+        if norm > 1e-8:
+            features /= norm
+
+        return features.astype(np.float32)
+
+    def encode_M(self, image: np.ndarray, learn: bool = False) -> np.ndarray:
+        """M 通路: 大 σ, 低空间频率 → 运动/粗略空间 (→ MT / 背侧通路).
+
+        M-type retinal ganglion cells (parasol) have:
+          - Large receptive fields (coarse spatial resolution)
+          - High contrast sensitivity
+          - Fast conduction velocity
+          - No color opponency (achromatic)
+
+        Uses M_sigmas=[4,6,8,12] for coarse-scale filtering.
+
+        Args:
+            image: (H, W) uint8 or (H, W, 3) RGB image
+            learn: whether to update Hebb gains
+
+        Returns:
+            (n_M_kernels × 16 × 2,) float32 — L2 normalized
+        """
+        self._ensure_channel_kernels()
+        if image.ndim == 3 and image.shape[2] >= 3:
+            gray = np.mean(image.astype(np.float32), axis=2).astype(np.uint8)
+        elif image.dtype == np.float32 or image.dtype == np.float64:
+            gray = np.clip(image, 0, 255).astype(np.uint8)
+        else:
+            gray = image
+        return self._encode_channel(gray, self._M_kernels, learn=learn)
+
+    def encode_P(self, image: np.ndarray, learn: bool = False) -> np.ndarray:
+        """P 通路: 小 σ, 高空间频率 → 精细形状/纹理 (→ V4 / 腹侧通路).
+
+        P-type retinal ganglion cells (midget) have:
+          - Small receptive fields (fine spatial resolution)
+          - Red-green color opponency
+          - Sustained responses
+          - Slower conduction velocity
+
+        Uses P_sigmas=[1,2,3,4] for fine-scale filtering.
+
+        Args:
+            image: (H, W) uint8 or (H, W, 3) RGB image
+            learn: whether to update Hebb gains
+
+        Returns:
+            (n_P_kernels × 16 × 2,) float32 — L2 normalized
+        """
+        self._ensure_channel_kernels()
+        if image.ndim == 3 and image.shape[2] >= 3:
+            gray = np.mean(image.astype(np.float32), axis=2).astype(np.uint8)
+        elif image.dtype == np.float32 or image.dtype == np.float64:
+            gray = np.clip(image, 0, 255).astype(np.uint8)
+        else:
+            gray = image
+        return self._encode_channel(gray, self._P_kernels, learn=learn)
+
+    def encode_K(self, image: np.ndarray, learn: bool = False) -> np.ndarray:
+        """K 通路: 中 σ, 蓝-黄颜色拮抗 → 颜色处理 (→ V4 颜色恒常).
+
+        K-type retinal ganglion cells (bistratified) have:
+          - Blue-yellow color opponency
+          - Medium spatial resolution
+          - May contribute to blindsight
+
+        Converts RGB to Blue-Yellow opponent channel before Gabor filtering.
+        Uses K_sigmas=[2,3,5,7] for mid-scale filtering.
+
+        Args:
+            image: (H, W, 3) RGB image (uint8 or float)
+            learn: whether to update Hebb gains
+
+        Returns:
+            (n_K_kernels × 16 × 2,) float32 — L2 normalized
+        """
+        self._ensure_channel_kernels()
+        if image.ndim == 3 and image.shape[2] >= 3:
+            img = image.astype(np.float32)
+            R, G, B = img[:, :, 0], img[:, :, 1], img[:, :, 2]
+            # Blue-Yellow opponent channel: B - (R+G)/2
+            BY = (B - (R + G) / 2.0)
+            # Map to [0, 255] range for _preprocess
+            BY = np.clip((BY + 128) * 0.7 + 64, 0, 255).astype(np.uint8)
+        else:
+            BY = image
+        return self._encode_channel(BY, self._K_kernels, learn=learn)
+
+    # ================================================================
     # V2 编码 — 粗网格 + 方向池化 (仿 V2 复杂细胞)
     # ================================================================
 
