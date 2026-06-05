@@ -40,8 +40,8 @@ def create_default_theta() -> Theta:
 # ============================================================
 
 def create_seed_package(theta=None, rng=None, bootstrap_sensory=None):
-    from data_types import SeedPackage
-    from layer0_model import bootstrap_clusters
+    from cns.data_types import SeedPackage
+    from cerebrum.limbic_system.hippocampus import bootstrap_clusters
     if rng is None: rng = np.random.default_rng()
     if theta is None: theta = create_default_theta()
     hidden = rng.normal(0, 0.1, 16)  # H=16 初始隐状态
@@ -110,7 +110,7 @@ class MetaLearner:
 
         grad_i = [F(θ_i + ε) - F(θ_i - ε)] / (2ε)
         """
-        from layer1_free_energy import compute_free_energy
+        from cerebrum.limbic_system.cingulate import compute_free_energy
 
         grads = {}
         eps = self.theta.grad_epsilon

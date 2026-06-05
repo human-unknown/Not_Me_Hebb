@@ -11,15 +11,15 @@ v7: Stage 3 多模态感知 —
      Scene C: 视觉特征 → Body ODE 调制 → F_body → valence/arousal 变化
 """
 import sys, time, queue, pickle, os as _os, numpy as np
-from data_types import D, BodyVector, Action, ACTION_DIRECTIONS
-from agent import Agent
-from text_interface import TextEnvironment
-from word_speech import get_speaker
-from broca import Broca
-from stdin_reader import StdinReader
-from sentiment import analyze_sentiment, sentiment_to_social_signal, get_emotional_lexicon
-from layer1_free_energy import SocialContext
-from image_encoder import (ImageEncoder, build_visual_sensory,
+from cns.data_types import D, BodyVector, Action, ACTION_DIRECTIONS
+from cns.agent import Agent
+from environments.text_interface import TextEnvironment
+from tools.word_speech import get_speaker
+from cerebrum.frontal_lobe.broca import Broca
+from entry.stdin_reader import StdinReader
+from cerebrum.limbic_system.amygdala import analyze_sentiment, sentiment_to_social_signal, get_emotional_lexicon
+from cerebrum.limbic_system.cingulate import SocialContext
+from cerebrum.occipital_lobe.retina_lgn import (ImageEncoder, build_visual_sensory,
                            make_visual_mask, make_text_mask)
 
 

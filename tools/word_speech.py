@@ -98,8 +98,8 @@ class WordSpeaker:
         # v3: Hebb 检索路径 (优先)
         if broca is not None:
             broca._ensure_sent_clusters()
-            from data_types import D
-            from layer0_model import _masked_cosine
+            from cns.data_types import D
+            from cerebrum.limbic_system.hippocampus import _masked_cosine
 
             word_audios = []; word_labels = []
             for concept_vec in path_centroids:
@@ -137,7 +137,7 @@ class WordSpeaker:
                 with open(corpus_path, 'r', encoding='utf-8') as f: text = f.read()
                 self._corpus_sentences = [s.strip() for s in re.split(r'[。！？；\n]+', text)
                                          if len(s.strip()) > 5]
-                from text_interface import TextEnvironment
+                from environments.text_interface import TextEnvironment
                 self._corpus_env = TextEnvironment()
                 self._corpus_embs = self._corpus_env.embeddings
 

@@ -97,7 +97,7 @@ def predict_next_state(
         onehot = np.zeros(5)
         onehot[a] = 1.0
         # Query: [zeros(48) | F_context(5) | action_onehot(5)] → 匹配 centroid[:48]=s_next
-        from data_types import S_CORE
+        from cns.data_types import S_CORE
         query = np.zeros(D)
         query[S_CORE:S_CORE+5] = F_context
         query[S_CORE+5:S_CORE+10] = onehot

@@ -237,8 +237,8 @@ class COCOLoader:
         self.n_images = len(self.images)
 
         # ---- 视觉特征编码 (Gabor V1+V2+V4+Gestalt+Color) ----
-        from layer0_visual import GaborFilterBank
-        from layer0_gestalt import compute_gestalt_from_image
+        from cerebrum.occipital_lobe.visual_pathway import GaborFilterBank
+        from cerebrum.occipital_lobe.gestalt import compute_gestalt_from_image
         self._gabor = GaborFilterBank(image_size=image_size, grid_size=4)
 
         cache_dir = os.path.join(base, '.cache')

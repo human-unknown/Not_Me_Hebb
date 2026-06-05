@@ -545,7 +545,7 @@ def compute_gestalt_from_image(image: np.ndarray,
         grouping_vector: (19,) float32
     """
     from scipy.fft import fft2, ifft2
-    from layer0_visual import GaborFilterBank
+    from cerebrum.occipital_lobe.visual_pathway import GaborFilterBank
 
     # 预处理 (灰度)
     if hasattr(gabor_bank, '_preprocess'):
@@ -589,7 +589,7 @@ if __name__ == '__main__':
     print("  GestaltGrouping Test")
     print("=" * 60)
 
-    from layer0_visual import GaborFilterBank
+    from cerebrum.occipital_lobe.visual_pathway import GaborFilterBank
 
     gfb = GaborFilterBank(image_size=64, grid_size=4)
     rng = np.random.default_rng(42)

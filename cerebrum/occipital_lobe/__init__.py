@@ -34,9 +34,13 @@ from cerebrum.occipital_lobe.retina_lgn import (
 from cerebrum.occipital_lobe.gestalt import (
     GestaltGrouping, compute_gestalt_from_image,
 )
+from cerebrum.occipital_lobe.v1 import V1
+from cerebrum.occipital_lobe.v2 import V2
+from cerebrum.occipital_lobe.v4 import V4
 
 __all__ = [
     'GaborFilterBank',
     'ImageEncoder', 'build_visual_sensory',
     'GestaltGrouping', 'compute_gestalt_from_image',
+    'V1', 'V2', 'V4',
 ]

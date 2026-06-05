@@ -321,13 +321,13 @@ def compute_free_energy(
 
     # F_accuracy: 集群预测误差 — 从集群读出 (v3: Theta 参数化)
     if c is not None:
-        from data_types import S_CORE
+        from cns.data_types import S_CORE
         residual = np.sum((s[:S_CORE] - s_pred[:S_CORE]) ** 2)
         F_accuracy = (theta.w_accuracy * residual / (theta.sigma_x ** 2 + 1e-8)
                       + theta.w_F_signal * c.F_signal)
     else:
         # 冷启动: 基于输入熵的自适应 F_accuracy
-        from data_types import S_CORE
+        from cns.data_types import S_CORE
         input_norm = float(np.sum(s[:S_CORE] ** 2))
         F_accuracy = theta.w_accuracy * input_norm / (theta.sigma_x ** 2 + 1e-8)
 

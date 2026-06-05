@@ -18,7 +18,7 @@ Agent 的行动决定下一步读哪段文本。
 
 import re
 import numpy as np
-from data_types import D, S_CORE
+from cns.data_types import D
 
 
 class TextEnvironment:

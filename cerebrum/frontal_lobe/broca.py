@@ -54,8 +54,8 @@ class Broca:
         self._sentence_net = None       # ClusterNetwork — 每句一个集群
         self._cluster_to_sentence = {}  # {id(cluster): sentence_index}
 
-        from data_types import Theta, D
-        from layer0_model import ClusterNetwork
+        from cns.data_types import Theta, D
+        from cerebrum.limbic_system.hippocampus import ClusterNetwork
         theta = Theta(); theta.cluster_threshold = 0.05
         self.word_order_net = ClusterNetwork(theta)
 
@@ -92,7 +92,7 @@ class Broca:
         直接插入绕过 learn() 的 EMA 合并，每个唯一 trigram = 独立集群。
         """
         import jieba
-        from data_types import D, Cluster
+        from cns.data_types import D, Cluster
 
         # ---- 收集所有 trigram (只存出现次数 ≥ min_freq 的) ----
         tri_counts: dict[tuple[str, str, str], int] = {}
@@ -165,7 +165,7 @@ class Broca:
         不会移除已有集群，只会添加新的 trigram 或增加计数。
         """
         import jieba
-        from data_types import D, Cluster
+        from cns.data_types import D, Cluster
 
         words = [w for w in jieba.lcut(sentence) if len(w.strip()) >= 1]
         if len(words) < 3:
@@ -193,7 +193,7 @@ class Broca:
             mask[:192] = True
 
             existing = None
-            from layer0_model import _masked_cosine
+            from cerebrum.limbic_system.hippocampus import _masked_cosine
             for c in bucket:
                 sim = _masked_cosine(h, c.centroid, mask)
                 if sim > 0.95:  # 几乎相同的 trigram
@@ -223,7 +223,7 @@ class Broca:
         if self.word_order_net.n_clusters == 0:
             return None
 
-        from data_types import D
+        from cns.data_types import D
 
         query = np.zeros(D, dtype=np.float32)
         mask = np.zeros(D, dtype=bool)
@@ -263,8 +263,8 @@ class Broca:
         MAX_SENTENCES = 12000  # 生物容量上限 — 只保留最可记忆的句子
 
         import hashlib
-        from data_types import D, Cluster
-        from layer0_model import ClusterNetwork, _masked_cosine
+        from cns.data_types import D, Cluster
+        from cerebrum.limbic_system.hippocampus import ClusterNetwork, _masked_cosine
 
         base = os.path.dirname(__file__)
         cache_dir = os.path.join(base, '.cache'); os.makedirs(cache_dir, exist_ok=True)
@@ -293,7 +293,7 @@ class Broca:
                                                           MAX_SENTENCES)
 
         # ---- 构建 ClusterNetwork ----
-        from data_types import Theta
+        from cns.data_types import Theta
         # K 设大: 每句话一个集群, 不合并
         theta = Theta()
         theta.cluster_threshold = -1.0  # recall 永不自动合并
@@ -317,7 +317,7 @@ class Broca:
 
     def _build_sent_clusters(self, cache_path, max_sentences=None):
         """编码句子 → hash_features → 缓存为集群质心 (v2: 可选容量上限)"""
-        from data_types import D
+        from cns.data_types import D
         import numpy as np
 
         n_total = len(self.sentences)
@@ -404,8 +404,8 @@ class Broca:
         """
         self._ensure_sent_clusters()
 
-        from data_types import D
-        from layer0_model import _masked_cosine
+        from cns.data_types import D
+        from cerebrum.limbic_system.hippocampus import _masked_cosine
 
         # 构建查询 — 仅语义通道有效
         q = np.zeros(D, dtype=np.float32)
@@ -470,8 +470,8 @@ class Broca:
         Returns:
             [(word_string, cosine_score, word_vector_64), ...]
         """
-        from data_types import D
-        from layer0_model import _masked_cosine
+        from cns.data_types import D
+        from cerebrum.limbic_system.hippocampus import _masked_cosine
 
         query = np.zeros(D, dtype=np.float32)
         mask = np.zeros(D, dtype=bool)
@@ -537,7 +537,7 @@ class Broca:
             return
 
         import jieba, os, pickle
-        from data_types import D, Theta, Cluster
+        from cns.data_types import D, Theta, Cluster
 
         base = os.path.dirname(__file__)
         cache_dir = os.path.join(base, '.cache'); os.makedirs(cache_dir, exist_ok=True)
@@ -642,7 +642,7 @@ class Broca:
         当 Agent 生成回应后, 将 (理解向量, 回应词) 存入联想网络,
         使未来的概念→词映射随互动逐渐适应。
         """
-        from data_types import D, Cluster
+        from cns.data_types import D, Cluster
 
         for word in words[:4]:  # 最多前 4 个词
             wv = self._word_to_vec(word)
@@ -684,8 +684,8 @@ class Broca:
         """
         self._ensure_concept_word_net()
 
-        from data_types import D
-        from layer0_model import _masked_cosine
+        from cns.data_types import D
+        from cerebrum.limbic_system.hippocampus import _masked_cosine
 
         if self.concept_word_net.n_clusters == 0:
             return self._find_seed_words_fallback(concept_vec, k)
@@ -718,7 +718,7 @@ class Broca:
 
     def _find_seed_words_fallback(self, concept_vec, k):
         """回退: 无概念→词网络时的全局词搜索 (极少触发)"""
-        from data_types import D
+        from cns.data_types import D
         sims = np.dot(self.word_vecs, concept_vec[:64]) / (
             self.word_norms * np.linalg.norm(concept_vec[:64]) + 1e-8)
         top_indices = np.argsort(sims)[-k * 3:][::-1]
@@ -986,7 +986,7 @@ class Broca:
         import soundfile as sf
         speaker = None
         try:
-            from word_speech import get_speaker
+            from tools.word_speech import get_speaker
             speaker = get_speaker()
         except Exception:
             pass
@@ -1015,7 +1015,7 @@ class Broca:
     def assemble(self, concept_vecs, agent_net, word_speaker):
         # 1. 概念→最近语料句→取实体词作种子
         if not hasattr(self, '_seed_env'):
-            from text_interface import TextEnvironment
+            from environments.text_interface import TextEnvironment
             self._seed_env = TextEnvironment()
         import jieba
         seed_words = []
@@ -1049,7 +1049,7 @@ class Broca:
         # 3. 内部监听
         if agent_net.n_clusters > 0 and len(''.join(all_words)) > 2:
             if not hasattr(self, '_monitor_env'):
-                from text_interface import TextEnvironment
+                from environments.text_interface import TextEnvironment
                 self._monitor_env = TextEnvironment()
             emb = self._monitor_env.encode_text(''.join(all_words))
             padded = np.zeros(330, dtype=np.float32); padded[:64] = emb

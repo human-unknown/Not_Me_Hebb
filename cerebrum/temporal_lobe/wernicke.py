@@ -182,7 +182,7 @@ def comprehend(human_vec: np.ndarray,              # 人类输入语义 (64,)
         - understanding: dict — 可解释的理解摘要
     """
     # ---- 1. 记忆激活: 人类输入触发了哪些记忆？ ----
-    from data_types import D
+    from cns.data_types import D
     s_full = np.zeros(D, dtype=np.float32)
     s_full[:64] = human_vec[:64].astype(np.float32)
 
@@ -192,7 +192,7 @@ def comprehend(human_vec: np.ndarray,              # 人类输入语义 (64,)
         h = agent_net.hash_features(s_full)
         mask = np.zeros(D, dtype=bool)
         mask[:64] = True
-        from layer0_model import _masked_cosine
+        from cerebrum.limbic_system.hippocampus import _masked_cosine
 
         # 跨桶检索 top-5 触发记忆
         for c in agent_net.clusters:
@@ -288,8 +288,8 @@ def evaluate_response(response_vec: np.ndarray,       # 回应的语义编码 (6
     """
     # 相关性 (v2: FEP 驱动 — 集群历史经验)
     # 回应在 L0 中触发什么记忆？该记忆的历史 F_signal 低 = 好模式
-    from data_types import D
-    from layer0_model import _masked_cosine
+    from cns.data_types import D
+    from cerebrum.limbic_system.hippocampus import _masked_cosine
     query = np.zeros(D, dtype=np.float32)
     query[:64] = response_vec[:64].astype(np.float32)
     mask = np.zeros(D, dtype=bool); mask[:64] = True
@@ -391,7 +391,7 @@ def consolidate_dialogue_memory(
             'phase': 'skip', 'n_turns': 0,
         }
 
-    from data_types import D
+    from cns.data_types import D
     import numpy as np
 
     # ---- 备份原始参数 ----
@@ -589,7 +589,7 @@ def micro_consolidation(
     if len(turns) < 1:
         return {'consolidated': 0, 'phase': 'skip'}
 
-    from data_types import D
+    from cns.data_types import D
     import numpy as np
 
     orig_lr = agent_net.theta.learn_rate_l0

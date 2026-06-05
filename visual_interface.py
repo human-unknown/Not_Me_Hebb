@@ -27,7 +27,7 @@ import hashlib
 import numpy as np
 from urllib.request import urlretrieve
 
-from layer0_gestalt import compute_gestalt_from_image
+from cerebrum.occipital_lobe.gestalt import compute_gestalt_from_image
 
 CIFAR10_URL = 'https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz'
 CIFAR10_CLASSES = [
@@ -75,7 +75,7 @@ class VisualEnvironment:
         base = os.path.dirname(__file__)
 
         # ---- Gabor V1 ----
-        from layer0_visual import GaborFilterBank
+        from cerebrum.occipital_lobe.visual_pathway import GaborFilterBank
         self._gabor = GaborFilterBank(image_size=image_size,
                                        grid_size=grid_size)
 
@@ -425,7 +425,7 @@ class VisualEnvironment:
         do_v4 = self.use_v4
 
         # Gestalt dim (Module A)
-        from layer0_gestalt import GestaltGrouping
+        from cerebrum.occipital_lobe.gestalt import GestaltGrouping
         gestalt_dim = GestaltGrouping(
             image_size=self.image_size,
             n_scales=self._gabor.n_scales,
