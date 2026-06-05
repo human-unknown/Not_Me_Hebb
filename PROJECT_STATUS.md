@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v5.5 — 神经调节系统: 下丘脑稳态 + VTA RPE + 蓝斑核 NE
-> **日期**: 2026-06-05
-> **基于**: 图1-4 人脑结构调查可视化图表集 + 听觉系统综述 + 感官知觉规律调查 + 痛觉生理学综述 + 神经调节系统综述
+> **版本**: v5.6 — 语言系统完善: 弓状束 + 语音回路 + 短语结构 + 角回 + 运动皮层 + TPJ + N400/P600
+> **日期**: 2026-06-06
+> **基于**: 语言与大脑——神经科学视角下的语言研究 (Broca, Wernicke, Geschwind, Hickok & Poeppel, Baddeley, Sperry & Gazzaniga 等经典研究)
 
 ---
 
@@ -21,6 +21,7 @@
 | **v5.3** | **2026-06-05** | **真实音频输入 — 替换语义代理模式, AudioInput(WAV/MP3/FLAC/麦克风), Mel频谱驱动全听觉管线** |
 | **v5.4** | **2026-06-05** | **痛觉系统 — 7条知觉规律, 闸门控制, 双通路, 下行调控PAG→RVM闭环, D=516, 8个新增/升级脑区** |
 | **v5.5** | **2026-06-05** | **神经调节系统 — 下丘脑稳态调节(SetpointModel+DriveSystem+HPA轴) + VTA RPE(事件驱动学习率) + 蓝斑核NE(phasic/tonic+SNR+RVM连接)** |
+| **v5.6** | **2026-06-06** | **语言系统 — 弓状束(Broca↔Wernicke Hebb桥接) + 语音回路(Baddeley工作记忆) + 短语结构(BA44层级句法) + 角回(阅读通路) + 运动皮层(发音规划) + TPJ(心理理论/语用) + N400/P600(语言预测误差)** |
 
 ---
 
@@ -30,10 +31,10 @@
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ★ 已实现 (含 v5.0/v5.2/v5.3/v5.4/v5.5 新增) | 46 | 61% |
-| ○ 占位 (接口设计完成, 待实现代码) | 18 | 24% |
-| — 配置/工具/入口 (无类定义但功能完备) | 11 | 15% |
-| **合计** | **75** | **100%** |
+| ★ 已实现 (含 v5.0/v5.2/v5.3/v5.4/v5.5/v5.6 新增) | **52** | 64% |
+| ○ 占位 (接口设计完成, 待实现代码) | 16 | 20% |
+| — 配置/工具/入口 (无类定义但功能完备) | 13 | 16% |
+| **合计** | **81** | **100%** |
 
 ### 按脑区
 
@@ -44,34 +45,37 @@
 | **额叶** | | |
 | 前额叶 (dlPFC) | `frontal_lobe/prefrontal.py` | ★ 已实现 (EFE行动选择) |
 | 布罗卡区 (BA44/45) | `frontal_lobe/broca.py` | ★ 已实现 (词序Hebb链) |
-| 运动皮层 (BA4/6) | `frontal_lobe/motor_cortex.py` | ○ 占位 |
+| **短语结构网络** | `frontal_lobe/phrase_structure.py` | **★ NEW v5.6** (BA44层级句法: 转移概率边界检测+短语聚类+递归嵌入) |
+| **语音回路** | `frontal_lobe/phonological_loop.py` | **★ NEW v5.6** (Baddeley模型: ~7组块语音存储+默读复述+~2s消退) |
+| **运动皮层 (BA4/6)** | `frontal_lobe/motor_cortex.py` | **★ UPGRADED v5.6** (16维发音特征+SMA序列编排+共发音+运动指令副本) |
 | 眶额皮层 (BA11) | `frontal_lobe/orbitofrontal.py` | ○ 占位 |
 | **顶叶** | | |
-| 体感皮层 (BA3,1,2) | `parietal_lobe/somatosensory.py` | **★ UPGRADED v5.4** (S1/S2全实现: 痛觉定位+触觉编码+本体感觉+威胁评估) |
+| 体感皮层 (BA3,1,2) | `parietal_lobe/somatosensory.py` | ★ UPGRADED v5.4 (S1/S2全实现: 痛觉定位+触觉编码+本体感觉+威胁评估) |
 | 空间注意力 | `parietal_lobe/spatial_attention.py` | ○ 占位 |
-| 颞顶联合区 (TPJ) | `parietal_lobe/tpj.py` | ○ 占位 |
+| **颞顶联合区 (TPJ)** | `parietal_lobe/tpj.py` | **★ UPGRADED v5.6** (心理理论+意图推断+反讽检测+视角采择+语用丰富化) |
+| **角回 (BA39)** | `parietal_lobe/angular_gyrus.py` | **★ NEW v5.6** (阅读通路: 视觉字形→语音表征 Hebb映射, 双路径阅读模型) |
 | **颞叶** | | |
-| 韦尼克区 (BA22) | `temporal_lobe/wernicke.py` | ★ 已实现 (语言理解) |
-| 听皮层 (BA41/42) | `temporal_lobe/auditory_cortex.py` | **★ NEW v5.2** (A1+Belt+Parabelt 3层, 听觉场景分析, What/Where双流) |
-| **听觉层级管线** | `temporal_lobe/auditory_hierarchy.py` | **★ NEW v5.2** (6核团编排: CN→SOC→LL→IC→MGB→AC) |
-| IT皮层 | `temporal_lobe/it_cortex.py` | **★ NEW v5.0** (Hebb物体学习+反馈预测) |
-| **MT (V5)** | `temporal_lobe/mt_cortex.py` | **★ NEW v5.0** (方向选择性运动检测) |
-| **MST** | `temporal_lobe/mst_cortex.py` | **★ NEW v5.0** (光流模式检测) |
+| 韦尼克区 (BA22) | `temporal_lobe/wernicke.py` | **★ UPGRADED v5.6** (+compute_language_PE: N400语义PE+P600句法PE+MMN语音PE, F_language汇入自由能) |
+| 听皮层 (BA41/42) | `temporal_lobe/auditory_cortex.py` | ★ NEW v5.2 (A1+Belt+Parabelt 3层, 听觉场景分析, What/Where双流) |
+| 听觉层级管线 | `temporal_lobe/auditory_hierarchy.py` | ★ NEW v5.2 (6核团编排: CN→SOC→LL→IC→MGB→AC) |
+| IT皮层 | `temporal_lobe/it_cortex.py` | ★ NEW v5.0 (Hebb物体学习+反馈预测) |
+| MT (V5) | `temporal_lobe/mt_cortex.py` | ★ NEW v5.0 (方向选择性运动检测) |
+| MST | `temporal_lobe/mst_cortex.py` | ★ NEW v5.0 (光流模式检测) |
 | 梭状回 (BA37) | `temporal_lobe/fusiform.py` | ○ 占位 |
 | **枕叶** | | |
 | 视觉通路 (V1+V2+V4) | `occipital_lobe/visual_pathway.py` | ★ 已实现 (Gabor滤波核心, v5.0 M/P/K核集) |
 | 视网膜→LGN | `occipital_lobe/retina_lgn.py` | ★ 已实现 (v5.0 M/P/K分型输出) |
 | Gestalt 知觉分组 | `occipital_lobe/gestalt.py` | ★ 已实现 (闭合/共同命运/简洁律→v5.0由层级动力学涌现) |
-| V1 (BA17) | `occipital_lobe/v1.py` | **★ REWRITTEN v5.0** (层状模块: 4Cα/4Cβ/斑块/4B/5/6层) |
-| V2 (BA18) | `occipital_lobe/v2.py` | **★ REWRITTEN v5.0** (三类条纹: 粗/苍白/细 + 横向连接) |
-| V4 (BA19) | `occipital_lobe/v4.py` | **★ REWRITTEN v5.0** (M/P/K汇合 + 曲率+颜色恒常) |
-| **视觉层级管线** | `occipital_lobe/visual_hierarchy.py` | **★ NEW v5.0** (10模块编排器: 前馈→反馈→PE→感知向量)
+| V1 (BA17) | `occipital_lobe/v1.py` | ★ REWRITTEN v5.0 (层状模块: 4Cα/4Cβ/斑块/4B/5/6层) |
+| V2 (BA18) | `occipital_lobe/v2.py` | ★ REWRITTEN v5.0 (三类条纹: 粗/苍白/细 + 横向连接) |
+| V4 (BA19) | `occipital_lobe/v4.py` | ★ REWRITTEN v5.0 (M/P/K汇合 + 曲率+颜色恒常) |
+| 视觉层级管线 | `occipital_lobe/visual_hierarchy.py` | ★ NEW v5.0 (10模块编排器: 前馈→反馈→PE→感知向量)
 | **边缘系统** | | |
 | 海马 | `limbic_system/hippocampus.py` | ★ 已实现 (ClusterNetwork) |
 | 杏仁核 | `limbic_system/amygdala.py` | ★ 已实现 (情感词汇) |
 | 扣带回/ACC | `limbic_system/cingulate.py` | ★ 已实现 (自由能计算) |
-| **岛叶 (BA13-16)** | `limbic_system/insula.py` | **★ NEW v5.4** (后岛叶内感受+前岛叶情感评估+突显网络) |
-| 下丘脑 | `limbic_system/hypothalamus.py` | **★ NEW v5.5** (SetpointModel+DriveSystem+HPA轴+自主神经平衡) |
+| 岛叶 (BA13-16) | `limbic_system/insula.py` | ★ NEW v5.4 (后岛叶内感受+前岛叶情感评估+突显网络) |
+| 下丘脑 | `limbic_system/hypothalamus.py` | ★ NEW v5.5 (SetpointModel+DriveSystem+HPA轴+自主神经平衡) |
 | 嗅皮层 | `limbic_system/olfactory.py` | ○ 占位 |
 | **基底神经节** | | |
 | 动作门控 (MoE) | `basal_ganglia/action_gating.py` | ★ 已实现 |
@@ -79,37 +83,38 @@
 | 苍白球 | `basal_ganglia/pallidum.py` | ○ 占位 |
 | 底丘脑核 | `basal_ganglia/subthalamic.py` | ○ 占位 |
 | **丘脑** | | |
-| 丘脑 (总览) | `thalamus/thalamus.py` | **★ UPGRADED v5.4** (VPL/CM-Pf/MD/Po痛觉中继核团全实现) |
-| **LGN (外侧膝状体)** | `thalamus/lgn.py` | **★ v5.0** (6层主动门控: tonic/burst + V1反馈 + TRN) |
-| **Pulvinar (丘脑枕)** | `thalamus/pulvinar.py` | **★ v5.0** (SC→皮层快速中继, 第二条视觉通路) |
-| **MGB (内侧膝状体)** | `thalamus/mgb.py` | **★ NEW v5.2** (MGv/MGd/MGm 3亚区, 唤醒度门控, FPN注意调制) |
+| 丘脑 (总览) | `thalamus/thalamus.py` | ★ UPGRADED v5.4 (VPL/CM-Pf/MD/Po痛觉中继核团全实现) |
+| LGN (外侧膝状体) | `thalamus/lgn.py` | ★ v5.0 (6层主动门控: tonic/burst + V1反馈 + TRN) |
+| Pulvinar (丘脑枕) | `thalamus/pulvinar.py` | ★ v5.0 (SC→皮层快速中继, 第二条视觉通路) |
+| MGB (内侧膝状体) | `thalamus/mgb.py` | ★ NEW v5.2 (MGv/MGd/MGm 3亚区, 唤醒度门控, FPN注意调制) |
 | **联合皮层 + 三大网络** | | |
 | DMN | `association/dmn.py` | ★ 已实现 (自我模型) |
-| **FPN** | `association/fpn.py` | **★ v4.3/v4.4 + v5.0增强** (注意力探照灯 + M/P/K通道增益) |
-| **TPN** | `association/tpn.py` | **★ v4.3/v4.4** (跷跷板动态) |
+| FPN | `association/fpn.py` | ★ v4.3/v4.4 + v5.0增强 (注意力探照灯 + M/P/K通道增益) |
+| TPN | `association/tpn.py` | ★ v4.3/v4.4 (跷跷板动态) |
 | 跨模态联合 | `association/crossmodal.py` | ★ 已实现 (COCO Visual↔Text) |
-| **视觉绑定** | `association/visual_binding.py` | **★ NEW v5.0** (FPN驱动的M/P/K跨通道特征绑定) |
+| 视觉绑定 | `association/visual_binding.py` | ★ NEW v5.0 (FPN驱动的M/P/K跨通道特征绑定) |
+| **弓状束 (AF)** | `association/arcuate_fasciculus.py` | **★ NEW v5.6** (Wernicke↔Broca Hebb桥接; 腹侧(理解→言语)+背侧(运动副本→预期听觉); 复述通路) |
 
 #### 脑干 + 小脑 (Brainstem + Cerebellum)
 
 | 脑区 | 模块 | 状态 |
 |------|------|------|
 | **中脑** | | |
-| VTA (多巴胺) | `midbrain/vta.py` | **★ NEW v5.5** (RPEModel+DopamineDynamics+事件驱动学习率调制) |
+| VTA (多巴胺) | `midbrain/vta.py` | ★ NEW v5.5 (RPEModel+DopamineDynamics+事件驱动学习率调制) |
 | 黑质 (SNc/SNr) | `midbrain/substantia_nigra.py` | ○ 占位 |
-| 上丘 | `midbrain/superior_colliculus.py` | **★ v5.0** (显著性图+新颖性检测+空间定向) |
-| **下丘 (IC)** | `midbrain/inferior_colliculus.py` | **★ NEW v5.2** (中央核/背皮层/外皮层, 频率×空间×时间整合+新颖性检测) |
-| **PAG (导水管周围灰质)** | `midbrain/pag.py` | **★ NEW v5.4** (下行痛觉调节总枢纽, 4功能柱, 内啡肽释放+SIΑ+安慰剂镇痛) |
+| 上丘 | `midbrain/superior_colliculus.py` | ★ v5.0 (显著性图+新颖性检测+空间定向) |
+| 下丘 (IC) | `midbrain/inferior_colliculus.py` | ★ NEW v5.2 (中央核/背皮层/外皮层, 频率×空间×时间整合+新颖性检测) |
+| PAG (导水管周围灰质) | `midbrain/pag.py` | ★ NEW v5.4 (下行痛觉调节总枢纽, 4功能柱, 内啡肽释放+SIΑ+安慰剂镇痛) |
 | **脑桥** | | |
-| 蓝斑核 (NE) | `pons/locus_coeruleus.py` | **★ NEW v5.5** (NEDynamics phasic/tonic+SNREnhancer+RVM NE连接) |
+| 蓝斑核 (NE) | `pons/locus_coeruleus.py` | ★ NEW v5.5 (NEDynamics phasic/tonic+SNREnhancer+RVM NE连接) |
 | 网状结构 | `pons/reticular_formation.py` | ○ 占位 |
-| **耳蜗核** | `pons/cochlear_nucleus.py` | **★ NEW v5.2** (AVCN/PVCN/DCN, 频谱分解, 相位锁定, 声反射) |
-| **上橄榄复合体 (SOC)** | `pons/superior_olivary.py` | **★ NEW v5.2** (MSO/LSO/MNTB, ITD/ILD双耳定位, 双重理论) |
-| **外侧丘系 (LL)** | `pons/lateral_lemniscus.py` | **★ NEW v5.2** (VNLL/DNLL, 时间增强+双侧GABA抑制) |
-| **痛觉层级管线** | `nociception_hierarchy.py` | **★ NEW v5.4** (6核团编排: 背角→脊髓丘脑→丘脑→S1/岛叶←PAG→RVM下行闭环) |
+| 耳蜗核 | `pons/cochlear_nucleus.py` | ★ NEW v5.2 (AVCN/PVCN/DCN, 频谱分解, 相位锁定, 声反射) |
+| 上橄榄复合体 (SOC) | `pons/superior_olivary.py` | ★ NEW v5.2 (MSO/LSO/MNTB, ITD/ILD双耳定位, 双重理论) |
+| 外侧丘系 (LL) | `pons/lateral_lemniscus.py` | ★ NEW v5.2 (VNLL/DNLL, 时间增强+双侧GABA抑制) |
+| 痛觉层级管线 | `nociception_hierarchy.py` | ★ NEW v5.4 (6核团编排: 背角→脊髓丘脑→丘脑→S1/岛叶←PAG→RVM下行闭环) |
 | **延髓** | | |
 | 自主神经 | `medulla/autonomic.py` | ○ 占位 |
-| **RVM (延髓头端腹内侧区)** | `medulla/rvm.py` | **★ NEW v5.4** (PAG→脊髓关键中继, OFF/ON细胞动态, 5-HT/NE调制) |
+| RVM (延髓头端腹内侧区) | `medulla/rvm.py` | ★ NEW v5.4 (PAG→脊髓关键中继, OFF/ON细胞动态, 5-HT/NE调制) |
 | **小脑** | | |
 | 运动协调 | `cerebellum/motor_coordination.py` | ○ 占位 |
 | 时序预测 | `cerebellum/predictive_timing.py` | ○ 占位 |
@@ -123,7 +128,7 @@
 |------|------|
 | `body/body_state.py` | ○ 占位 |
 | `body/interoception.py` | ○ 占位 |
-| **脊髓背角** | `spinal/dorsal_horn.py` | **★ NEW v5.4** (闸门控制, SG细胞+WDR神经元, 中枢敏化, 快/慢痛分离) |
+| 脊髓背角 | `spinal/dorsal_horn.py` | ★ NEW v5.4 (闸门控制, SG细胞+WDR神经元, 中枢敏化, 快/慢痛分离) |
 | `spinal/motor_output.py` | ○ 占位 |
 
 ---
@@ -132,14 +137,62 @@
 
 | 规则 | 核心机制 | 实现状态 | 关键模块 |
 |------|---------|---------|---------|
-| **1. 分层处理** | V1→V2→V4→IT + MT→MST + **CN→SOC→IC→MGB→AC** | ✅ **增强 (v5.2 听觉15级层级)** | `visual_hierarchy.py`, `auditory_hierarchy.py` |
-| **2. 双向加工** | 自下而上 + 自上而下 (前馈+反馈) | ✅ **增强 (v5.2 听觉3层PE闭环)** | `visual_hierarchy.py`, `auditory_hierarchy.py`, `fpn.py` |
-| **3. 并行分布式** | M/P/K 三流 + 听觉6核团 + 分布式表征 | ✅ **增强 (v5.2 视听双模态并行N核团)** | `crossmodal.py`, 感知向量D_V52=468 |
-| **4. 注意力瓶颈** | FPN探照灯 + TPN↔DMN跷跷板 + 听觉注意 | ✅ **增强 (v5.2 FPN调制MGB+听皮层增益)** | `fpn.py`(集成), `tpn.py`(集成), `dmn.py`, `mgb.py` |
-| **5. 赫布可塑性** | LTP/LTD + 睡眠巩固 + 听觉记忆 | ✅ **增强 (v5.2 听皮层经验依赖可塑性)** | `hippocampus.py`, `wernicke.py`, `auditory_cortex.py` |
-| **6. 预测编码** | 自由能最小化 + 视听痛三模态PE闭环 | ✅ **增强 (v5.4 痛觉PE闭环: 背角+岛叶+丘脑3层PE汇入F_accuracy)** | `visual_hierarchy.py`, `auditory_hierarchy.py`, `nociception_hierarchy.py`, `cingulate.py` |
+| **1. 分层处理** | V1→V2→V4→IT + MT→MST + CN→SOC→IC→MGB→AC + **Wernicke→AF→Broca→Motor(语言层级)** | ✅ **增强 (v5.6 语言7级层级)** | `visual_hierarchy.py`, `auditory_hierarchy.py`, `arcuate_fasciculus.py` |
+| **2. 双向加工** | 自下而上 + 自上而下 (前馈+反馈) + **语言双流(腹侧What+背侧How)** | ✅ **增强 (v5.6 AF双通路+语言PE闭环)** | `visual_hierarchy.py`, `auditory_hierarchy.py`, `fpn.py`, `arcuate_fasciculus.py` |
+| **3. 并行分布式** | M/P/K 三流 + 听觉6核团 + **语言6模块并行** + 分布式表征 | ✅ **增强 (v5.6 视听语言全并行)** | `crossmodal.py`, 感知向量D=516 |
+| **4. 注意力瓶颈** | FPN探照灯 + TPN↔DMN跷跷板 + **语音回路~7组块限制** | ✅ **增强 (v5.6 语音WM容量瓶颈)** | `fpn.py`, `tpn.py`, `dmn.py`, `phonological_loop.py` |
+| **5. 赫布可塑性** | LTP/LTD + 睡眠巩固 + **AF Hebb在线学习+短语结构统计学习** | ✅ **增强 (v5.6 语言Hebb网络6个)** | `hippocampus.py`, `wernicke.py`, `arcuate_fasciculus.py`, `phrase_structure.py` |
+| **6. 预测编码** | 自由能最小化 + **N400语义PE+P600句法PE+AF自我监控PE** | ✅ **增强 (v5.6 语言域F_language汇入总F)** | `visual_hierarchy.py`, `auditory_hierarchy.py`, `nociception_hierarchy.py`, `cingulate.py`, `wernicke.py` |
 
-### 规则实现度: 6/6 有代码支撑 (v4.4 全部六条规则已实现)
+### 规则实现度: 6/6 有代码支撑 (v5.6 全部六条规则进一步增强 — 语言域全覆盖)
+
+---
+
+## v5.6 语言双流模型 (Hickok & Poeppel 2007)
+
+```
+                    听觉输入 (speech/text)
+                           │
+              ┌────────────┴────────────┐
+              │   听觉层级 (CN→SOC→     │
+              │   LL→IC→MGB→AC)        │
+              └────────────┬────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │   语音回路              │  ★ v5.6: Baddeley WM
+              │   存储 ⇄ 默读复述       │
+              └────────────┬────────────┘
+                           │
+         ┌─────────────────┼─────────────────┐
+         │                 │                 │
+  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐
+  │ 角回 (阅读) │  │  Wernicke   │  │    TPJ      │
+  │ BA39        │  │  BA22       │  │  语用理解    │
+  │ 字形→语音   │  │ +N400/P600  │  │  意图推断    │
+  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
+         │                 │                 │
+         └─────────────────┼─────────────────┘
+                           │ 理解向量
+              ┌────────────▼────────────┐
+              │   弓状束 (AF)           │  ★ v5.6: Hebb桥接
+              │   腹侧: 理解→言语种子   │
+              │   背侧: 运动副本→预期   │
+              └────────────┬────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │   Broca区 (BA44/45)     │
+              │   + 短语结构网络        │  ★ v5.6: 层级句法
+              │   词序Hebb链逐词生成    │
+              └────────────┬────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │   运动皮层 (BA4/6)      │  ★ v5.6: 发音规划
+              │   SMA序列+共发音+       │
+              │   运动指令副本          │
+              └────────────┬────────────┘
+                           │
+                    TTS 输出 + 自听 → 语音回路 (自我监控)
+```
 
 ---
 
@@ -149,59 +202,64 @@
 |------|------|---------|
 | **图1** | 人脑层级结构 (CNS→大脑→四叶→BA分区) | ✅ 完整 — v4.0架构100%对齐 |
 | **图2** | 9大核心脑区功能分工 | ✅ 完整 — 全部9区有对应模块 |
-| **图3** | 六大核心运行规则 | ✅ v4.3 对齐 — 全部6条有文档+代码映射 |
+| **图3** | 六大核心运行规则 | ✅ v5.6 增强 — 全部6条有语言域实现 |
 | **图4** | 信息流转路径 (看苹果→拿苹果) | ✅ 完整 — 7阶段全链路有对应 |
 
 ---
 
 ## 已知问题
 
-1. ~~**循环导入**~~: ✅ **v4.4 已修复** — `cns/__init__.py` 使用 `__getattr__` 延迟加载 Agent
-2. ~~**FPN/TPN 接口就绪但未集成**~~: ✅ **v4.4 已集成** — FPN 探照灯 + TPN 跷跷板已接入 `agent.step()` 主循环
-3. ~~**丘脑门控未实现**~~: ✅ **v5.0 已实现** — LGN 6层主动门控 (tonic/burst + V1反馈 + TRN侧抑制)
+1. ~~**循环导入**~~: ✅ **v4.4 已修复**
+2. ~~**FPN/TPN 接口就绪但未集成**~~: ✅ **v4.4 已集成**
+3. ~~**丘脑门控未实现**~~: ✅ **v5.0 已实现**
 4. **小脑内部模型未实现**: 前向/逆向模型预留但无代码
-5. ~~**VisualHierarchy未接入主循环**~~: ✅ **v5.1 已接入** — `agent.step()` Phase 0 使用 `VisualHierarchy.process()` 驱动全视觉管线
-6. ~~**感知向量旧布局仍在使用**~~: ✅ **v5.1 已切换** — D=330→D_V5=372, S_CORE=320→362, 全模块对齐 V5 布局
-7. **跨模态模型需重训**: D=330→372→468 布局变更导致已保存的 .pkl 模型不兼容, 需运行 `stage2_crossmodal.py` 重新训练
-8. ~~**听觉管线为语义代理模式**~~: ✅ **v5.3 已解决** — AudioInput 模块支持 WAV/MP3/FLAC 加载 + 麦克风录制, 真实 Mel 频谱驱动全听觉管线, 语义代理仅作为无音频时的回退
+5. ~~**VisualHierarchy未接入主循环**~~: ✅ **v5.1 已接入**
+6. ~~**感知向量旧布局仍在使用**~~: ✅ **v5.1 已切换**
+7. **跨模态模型需重训**: D=330→372→468→516 布局变更导致已保存的 .pkl 模型不兼容, 需运行 `stage2_crossmodal.py` 重新训练
+8. ~~**听觉管线为语义代理模式**~~: ✅ **v5.3 已解决**
 9. **小脑内部模型未实现**: 前向/逆向模型预留但无代码
-10. ~~**VTA RPE未实现**~~: ✅ **v5.5 已实现** — RPEModel + DopamineDynamics + 事件驱动 learn_rate 调制
+10. ~~**VTA RPE未实现**~~: ✅ **v5.5 已实现**
+11. ~~**TPJ 心理理论未实现**~~: ✅ **v5.6 已实现** — 意图推断+反讽检测+视角采择+语用丰富化
+12. ~~**运动皮层发音规划未实现**~~: ✅ **v5.6 已实现** — 16维发音特征+SMA序列编排+共发音+efference copy
+13. ~~**Broca↔Wernicke 之间无直接连接**~~: ✅ **v5.6 已实现** — 弓状束 Hebb 桥接
+14. ~~**无语音工作记忆**~~: ✅ **v5.6 已实现** — 语音回路 (Baddeley 模型)
+15. ~~**无层级句法结构**~~: ✅ **v5.6 已实现** — 短语结构网络 (BA44 层级句法)
+16. ~~**无语言预测误差信号**~~: ✅ **v5.6 已实现** — N400/P600/MMN (compute_language_PE)
+17. **v5.6 模块预训练耗时**: 弓状束+短语结构+角回+TPJ 四模块从语料预训练 (~3000-5000句) 在对话启动时需要 ~30-60秒, 后续可缓存加速
 
 ---
 
 ## 下一优先级 (P0 → P3)
 
-### P0 — 核心完善 ✅ v4.4 + v5.0 + v5.2 全部完成
-1. ✅ FPN 探照灯集成: `fpn.gate_attention()` → 调制感觉输入增益 (v4.4)
-2. ✅ TPN 跷跷板集成: `cingulate` 冲突信号 → `tpn.receive_salience()` → DMN 抑制 (v4.4)
+### P0 — 核心完善 ✅ v4.4 + v5.0 + v5.2 + v5.6 全部完成
+1. ✅ FPN 探照灯集成 (v4.4)
+2. ✅ TPN 跷跷板集成 (v4.4)
 3. ✅ 修复 cns 循环导入 (v4.4)
-4. ✅ **M/P/K 并行通路 + 10脑区视觉层级管线 + 预测编码闭环 (v5.0)**
-5. ✅ **听觉6核团层级管线 + 15条知觉规律 + 视听双模态并行 (v5.2)**
+4. ✅ M/P/K 并行通路 + 10脑区视觉层级管线 (v5.0)
+5. ✅ 听觉6核团层级管线 + 15条知觉规律 (v5.2)
+6. ✅ **语言系统: 弓状束+语音回路+短语结构+角回+运动皮层+TPJ+N400/P600 (v5.6)**
 
-### P1 — 功能扩展 ✅ v5.5 全部完成
-5. ~~丘脑感觉门控实现~~ ✅ v5.0 LGN 6层主动门控
-6. ~~全视觉管线接入 agent.step() 主循环~~ ✅ v5.1
-7. ~~感知向量 D=330 → D_V5=372 全局切换~~ ✅ v5.1
-8. ~~**听觉系统 15条知觉规律 + 6核团层级管线**~~ ✅ v5.2
-9. ~~真实音频输入支持 (替换语义代理模式)~~ ✅ v5.3
-10. ~~**痛觉系统 7条知觉规律 + 闸门控制 + 下行调控闭环**~~ ✅ v5.4
-11. ~~下丘脑稳态调节 (从 BodyVector 提取 setpoint)~~ ✅ v5.5
-12. ~~VTA RPE (事件驱动学习率)~~ ✅ v5.5
-13. ~~蓝斑核 NE 唤醒度调制 (RVM 已预留接口)~~ ✅ v5.5
+### P1 — 功能扩展 ✅ v5.5 全部完成 (v5.6 无新增P1)
+7. ✅ 丘脑感觉门控 (v5.0)
+8. ✅ 全视觉管线接入 (v5.1)
+9. ✅ 真实音频输入 (v5.3)
+10. ✅ 痛觉系统 (v5.4)
+11. ✅ 神经调节系统 (v5.5)
 
-### P2 — 社会认知
-14. 小脑内部模型 (前向/逆向)
-15. TPJ 心理理论 (二阶信念)
+### P2 — 社会认知 (部分完成)
+12. ~~TPJ 心理理论~~ ✅ v5.6 已实现 (意图推断+语用)
+13. 小脑内部模型 (前向/逆向) — 仍未实现
 
 ### P3 — 完整化
-16. 梭状回面孔识别 (IT 已完成物体表征, 面孔为特化子集)
-17. 纹状体习惯学习 (D1-D2)
-18. 自主神经系统 + 脊髓运动输出
-19. Gestalt 格式塔效应涌现验证 (闭合律/共同命运律/简洁律的层级动力学演示)
+14. 梭状回面孔识别 (IT 已完成物体表征, 面孔为特化子集)
+15. 纹状体习惯学习 (D1-D2)
+16. 自主神经系统 + 脊髓运动输出
+17. Gestalt 格式塔效应涌现验证 (闭合律/共同命运律/简洁律的层级动力学演示)
+18. 黑质 (SNc/SNr) 运动调节 — 可配合运动皮层发音规划实现基底节→丘脑→皮层运动环路
 
 ---
 
-## 技术参数 (v5.5 当前)
+## 技术参数 (v5.6 当前)
 
 | 参数 | 值 |
 |------|-----|
@@ -210,24 +268,73 @@
 | 隐状态 H | 16 |
 | 最大簇数 K | 256 |
 | 行动数 A | 5 (grid) / 3 (dialogue) |
-| Theta 参数 | 24 |
+| Theta 参数 | **26** (v5.6: +w_semantic +w_syntactic) |
 | 身体维度 M | 5 (grid) / **9 (text, v5.4 +1 痛觉)** |
 | 语料规模 | 50,000 行 |
 | 词表规模 | 12,000 词 |
 | 视觉通路数 | **3 并行** (M/P/K) + 1 快速 (SC→Pulvinar) |
 | 听觉核团数 | **6** (CN, SOC, LL, IC, MGB, AC) |
 | 痛觉核团数 | **6** (DorsalHorn, Spinothalamic, Thalamus-VPL/CM-Pf/MD/Po, Insula, PAG, RVM) |
-| **神经调节模块** | **3** (Hypothalamus, VTA, LocusCoeruleus) — ★v5.5 |
+| 神经调节模块 | **3** (Hypothalamus, VTA, LocusCoeruleus) |
+| **语言模块 (v5.6)** | **7** (AF, PhonologicalLoop, PhraseStructure, AngularGyrus, MotorCortex, TPJ, +LanguagePE via Wernicke) |
 | 视觉脑区模块 | **10** (LGN, V1, V2, V4, MT, MST, IT, SC, Pulvinar, FPN-Binding) |
-| 模块总数 | **75** |
-| 已实现核心模块 | **46** (61%) |
-| v5.2 新增代码 | **~1,500 行** (7 files) |
-| v5.3 新增 | **AudioInput 模块** (~330 行) — 真实音频加载/录制/Mel频谱/立体声支持 |
-| v5.4 新增代码 | **~1,800 行** (8 files) |
-| v5.4 新增脑区 | **5 新建** (DorsalHorn, Insula, PAG, RVM, NociceptionHierarchy) **+ 3 升级** (Somatosensory, Thalamus, BodyVector) |
-| **v5.5 新增代码** | **~800 行** (3 files) |
-| **v5.5 新增脑区** | **3 新建** (Hypothalamus, VTA, LocusCoeruleus) |
+| 模块总数 | **81** |
+| 已实现核心模块 | **52 (64%)** |
+| v5.2 新增代码 | ~1,500 行 (7 files) |
+| v5.3 新增 | AudioInput 模块 (~330 行) |
+| v5.4 新增代码 | ~1,800 行 (8 files) |
+| v5.5 新增代码 | ~800 行 (3 files) |
+| **v5.6 新增代码** | **~3,200 行 (11 files: 6 new + 4 modified + 1 doc)** |
+| **v5.6 新增脑区** | **4 新建** (AF, PhonologicalLoop, PhraseStructure, AngularGyrus) **+ 2 升级** (MotorCortex, TPJ) **+ 1 增强** (Wernicke: N400/P600) |
+| **v5.6 从占位升级** | **2** (MotorCortex: 发音规划, TPJ: 心理理论+语用) |
 
 ---
 
-*由 v5.5 神经调节系统自动更新 · 基于 神经调节系统综述 + 下丘脑稳态 + VTA RPE (Schultz 1997) + LC-NE (Aston-Jones & Cohen 2005)*
+## v5.6 核心机制详解
+
+### 弓状束 (Arcuate Fasciculus)
+- **腹侧通路**: Wernicke理解向量 → Hebb召回 → 言语种子词 (复述通路)
+- **背侧通路**: 言语计划 → 运动副本 → 预期听觉 (自我监控通路)
+- **传导效率**: `conduction` 参数 [0,1] 模拟传导性失语症
+- **Hub学习**: 每次对话回合在线强化 AF 连接
+- **预训练**: 从语料 3000 句模拟"听→学说话"的统计学习
+
+### 语音回路 (Phonological Loop)
+- **语音存储**: 缘上回(BA40)等价, ~7±2 chunk 容量
+- **消退率**: 0.08/step → 约2秒 @10fps 无复述消退
+- **默读复述**: subvocal rehearsal → 激活度回升
+- **语音干扰**: 存储中相似向量加速消退 (phonological similarity effect)
+- **词长效应**: 长词占用更多复述时间 → 有效容量↓
+
+### 短语结构网络 (Phrase Structure)
+- **边界检测**: bigram转移概率骤降 → 短语边界 (零手写规则)
+- **阈值**: 自适应 — 转移概率下四分位数
+- **短语连贯性**: 候选词在短语内的连贯度 → 调制 trigram 得分
+- **短语闭合**: 长度因素 + 尾词特征 → 结束概率
+- **Broca失语模拟**: `phrase_strength` 降低 → 电报式言语
+
+### 语言预测误差 (N400/P600)
+- **N400 (语义PE)**: 输入 vs 上下文语义不匹配 → 0.6×(1-congruence) + 0.4×(1-mem_match)
+- **P600 (句法PE)**: 连贯性缺口 (上下文coherence vs 实际匹配差异)
+- **MMN (语音PE)**: 输入与记忆预期的向量差异
+- **F_language**: w_semantic×N400 + w_syntactic×P600 + w_phonological×MMN → 汇入总自由能
+
+### 角回阅读通路
+- **字形编码**: Unicode码点+笔画代理+结构特征 → 64维视觉特征
+- **字形→语音**: Hebb学习, 12K词表预训练
+- **双路径**: 快速路径(MiniLM→语义, 效率) + 脑路径(角回→语音, 生物合理)
+
+### 运动皮层发音规划
+- **16维发音特征**: 唇/舌/下颌/软腭/声门 + 发音部位/方式/清浊/鼻音/边音/r音
+- **SMA序列**: 词序列 → 共发音平滑过渡 (coarticulation weight=0.3)
+- **运动副本**: 发音计划 → 预期听觉 → AF背侧 → 自我监控
+
+### TPJ 语用理解
+- **意图推断**: 话语+说话人模型+情境 → Hebb检索意图
+- **反讽检测**: 字面正面 + 低信任 + 情境负面 + 高熟悉度 → sarcasm_score
+- **语用丰富化**: 字面理解(w_literal) + 意图推断(w_intent) → 真正理解
+- **说话人模型**: 从语料角色对话中无监督学习角色"语言指纹"
+
+---
+
+*由 v5.6 语言系统自动更新 · 基于 语言与大脑——神经科学视角下的语言研究 (Broca 1861, Wernicke 1874, Geschwind 1965, Hickok & Poeppel 2007, Baddeley 1974, Sperry & Gazzaniga 1960s)*
