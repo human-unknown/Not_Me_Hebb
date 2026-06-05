@@ -36,6 +36,10 @@ class Broca:
             w: i for i, w in enumerate(self.word_list)}
 
         corpus_path = os.path.join(base, 'corpus.txt')
+        # Fallback to project root (monorepo layout)
+        root_corpus = os.path.join(base, '..', '..', 'corpus.txt')
+        if not os.path.exists(corpus_path) and os.path.exists(root_corpus):
+            corpus_path = root_corpus
         with open(corpus_path, 'r', encoding='utf-8') as f: text = f.read()
         raw_sentences = [s.strip() for s in re.split(r'[。！？；\n]+', text)
                          if len(s.strip()) > 5]

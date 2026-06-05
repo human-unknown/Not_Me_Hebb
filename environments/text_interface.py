@@ -207,10 +207,16 @@ def _fetch_corpus() -> list[str]:
     import os
 
     local_path = os.path.join(os.path.dirname(__file__), 'corpus.txt')
+    # Fallback to project root (monorepo layout)
+    root_path = os.path.join(os.path.dirname(__file__), '..', 'corpus.txt')
     if os.path.exists(local_path):
         with open(local_path, 'r', encoding='utf-8') as f:
             text = f.read()
         print(f"  Loaded corpus.txt ({len(text)} chars)")
+    elif os.path.exists(root_path):
+        with open(root_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        print(f"  Loaded corpus.txt from root ({len(text)} chars)")
     else:
         # 尝试下载《小王子》中文全文
         try:
