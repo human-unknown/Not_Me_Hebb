@@ -162,3 +162,64 @@ class FrontoparietalNetwork:
     def get_activation(self) -> float:
         """返回 FPN 当前激活度。"""
         return self.tpn_activation
+
+    def set_channel_gains(self, task_type: str = 'default') -> dict:
+        """v5.0: 按 M/P/K 通道 + 脑区设置增益权重.
+
+        Args:
+            task_type: 当前任务类型
+                'motion' → M 通道增益↑ (运动检测优先)
+                'shape'  → P 通道增益↑ (形状分析优先)
+                'color'  → K 通道增益↑ (颜色处理优先)
+                'default' → 均匀增益
+
+        Returns:
+            dict with per-area per-channel gain values
+        """
+        gains = {
+            'V1': {'M': 1.0, 'P': 1.0, 'K': 1.0},
+            'V2': {'thick': 1.0, 'pale': 1.0, 'thin': 1.0},
+            'V4': {'shape': 1.0, 'color': 1.0},
+            'MT': {'direction': 1.0},
+            'IT': {'object': 1.0},
+        }
+
+        if task_type == 'motion':
+            gains['V1']['M'] = 1.8
+            gains['V2']['thick'] = 1.8
+            gains['MT']['direction'] = 2.0
+            gains['V1']['P'] = 0.6
+            gains['V2']['pale'] = 0.6
+        elif task_type == 'shape':
+            gains['V1']['P'] = 1.8
+            gains['V2']['pale'] = 1.8
+            gains['V4']['shape'] = 2.0
+            gains['IT']['object'] = 1.5
+        elif task_type == 'color':
+            gains['V1']['K'] = 1.8
+            gains['V2']['thin'] = 1.8
+            gains['V4']['color'] = 2.0
+        # 'default': all 1.0
+
+        return gains
+
+    def compute_spatial_focus(self, sensory_or_v1: np.ndarray,
+                               n_positions: int = 16) -> np.ndarray:
+        """v5.0: 从 V1 段信号中提取 FPN 的空间注意力焦点.
+
+        Returns:
+            (n_positions,) 空间注意力权重, sum=1
+        """
+        spatial_focus = np.ones(n_positions, dtype=np.float32)
+
+        # 从 V1 段提取每个网格细胞的响应强度
+        if len(sensory_or_v1) >= n_positions * 4:
+            for i in range(n_positions):
+                offset = i * 4
+                if offset + 4 <= len(sensory_or_v1):
+                    cell_strength = float(np.mean(np.abs(
+                        sensory_or_v1[offset:offset + 4])))
+                    spatial_focus[i] = 1.0 + cell_strength * 3.0
+
+        total = float(np.sum(spatial_focus)) + 1e-8
+        return spatial_focus / total

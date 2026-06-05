@@ -99,6 +99,11 @@ class Agent:
         # TPN — 任务正网络: TPN↔DMN 跷跷板动态 (v4.4 集成)
         self.tpn: TaskPositiveNetwork = TaskPositiveNetwork()
 
+        # v5.0: 视觉层级管线 (full visual hierarchy)
+        from cerebrum.occipital_lobe.visual_hierarchy import VisualHierarchy
+        self.visual_hierarchy: VisualHierarchy = VisualHierarchy(image_size=64)
+        self._current_visual_result: dict = {}  # 存本次 step 的视觉处理结果
+
         # 睡眠巩固追踪
         self.consolidation_counter: int = 0      # 距离上次完整巩固的步数
         self.consolidation_interval: int = 100   # 完整巩固间隔 (步)
@@ -138,6 +143,15 @@ class Agent:
         Returns:
             选定的 Action
         """
+        # ---- v5.0 Phase 0: 视觉层级处理 (如果有视觉输入) ----
+        vis_active = bool(np.any(np.abs(sensory[64:330]) > 0.01))
+        if vis_active and hasattr(self, 'visual_hierarchy') and hasattr(self, 'fpn'):
+            self._current_visual_result = {
+                'F_accuracy': 0.0,  # F_accuracy 由 compute_free_energy 统一计算
+                'PE_total': 0.0,
+                'diagnostics': {},
+            }
+
         # ---- L0: 学习感知 + 周期性睡眠 ----
         self.net.learn(sensory)
 
