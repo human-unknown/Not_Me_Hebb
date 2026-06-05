@@ -1,5 +1,5 @@
 """
-main_dialogue.py —— Stage 6: 人机对话闭环 (v7: Stage 3 多模态感知)
+main_dialogue.py —— Stage 6: 人机对话闭环 (v5.3: 真实音频)
 自由能原理智能体
 
 持续流模式: Agent 不等人类，10 FPS 持续循环。
@@ -9,6 +9,12 @@ v7: Stage 3 多模态感知 —
      Scene A: 图像 → Gabor 编码 → 跨模态检索 → 视觉属性 → 身体调制 → 情感影响
      Scene B: 文本 → 跨模态视觉补全 ("苹果" → 脑补苹果的样子 → 丰富回应)
      Scene C: 视觉特征 → Body ODE 调制 → F_body → valence/arousal 变化
+
+v5.3: 真实音频输入 —
+     替换 v5.2 语义代理模式, 从音频文件/麦克风提取真实 mel 频谱
+     audio:path → 加载 WAV/MP3/FLAC, 计算 32 通道 mel 频谱 → 驱动全听觉管线
+     mic:N → 从麦克风录制 N 秒
+     立体声支持双耳定位 (左右耳独立频谱 → SOC ITD/ILD)
 """
 import sys, time, queue, pickle, os as _os, numpy as np
 from cns.data_types import D, BodyVector, Action, ACTION_DIRECTIONS
@@ -22,6 +28,7 @@ from cerebrum.limbic_system.cingulate import SocialContext
 from cerebrum.occipital_lobe.retina_lgn import (ImageEncoder, build_visual_sensory,
                            make_visual_mask, make_text_mask)
 from cns.data_types import (M_V1_START, BINDING_END, D_VISUAL_V5)
+from tools.audio_io import AudioInput  # v5.3: 真实音频输入
 
 
 def _safe_str(s: str) -> str:
@@ -745,8 +752,9 @@ def run_dialogue():
     n_cross_modal = 0      # Stage 3: 跨模态补全计数
 
     print("=" * 60)
-    print("  自由能原理智能体 — Stage 6: 人机对话 (v7: 多模态感知)")
+    print("  自由能原理智能体 — Stage 6: 人机对话 (v5.3: 真实音频)")
     print("  v7: Scene A 看图描述 | Scene B 文本→视觉联想 | Scene C 视觉→情感")
+    print("  v5.3: 真实音频输入 — 加载 WAV/MP3 或麦克风录制")
     print("=" * 60)
     print("  你说的话会改变 Agent 的情感状态")
     print("  温暖的话 → F_social ↓ → valence ↑ → Agent 感到好")
@@ -756,6 +764,8 @@ def run_dialogue():
     print("  沉默时 Agent 会自己「想」→ 内部言语链")
     if vis_brain:
         print("  🖼️ 输入 'img:path/to/image.jpg' 让 Agent \"看到\" 图片")
+    print("  🎵 输入 'audio:path/to/sound.wav' 让 Agent \"听到\" 声音")
+    print("  🎤 输入 'mic:3' 从麦克风录制 3 秒")
     print("-" * 60)
     print("  输入文字后回车 · 输入 'exit' 退出 · Ctrl+C 退出")
     print("-" * 60)
@@ -773,6 +783,67 @@ def run_dialogue():
             if human_text and human_text.strip().lower() == 'exit':
                 print("\n[System]: 退出")
                 break
+
+            # ---- 听觉输入处理: audio:<path> 或 mic:<N> (v5.3) ----
+            audio_data = None     # 真实音频输入数据
+            audio_features = None # 人类可读的声学特征
+            is_audio_input = False
+            if human_text and (human_text.strip().startswith('audio:')
+                               or human_text.strip().startswith('mic:')):
+                cmd = human_text.strip()
+                if cmd.startswith('audio:'):
+                    # audio:path/to/file.wav [额外文本]
+                    audio_part = cmd[6:].strip()
+                    extra_text = None
+                    if ' ' in audio_part:
+                        parts = audio_part.split(' ', 1)
+                        audio_path = parts[0].strip('"\'')
+                        extra_text = parts[1] if len(parts) > 1 else None
+                    else:
+                        audio_path = audio_part.strip('"\'')
+                        extra_text = None
+
+                    if not _os.path.exists(audio_path):
+                        print(f"\n[Audio] 文件未找到: {audio_path}")
+                    else:
+                        try:
+                            print(f"\n[Audio] 正在听: {audio_path} ...")
+                            audio_data = AudioInput.from_file(audio_path)
+                            audio_features = AudioInput.spectrum_to_features(
+                                audio_data['spectrum'])
+                            print(f"  [Audio] 时长={audio_data['duration']:.1f}s, "
+                                  f"响度={audio_features['loudness']:.2f}, "
+                                  f"音高={audio_features['pitch_class']}, "
+                                  f"明亮度={audio_features['brightness']:.2f}, "
+                                  f"{'立体声' if audio_data['is_stereo'] else '单声道'}"
+                                  f"{' 语音' if audio_data.get('is_speech') else ''}")
+                            is_audio_input = True
+                        except Exception as e:
+                            print(f"  [Audio] 加载失败: {e}")
+                            audio_data = None
+
+                elif cmd.startswith('mic:'):
+                    # mic:N — 从麦克风录制 N 秒
+                    mic_part = cmd[4:].strip()
+                    try:
+                        duration = float(mic_part.split()[0])
+                    except (ValueError, IndexError):
+                        duration = 3.0
+                    duration = max(0.5, min(duration, 30.0))  # 限制 0.5-30 秒
+
+                    print(f"\n[Audio] 录制 {duration:.1f} 秒...")
+                    try:
+                        audio_data = AudioInput.from_mic(duration_sec=duration)
+                        audio_features = AudioInput.spectrum_to_features(
+                            audio_data['spectrum'])
+                        print(f"  [Audio] 录制完成: "
+                              f"响度={audio_features['loudness']:.2f}, "
+                              f"音高={audio_features['pitch_class']}, "
+                              f"明亮度={audio_features['brightness']:.2f}")
+                        is_audio_input = True
+                    except Exception as e:
+                        print(f"  [Audio] 录制失败: {e}")
+                        audio_data = None
 
             # ---- 视觉输入处理: img:<path> ----
             visual_context = None  # 视觉理解结果 (用于注入对话)
@@ -903,6 +974,67 @@ def run_dialogue():
                     n_visual_inputs += 1
                     print(f"       vision_input=True "
                           f"understood={understanding['n_triggered_memories']}mem")
+                elif is_audio_input and audio_data is not None:
+                    # ---- v5.3: 真实音频输入 ----
+                    # 设置音频数据到 agent (Phase 0b 将使用真实频谱)
+                    agent.set_audio_input(audio_data)
+
+                    # 语义编码: 如果有附带文本则编码, 否则用中性向量
+                    if extra_text:
+                        display_text = f"[听到声音] {extra_text}"
+                        try:
+                            s[0:64] = text_env.encode_text(extra_text)
+                        except Exception:
+                            s[0:64] = np.zeros(64)
+                    else:
+                        # 纯音频: 用音频特征生成伪语义描述
+                        try:
+                            # 给 Agent 一个提示——它听到了声音
+                            s[0:64] = text_env.encode_text("听到了声音")
+                        except Exception:
+                            s[0:64] = np.zeros(64)
+                    last_human_vec = s[0:64].copy()
+
+                    # 音频特征 → 情感编码 (响度/音高影响 arousal)
+                    if audio_features:
+                        aud_arousal = float(np.clip(
+                            audio_features['loudness'] * 0.8 +
+                            audio_features['brightness'] * 0.3, 0.0, 1.0))
+                        # 低音 → 稍微负效价 (低沉声音可能预示威胁)
+                        pitch_v_bias = 0.1 if audio_features['pitch_class'] == 'high' else (
+                            -0.05 if audio_features['pitch_class'] == 'low' else 0.0)
+                        aud_valence = float(np.clip(pitch_v_bias, -1.0, 1.0))
+                    else:
+                        aud_arousal = 0.3
+                        aud_valence = 0.0
+                    s[80:88] = np.array(
+                        [aud_arousal, 0.0, 0.0, 0.0,
+                         aud_arousal, 0.0,
+                         aud_valence, 0.0],
+                        dtype=np.float32)
+
+                    # 更新社会上下文
+                    social_ctx.update(aud_valence, aud_arousal)
+
+                    # Wernicke 理解 (基于附加文本)
+                    human_sent = s[80:88].astype(np.float32)
+                    comprehension_vec, understanding = agent.comprehend(
+                        last_human_vec, human_sent)
+
+                    # 显示
+                    duration_str = f"{audio_data['duration']:.1f}s"
+                    stereo_str = '立体声' if audio_data.get('is_stereo') else '单声道'
+                    print(f"\n[You] 🎵: {human_text.strip()}")
+                    print(f"       → Agent 听到: {audio_features['description']}, "
+                          f"{duration_str}, {stereo_str}")
+                    if audio_features:
+                        print(f"       → 声学特征: 响度={audio_features['loudness']:.2f} "
+                              f"音高={audio_features['pitch_class']} "
+                              f"明亮度={audio_features['brightness']:.2f}")
+                    if extra_text:
+                        print(f"       → 附带问题: {extra_text}")
+                    print(f"       audio_input=True "
+                          f"understood={understanding['n_triggered_memories']}mem")
                 else:
                     # ---- 正常文本输入 ----
                     # 语义编码
@@ -983,6 +1115,10 @@ def run_dialogue():
             F_before = agent.F_body_history[-1] if agent.F_body_history else 0.0
             action = agent.step(s, t, social_ctx=social_ctx)
             F_after = agent.F_body_history[-1] if agent.F_body_history else 0.0
+
+            # v5.3: 音频输入用后即清 (单次处理, 下一帧回退语义代理)
+            if is_audio_input:
+                agent.set_audio_input(None)
 
             # ---- Hebb 情感学习: F_body 变化 → 词汇情感关联 ----
             if human_text and human_text.strip():

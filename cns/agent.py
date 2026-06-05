@@ -34,6 +34,36 @@ from cerebrum.association.fpn import FrontoparietalNetwork
 from cerebrum.association.tpn import TaskPositiveNetwork
 
 
+def _estimate_azimuth_from_stereo(left_spectrum, right_spectrum) -> float:
+    """v5.3: 从立体声频谱估算方位角.
+
+    通过比较左右耳 mel 频谱的能量差 (ILD) 粗略估计声源方位。
+    正值=右侧, 负值=左侧。
+
+    Args:
+        left_spectrum: 左耳 mel 频谱 (32,) 或 None
+        right_spectrum: 右耳 mel 频谱 (32,) 或 None
+
+    Returns:
+        azimuth: 方位角估计 (度, -90=左, +90=右, 0=正前方)
+    """
+    if left_spectrum is None or right_spectrum is None:
+        return 0.0
+    left = np.asarray(left_spectrum, dtype=np.float32).ravel()
+    right = np.asarray(right_spectrum, dtype=np.float32).ravel()
+    if len(left) == 0 or len(right) == 0:
+        return 0.0
+
+    left_energy = float(np.sum(left))
+    right_energy = float(np.sum(right))
+    total = left_energy + right_energy + 1e-8
+
+    # ILD ratio → azimuth
+    ild_ratio = (right_energy - left_energy) / total  # [-1, +1]
+    azimuth = float(np.degrees(np.arcsin(np.clip(ild_ratio, -1.0, 1.0))))
+    return azimuth
+
+
 class Agent:
     """自由能原理智能体
 
@@ -109,6 +139,7 @@ class Agent:
         from cerebrum.temporal_lobe.auditory_hierarchy import AuditoryHierarchy
         self.auditory_hierarchy: AuditoryHierarchy = AuditoryHierarchy()
         self._current_auditory_result: dict = {}  # 存本次 step 的听觉处理结果
+        self._current_audio_data: dict = None     # v5.3: 真实音频输入数据 (由外部设置)
 
         # v5.1: 自听回路状态 (从 sensory 向量中移出, 变为 Agent 内部状态)
         self._audio_semantic: np.ndarray = np.zeros(64, dtype=np.float32)
@@ -186,15 +217,13 @@ class Agent:
                 }
 
         # ---- v5.2 Phase 0b: 听觉层级处理 (耳蜗核→SOC→IC→MGB→听皮层) ----
-        # 使用语义代理模式: 从text段合成伪频谱驱动听觉通路
+        # v5.3: 真实音频优先 — 有真实频谱时用它, 否则回退语义代理模式
         from cns.data_types import CN_START, AC_END, CN_WIDTH, SOC_WIDTH, IC_WIDTH, AC_WIDTH
         AUD_START, AUD_END = CN_START, AC_END  # s[372:468]
-        aud_active = True  # 听觉管线常开 (语义代理模式)
+        aud_active = True  # 听觉管线常开
 
         if aud_active and hasattr(self, 'auditory_hierarchy'):
             try:
-                # 语义代理: text[0:64] → 伪频谱 → 全听觉通路
-                text_vec = sensory[0:64].copy()
                 brainstem_arousal = float(np.clip(
                     self.arousal_history[-1] if self.arousal_history else 0.5,
                     0.1, 1.0))
@@ -203,15 +232,39 @@ class Agent:
                 if 'sensory' in self._current_visual_result:
                     vis_vec = self._current_visual_result.get('sensory', None)
                     if vis_vec is not None:
-                        vis_spatial = vis_vec[VIS_START:VIS_START+16]  # 取视觉空间段
+                        vis_spatial = vis_vec[VIS_START:VIS_START+16]
 
-                aud_result = self.auditory_hierarchy.process(
-                    semantic_vec=text_vec,
-                    arousal=brainstem_arousal,
-                    fpn=self.fpn if hasattr(self, 'fpn') else None,
-                    visual_spatial=vis_spatial,
-                    learn=True,
-                )
+                # v5.3: 真实音频输入 → 替换语义代理
+                if self._current_audio_data is not None:
+                    audio_data = self._current_audio_data
+                    spectrum = audio_data.get('spectrum', None)
+                    left_spec = audio_data.get('left_spectrum', None)
+                    right_spec = audio_data.get('right_spectrum', None)
+                    # 从立体声数据估算方位角 (用于双耳处理)
+                    azimuth_hint = _estimate_azimuth_from_stereo(
+                        left_spec, right_spec)
+
+                    aud_result = self.auditory_hierarchy.process(
+                        spectrum=spectrum,
+                        left_spectrum=left_spec,
+                        right_spectrum=right_spec,
+                        azimuth_hint=azimuth_hint,
+                        arousal=brainstem_arousal,
+                        fpn=self.fpn if hasattr(self, 'fpn') else None,
+                        visual_spatial=vis_spatial,
+                        learn=True,
+                    )
+                else:
+                    # 语义代理: text[0:64] → 伪频谱 → 全听觉通路
+                    text_vec = sensory[0:64].copy()
+                    aud_result = self.auditory_hierarchy.process(
+                        semantic_vec=text_vec,
+                        arousal=brainstem_arousal,
+                        fpn=self.fpn if hasattr(self, 'fpn') else None,
+                        visual_spatial=vis_spatial,
+                        learn=True,
+                    )
+
                 # 将听觉管线输出写入感知向量的听觉段
                 sensory[AUD_START:AUD_END] = aud_result['sensory'][:AUD_END-AUD_START]
                 self._current_auditory_result = aud_result
@@ -577,6 +630,23 @@ class Agent:
             image: (H, W, 3) uint8 图像, 或 None 清除
         """
         self._current_image = image
+
+    def set_audio_input(self, audio_data: dict = None):
+        """v5.3: 设置真实音频输入 (供 Phase 0b 听觉层级管线使用).
+
+        当设置真实音频数据时, Phase 0b 将使用真实的 mel 频谱
+        替代语义代理模式。设置 None 回到语义代理模式。
+
+        Args:
+            audio_data: AudioInput.from_file()/from_mic() 返回的 dict,
+                       或 None 清除 (回到语义代理模式).
+                       dict 应包含:
+                         'spectrum': mono mel 频谱 (32,)
+                         'left_spectrum': 左耳频谱 (可选, 立体声)
+                         'right_spectrum': 右耳频谱 (可选, 立体声)
+                         'is_stereo': 是否立体声
+        """
+        self._current_audio_data = audio_data
 
     def evaluate_own_response(self, response_vec: np.ndarray) -> dict:
         """ACC+OFC —— 评估自己刚生成的回应"""
