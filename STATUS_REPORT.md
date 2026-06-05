@@ -76,17 +76,16 @@ Level 2: Brainstem+Cerebellum (brainstem_cerebellum/) 10 文件
 |------|------|------|
 | 根目录 shim | 22 | 0 |
 | Flat import (项目范围) | 35+ (函数内懒加载) | 0 |
-| 根目录 `.py` | 26 | 4 (2 launcher + 2 工具) |
+| 根目录 `.py` | 26 | 3 (2 launcher + 1 工具) |
 | 所有导入 | 层级包路径 | 100% 层级包路径 |
 
 ### 3.2 根目录清洁度
 
 ```
 v4.1: 26 个 .py 文件 (22 shim + 2 副本 + 2 工具)
-v4.2:  4 个 .py 文件 (2 launcher + 2 工具)
+v4.2:  3 个 .py 文件 (2 launcher + 1 工具)
       main_dialogue.py       → 薄启动器 (8行)
       stage2_crossmodal.py   → 薄启动器 (7行)
-      visual_interface.py    → VisualEnvironment 类
       clean_corpus.py        → 语料清洗工具
 ```
 
@@ -97,7 +96,7 @@ v4.2:  4 个 .py 文件 (2 launcher + 2 工具)
 | 脑干核团 (VTA/SN/LC) | 占位 + TODO | 待实现 |
 | 下丘脑 Body ODE | 占位 + TODO | 待实现 |
 | 丘脑感觉门控 | 占位 + TODO | 待实现 |
-| Visual Environment 迁移 | 仍在 `visual_interface.py` (根) | 待整理 |
+| Visual Environment 迁移 | ✅ 已迁移至 `environments/visual_interface.py` | v4.2 |
 
 ---
 
@@ -159,7 +158,6 @@ V1: (1024,)  V2: (276,)  V4: (72,)  — 与 visual_pathway.py 完全一致
 1. **下丘脑实现**: BodyVector ODE 动态 setpoint + 驱力计算
 2. **丘脑实现**: 感觉门控、TRN 注意力探照灯
 3. **脑干核团**: VTA (多巴胺)、蓝斑核 (NE) 神经调节模型
-4. **Visual Environment 迁移**: `visual_interface.py` → `tools/` 或 `environments/`
 
 ---
 

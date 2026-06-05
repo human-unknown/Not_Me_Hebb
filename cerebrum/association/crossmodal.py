@@ -1728,7 +1728,7 @@ def run_stage2(n_images: int = 2000, dataset: str = 'imagenette',
     # 1. Load Visual Encodings
     print("[1/4] Loading visual encodings...")
     t0 = time.perf_counter()
-    from visual_interface import VisualEnvironment
+    from environments.visual_interface import VisualEnvironment
 
     venv = VisualEnvironment(
         dataset=dataset, n_images=n_images,
