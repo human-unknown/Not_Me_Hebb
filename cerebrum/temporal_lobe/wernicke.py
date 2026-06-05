@@ -251,7 +251,15 @@ def comprehend(human_vec: np.ndarray,              # 人类输入语义 (64,)
         comprehension_vec /= norm
         comprehension_vec *= np.linalg.norm(human_vec[:64])  # 保持原始规模
 
-    # ---- 6. 构建可解释的理解摘要 ----
+    # ---- 6. 语言预测误差 (v5.6: N400/P600 等价物) ----
+    lang_pe = compute_language_PE(
+        human_vec=human_vec,
+        memory_context=memory_context,
+        dialogue_context=dialogue_context,
+        triggered_sims=triggered_sims,
+    )
+
+    # ---- 7. 构建可解释的理解摘要 ----
     top_memory_sim = triggered_sims[0] if triggered_sims else 0.0
     understanding = {
         'comprehension_vec': comprehension_vec,
@@ -262,8 +270,108 @@ def comprehend(human_vec: np.ndarray,              # 人类输入语义 (64,)
         'dialogue_coherence': dialogue_ctx.coherence_ema,
         'human_valence': human_v,
         'human_arousal': human_a,
+        # v5.6: 语言预测误差分量
+        'semantic_pe': lang_pe['semantic_pe'],     # N400等价
+        'syntactic_pe': lang_pe['syntactic_pe'],   # P600等价
+        'phonological_pe': lang_pe['phonological_pe'],  # MMN等价
+        'F_language': lang_pe['F_language'],
     }
     return comprehension_vec, understanding
+
+
+# ============================================================
+# v5.6: 语言预测误差 — N400/P600/MMN 等价物
+# ============================================================
+
+def compute_language_PE(human_vec: np.ndarray,           # 人类输入语义 (64,)
+                        memory_context: np.ndarray,       # 记忆激活的语义 (64,)
+                        dialogue_context: np.ndarray,     # 对话上下文 (64,)
+                        triggered_sims: list[float],     # 触发记忆相似度列表
+                        ) -> dict:
+    """计算语言特异性的预测误差分量.
+
+    神经科学基础 (参考: 语言与大脑 §5.2):
+      - N400 (~400ms): 语义违例 — 词不符合句子/对话上下文
+      - P600 (~600ms): 句法违例 — 语法结构预期被违反
+      - MMN  (~150-250ms): 失匹配负波 — 语音变化的自动察觉
+      - ELAN (~100-200ms): 早期句法结构检测
+
+    这些不是"模拟脑电", 而是在 FEP 框架下的语言特异性预测误差分解:
+      每个分量 = 预期与实际的差异 (预测编码的核心量)
+
+    Args:
+        human_vec: 当前输入的语义向量
+        memory_context: 记忆激活的语义上下文
+        dialogue_context: 对话上下文向量
+        triggered_sims: 触发记忆的相似度列表
+
+    Returns:
+        {'semantic_pe': float,      # N400 等价 — 语义预测误差
+         'syntactic_pe': float,     # P600 等价 — 句法预测误差
+         'phonological_pe': float,  # MMN 等价 — 语音预测误差
+         'F_language': float,       # 语言域自由能
+         'n400_triggered': bool,    # N400 是否被触发 (PE > 阈值)
+         'p600_triggered': bool}    # P600 是否被触发
+    """
+    # ---- N400 等价: 语义预测误差 ----
+    # 当前输入 vs 对话上下文预期 (上下文预测下一个词应该是什么语义)
+    denom = (np.linalg.norm(human_vec[:64])
+             * np.linalg.norm(dialogue_context[:64]) + 1e-8)
+    semantic_congruence = float(np.dot(human_vec[:64],
+                                      dialogue_context[:64]) / denom)
+
+    # 记忆一致性: 输入是否与已激活的记忆相符
+    top_mem_sim = triggered_sims[0] if triggered_sims else 0.0
+
+    # 语义PE: 上下文不匹配 + 记忆不匹配
+    semantic_pe = (
+        (1.0 - max(0.0, semantic_congruence)) * 0.6  # 上下文违例权重
+        + (1.0 - min(1.0, top_mem_sim * 2.0)) * 0.4   # 记忆新颖性权重
+    )
+    semantic_pe = float(np.clip(semantic_pe, 0.0, 1.0))
+    n400_triggered = semantic_pe > 0.5  # 高语义PE → N400
+
+    # ---- P600 等价: 句法/结构预测误差 ----
+    # 基于对话的连贯性: 如果上下文高度连贯但当前输入语义突然跳转
+    # → 可能是句法/结构层面的预期违反
+    ctx_norm = np.linalg.norm(dialogue_context[:64])
+    syntactic_pe = 0.0
+    if ctx_norm > 1e-8 and len(triggered_sims) > 0:
+        # 结构预期 = 上下文连贯性 vs 实际语义匹配
+        coherence_gap = abs(semantic_congruence - top_mem_sim)
+        syntactic_pe = float(np.clip(coherence_gap * 1.5, 0.0, 1.0))
+
+    p600_triggered = syntactic_pe > 0.4
+
+    # ---- MMN 等价: 语音/表层预测误差 ----
+    # 基于输入向量的前32维 (音频频谱相关)
+    # 在语义代理模式下 (只有text[0:64]), 用向量变化率代理
+    phonological_pe = 0.0
+    if np.linalg.norm(memory_context[:64]) > 1e-8:
+        # 输入与记忆预期的向量差异
+        diff = human_vec[:32] - memory_context[:32]
+        phonological_pe = float(np.clip(
+            np.linalg.norm(diff) * 0.5, 0.0, 1.0))
+
+    # ---- F_language: 语言域自由能 ----
+    # 精度加权组合 (语义权重 > 句法 > 语音, 因为语义代理模式)
+    w_semantic = 0.5
+    w_syntactic = 0.3
+    w_phonological = 0.2
+    F_language = float(
+        w_semantic * semantic_pe
+        + w_syntactic * syntactic_pe
+        + w_phonological * phonological_pe
+    )
+
+    return {
+        'semantic_pe': semantic_pe,
+        'syntactic_pe': syntactic_pe,
+        'phonological_pe': phonological_pe,
+        'F_language': F_language,
+        'n400_triggered': n400_triggered,
+        'p600_triggered': p600_triggered,
+    }
 
 
 # ============================================================

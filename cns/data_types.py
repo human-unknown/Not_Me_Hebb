@@ -137,9 +137,9 @@ S_CORE = D - 10                                        # 感觉核心
 
 @dataclass
 class Theta:
-    """24 个可学习参数 —— 唯一参数集
+    """26 个可学习参数 —— 唯一参数集 (v5.6: +2 语言PE权重)
     L0 (6): 生成模型
-    L1 (9): 自由能权重 + 情感偏差 + 精度系数
+    L1 (11): 自由能权重 + 情感偏差 + 精度系数 + 语言PE权重
     L2 (5): 策略推理
     L3 (4): 元学习
     """
@@ -151,7 +151,7 @@ class Theta:
     learn_rate_l0: float = 0.05      # 簇学习率
     pe_lr_scale: float = 0.0         # 预测误差驱动学习率缩放 (0=off)
 
-    # L1 (9): 自由能权重
+    # L1 (11): 自由能权重 + 语言PE (v5.6: +2)
     w_body: float = 1.0              # 躯体域权重
     w_social: float = 1.0            # 社会域权重
     w_cognitive: float = 1.0         # 认知域权重
@@ -161,6 +161,8 @@ class Theta:
     negativity_bias: float = 1.5     # 负面信号权重 (v2: 可学习, 非硬编码)
     w_accuracy: float = 0.5          # v3: 预测残差在 F_accuracy 中的权重
     w_F_signal: float = 0.1          # v3: 集群历史 F_signal 在 F_accuracy 中的权重
+    w_semantic: float = 0.5          # v5.6: 语义PE (N400) 在 F_language 中的权重
+    w_syntactic: float = 0.3         # v5.6: 句法PE (P600) 在 F_language 中的权重
 
     # L2 (5): 策略推理
     gamma: float = 0.95              # 时间折扣
@@ -187,6 +189,7 @@ class Theta:
             'habituation_tau': self.habituation_tau,
             'negativity_bias': self.negativity_bias,
             'w_accuracy': self.w_accuracy, 'w_F_signal': self.w_F_signal,
+            'w_semantic': self.w_semantic, 'w_syntactic': self.w_syntactic,
             'gamma': self.gamma, 'exploration_bonus': self.exploration_bonus,
             'temperature': self.temperature, 'n_policy_samples': self.n_policy_samples,
             'urgency_weight': self.urgency_weight,
@@ -364,10 +367,10 @@ class BodyVector:
 # ============================================================
 
 def validate_theta(theta: Theta) -> bool:
-    """验证 Theta 参数数量 = 23"""
+    """验证 Theta 参数数量 = 26 (v5.6)"""
     n = len(theta.to_dict())
-    if n != 24:
-        raise ValueError(f"Theta 必须有 24 个参数，当前有 {n}")
+    if n != 26:
+        raise ValueError(f"Theta 必须有 26 个参数，当前有 {n}")
     return True
 
 

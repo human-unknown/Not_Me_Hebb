@@ -4,9 +4,17 @@ agent.py —— Agent 主类
 
 组装 L0-L3 所有组件，提供统一的 step() 接口。
 
-全链路:
-s → L0.learn(s) → L1.compute_F(z,s) → L2.select_action() → a
+全链路 (v5.6):
+s → visual_hierarchy → auditory_hierarchy → nociception →
+  hypothalamus → VTA → LC → L0.learn(s) →
+  L1.compute_F(z,s) + F_language(N400/P600) → L2.select_action() → a
   → 状态更新: z' = predict_next_state(z,a) → L3.meta.update(F)
+
+v5.6 语言全管线 (comprehend → speak):
+  human_input → Wernicke.comprehend(+N400/P600) → TPJ.pragmatic_enrich →
+  ArcuateFasciculus.ventral → Broca.speak(+PhraseStructure) →
+  MotorCortex.plan_sequence → ArcuateFasciculus.dorsal(efference_copy) →
+  PhonologicalLoop(self-hearing) → self-monitoring
 """
 
 import numpy as np
@@ -28,10 +36,19 @@ from brainstem_cerebellum.neuromodulatory.meta_learning import (
 from cerebrum.temporal_lobe.wernicke import (
     DialogueContext, comprehend, evaluate_response,
     consolidate_dialogue_memory, micro_consolidation,
+    compute_language_PE,  # v5.6: 语言预测误差
 )
 from cerebrum.association.dmn import SelfModel
 from cerebrum.association.fpn import FrontoparietalNetwork
 from cerebrum.association.tpn import TaskPositiveNetwork
+
+# v5.6: 语言系统新模块
+from cerebrum.association.arcuate_fasciculus import ArcuateFasciculus
+from cerebrum.frontal_lobe.phonological_loop import PhonologicalLoop
+from cerebrum.frontal_lobe.phrase_structure import PhraseStructureNetwork
+from cerebrum.parietal_lobe.angular_gyrus import AngularGyrus
+from cerebrum.frontal_lobe.motor_cortex import MotorCortex
+from cerebrum.parietal_lobe.tpj import TPJ
 
 
 def _estimate_azimuth_from_stereo(left_spectrum, right_spectrum) -> float:
@@ -162,6 +179,29 @@ class Agent:
         from brainstem_cerebellum.pons.locus_coeruleus import LocusCoeruleus
         self.locus_coeruleus: LocusCoeruleus = LocusCoeruleus()
         self._lc_result: dict = {}                # 存本次 step 的 LC 结果
+
+        # v5.6: 弓状束 — 连接 Wernicke ↔ Broca (腹侧+背侧双通路)
+        self.arcuate_fasciculus: ArcuateFasciculus = ArcuateFasciculus()
+
+        # v5.6: 语音回路 — 言语工作记忆 (~7组块, ~2秒消退)
+        self.phonological_loop: PhonologicalLoop = PhonologicalLoop()
+
+        # v5.6: 短语结构网络 — 层级句法 (从语料统计中涌现)
+        self.phrase_structure: PhraseStructureNetwork = PhraseStructureNetwork()
+
+        # v5.6: 角回 — 阅读通路 (视觉字形→语音)
+        self.angular_gyrus: AngularGyrus = AngularGyrus()
+
+        # v5.6: 运动皮层 — 言语发音规划 (M1+SMA, 16维发音特征)
+        self.motor_cortex: MotorCortex = MotorCortex()
+
+        # v5.6: 颞顶联合区 — 心理理论与语用语言
+        self.tpj: TPJ = TPJ()
+
+        # v5.6: 语言预测误差追踪
+        self.F_language_history: list[float] = []
+        self.language_pe_history: list[dict] = []
+        self._last_comprehension: np.ndarray = np.zeros(64, dtype=np.float32)
 
         # v5.1: 自听回路状态 (从 sensory 向量中移出, 变为 Agent 内部状态)
         self._audio_semantic: np.ndarray = np.zeros(64, dtype=np.float32)
@@ -776,16 +816,23 @@ class Agent:
     # ================================================================
 
     def comprehend(self, human_vec: np.ndarray,
-                   human_sentiment: np.ndarray = None
+                   human_sentiment: np.ndarray = None,
+                   speaker_name: str = None
                    ) -> tuple[np.ndarray, dict]:
-        """Wernicke 区等价物 —— 理解人类输入。
+        """Wernicke 区等价物 —— 理解人类输入 (v5.6: 集成TPJ+语音回路).
 
         调用 dialogue_memory.comprehend()，传入当前身体/情感状态。
         理解向量驱动 Broca 区生成回应，而不是直接用原始输入检索。
 
+        v5.6 增强:
+          - 语音回路: 将输入词写入语音工作记忆
+          - TPJ: 推断说话人意图, 语用丰富化理解
+          - 语言PE: N400/P600 分量追踪
+
         Args:
             human_vec: 人类输入的语义编码 (64,)
             human_sentiment: 情感信号 (8,), 可选
+            speaker_name: 说话人标识 (用于TPJ意图推断), 可选
 
         Returns:
             (comprehension_vec, understanding_dict)
@@ -796,6 +843,9 @@ class Agent:
         v = self.valence_history[-1] if self.valence_history else 0.0
         a = self.arousal_history[-1] if self.arousal_history else 0.0
 
+        # v5.6: 写入语音回路 (模拟"听到"的过程)
+        self.phonological_loop.hear(human_vec[:64])
+
         comp_vec, understanding = comprehend(
             human_vec=human_vec,
             human_sentiment=human_sentiment,
@@ -805,9 +855,184 @@ class Agent:
             valence=v,
             arousal=a,
         )
-        # 存储最近的理解向量 (供自听回路使用)
+
+        # v5.6: TPJ 语用丰富化 (如果有说话人信息)
+        if speaker_name is not None and hasattr(self, 'tpj'):
+            try:
+                ctx_vec = self.dialogue_ctx.get_context_vector()
+                intent_vec, tpj_inference = self.tpj.infer_speaker_intent(
+                    utterance_vec=human_vec,
+                    speaker_name=speaker_name,
+                    context_vec=ctx_vec,
+                )
+                # 语用丰富化: 字面理解 + 意图推断
+                social_ctx = getattr(self, '_social_ctx', None)
+                enriched = self.tpj.pragmatic_enrichment(
+                    literal_comprehension=comp_vec,
+                    speaker_intent=intent_vec,
+                    social_context=social_ctx,
+                )
+                comp_vec = enriched
+                understanding['tpj_inference'] = tpj_inference
+                understanding['pragmatic_enriched'] = True
+            except Exception:
+                understanding['pragmatic_enriched'] = False
+
+        # v5.6: 追踪语言PE
+        if 'F_language' in understanding:
+            self.F_language_history.append(understanding['F_language'])
+            self.language_pe_history.append({
+                'semantic_pe': understanding.get('semantic_pe', 0.0),
+                'syntactic_pe': understanding.get('syntactic_pe', 0.0),
+                'phonological_pe': understanding.get('phonological_pe', 0.0),
+                'F_language': understanding['F_language'],
+            })
+
+        # 存储最近的理解向量 (供自听回路和AF使用)
         self._last_comprehension = comp_vec
         return comp_vec, understanding
+
+    def speak(self, broca, query_vec: np.ndarray = None,
+              belief_vec: np.ndarray = None,
+              valence: float = 0.0, arousal: float = 0.0,
+              max_words: int = 18, temperature: float = 0.7,
+              use_phrase_structure: bool = True
+              ) -> tuple[list[str], np.ndarray | None, dict]:
+        """v5.6: 全语言产出管线 — AF → Broca → Motor Cortex.
+
+        流程 (对应 Wernicke-Geschwind 模型 + 双流模型):
+          1. AF腹侧: 理解 → 言语种子 (弓状束复述通路)
+          2. Broca: 种子词 → Hebb词序链生成 (Broca区)
+          3. 短语结构: 调制词候选 (BA44层级句法)
+          4. Motor Cortex: 发音计划 + 运动指令副本 (M1/SMA)
+          5. AF背侧: 运动副本 → 预期听觉 (自我监控)
+
+        Args:
+            broca: Broca实例
+            query_vec: 查询向量 (64,) — 用于Broca生成
+            belief_vec: 信念向量 (64,) — Agent内部状态
+            valence: 当前效价
+            arousal: 当前唤醒
+            max_words: 最大词数
+            temperature: 生成温度
+            use_phrase_structure: 是否启用短语结构约束
+
+        Returns:
+            (words, audio, speech_diagnostics)
+        """
+        diagnostics = {
+            'af_seed_used': False,
+            'phrase_structure_used': False,
+            'motor_plan_executed': False,
+            'self_monitoring_pe': 0.0,
+        }
+
+        if query_vec is None:
+            query_vec = self._last_comprehension.copy()
+
+        if belief_vec is None:
+            belief_vec = self._belief_vector()
+
+        # ---- Step 1: AF 腹侧通路 → 言语种子 ----
+        comprehension_vec = self._last_comprehension
+        af_seed_vec, af_confidence = self.arcuate_fasciculus.repeat(
+            comprehension_vec, temperature=0.4)
+
+        diagnostics['af_seed_used'] = af_confidence > 0.1
+        diagnostics['af_confidence'] = float(af_confidence)
+
+        # ---- Step 2: AF 种子调制查询向量 ----
+        # AF种子与查询混合 → 言语产出同时受理解和当前状态驱动
+        if af_confidence > 0.15:
+            query_vec = (0.5 * query_vec[:64] + 0.5 * af_seed_vec[:64]
+                        ).astype(np.float32)
+
+        # ---- Step 3: Broca 词序 Hebb 链生成 ----
+        words, audio = broca.speak_from_state(
+            belief_vec=belief_vec,
+            body_state=self.body,
+            query_vec=query_vec,
+            valence=valence,
+            arousal=arousal,
+            max_words=max_words,
+            temperature=temperature,
+        )
+
+        # ---- Step 4: 短语结构约束 (v5.6) ----
+        if use_phrase_structure and hasattr(self, 'phrase_structure'):
+            if self.phrase_structure._trained and len(words) >= 3:
+                diagnostics['phrase_structure_used'] = True
+                # 获取短语结构诊断 (不重新生成, 只记录)
+                phrase_info = self.phrase_structure.get_boundary_examples(
+                    ''.join(words))
+                diagnostics['phrase_boundaries'] = len(phrase_info)
+
+        # ---- Step 5: 运动皮层发音计划 ----
+        if len(words) >= 1:
+            try:
+                word_vecs = [broca._word_to_vec(w) for w in words]
+                word_vecs = [wv for wv in word_vecs if wv is not None]
+                if word_vecs:
+                    motor_plans = self.motor_cortex.plan_sequence(
+                        word_vecs, words)
+                    diagnostics['motor_plan_executed'] = True
+                    diagnostics['motor_plan_length'] = len(motor_plans)
+
+                    # ---- Step 6: AF 背侧通路 (运动副本 → 预期听觉) ----
+                    if motor_plans:
+                        # 从运动计划生成预期听觉
+                        expected_audio = self.motor_cortex.efference_copy(
+                            motor_plans[-1])
+
+                        # AF 背侧: 言语计划 → 预期听觉
+                        speech_plan_vec = np.mean(
+                            [wv[:64] for wv in word_vecs], axis=0)
+                        af_expected, _ = self.arcuate_fasciculus.efference_copy(
+                            speech_plan_vec, motor_plans[-1])
+
+                        # 学习背侧关联
+                        self.arcuate_fasciculus.learn_dorsal(
+                            speech_plan=speech_plan_vec,
+                            actual_auditory=expected_audio,
+                            motor_plan=motor_plans[-1],
+                            weight=0.5,
+                        )
+            except Exception:
+                pass
+
+        # ---- Step 7: 自听 → 语音回路 ----
+        if len(words) >= 1:
+            try:
+                word_vecs_audio = []
+                for w in words:
+                    wv = broca._word_to_vec(w)
+                    if wv is not None:
+                        word_vecs_audio.append(wv[:64])
+                if word_vecs_audio:
+                    self.phonological_loop.hear_sequence(word_vecs_audio)
+            except Exception:
+                pass
+
+        # ---- Step 8: AF 腹侧学习 (comprehension → speech) ----
+        if len(words) >= 2 and af_confidence > 0.1:
+            try:
+                # 提取回应中的关键种子词
+                seed_vecs = []
+                for w in words[:3]:
+                    wv = broca._word_to_vec(w)
+                    if wv is not None:
+                        seed_vecs.append(wv[:64])
+                if seed_vecs:
+                    speech_seed = np.mean(seed_vecs, axis=0)
+                    self.arcuate_fasciculus.learn_ventral(
+                        comprehension_vec=comprehension_vec,
+                        speech_seed_vec=speech_seed,
+                        weight=0.3,
+                    )
+            except Exception:
+                pass
+
+        return words, audio, diagnostics
 
     def warmup_l0(self, sentences: list[str], text_env, n: int = 30):
         """L0 预热: 喂入种子句子建立初始记忆集群。

@@ -762,6 +762,38 @@ def run_dialogue():
     print("  Agent 先理解，再回忆，然后用自己的话说出来")
     print("  提到具体物体 → Agent 脑补视觉特征 → 回应更丰富")
     print("  沉默时 Agent 会自己「想」→ 内部言语链")
+    print("  v5.6: 弓状束复述 · 语音回路 · 短语结构 · N400/P600 · 运动皮层 · TPJ语用")
+
+    # ---- v5.6: 初始化语言系统新模块 ----
+    print(f"\n  [v5.6] Initializing language modules...")
+
+    # 弓状束: 从语料预训练 Hebb 连接
+    print(f"  [v5.6] Arcuate Fasciculus pretraining...")
+    agent.arcuate_fasciculus.pretrain_from_corpus(
+        broca, text_env, n_samples=3000, verbose=True)
+
+    # 短语结构: 从语料学习转移概率和短语边界
+    print(f"  [v5.6] Phrase Structure training...")
+    agent.phrase_structure.train_from_corpus(
+        broca.sentences, n_samples=5000, verbose=True)
+
+    # 角回: 从词表学习字形→语音映射
+    print(f"  [v5.6] Angular Gyrus training...")
+    agent.angular_gyrus.train_from_vocabulary(
+        broca.word_list, broca.word_vecs, n_samples=3000, verbose=True)
+
+    # TPJ: 从角色对话学习意图推断
+    print(f"  [v5.6] TPJ training...")
+    agent.tpj.train_from_corpus(
+        broca.sentences, n_samples=3000, verbose=True)
+
+    print(f"  [v5.6] Language modules ready: "
+          f"AF={agent.arcuate_fasciculus.n_ventral_clusters}v/"
+          f"{agent.arcuate_fasciculus.n_dorsal_clusters}d, "
+          f"Loop={agent.phonological_loop.max_chunks}chunks, "
+          f"Phrase={agent.phrase_structure.n_phrase_types}types, "
+          f"AG={agent.angular_gyrus.n_grapheme_clusters}glyphs, "
+          f"TPJ={agent.tpj._n_intents}intents")
     if vis_brain:
         print("  🖼️ 输入 'img:path/to/image.jpg' 让 Agent \"看到\" 图片")
     print("  🎵 输入 'audio:path/to/sound.wav' 让 Agent \"听到\" 声音")
@@ -1186,15 +1218,16 @@ def run_dialogue():
                         novelty_need = max(0.0, 0.5 - body.b[3])
                         temp = temp_base * (1.0 + social_need * 0.6 + novelty_need * 0.4)
 
-                        # ---- 生成回应 ----
-                        words, audio = broca.speak_from_state(
-                            belief_vec=top.centroid,
-                            body_state=agent.body,
+                        # ---- 生成回应 (v5.6: AF → Broca → Motor Cortex 全管线) ----
+                        words, audio, speech_diag = agent.speak(
+                            broca=broca,
                             query_vec=query,
+                            belief_vec=top.centroid,
                             valence=v,
                             arousal=a,
                             temperature=temp,
                             max_words=20,
+                            use_phrase_structure=True,
                         )
 
                         response = "".join(words) if words else ""
@@ -1208,14 +1241,15 @@ def run_dialogue():
                                 eval_score = eval_result['overall_score']
                                 # 低于阈值 → 重试一次 (更高温度)
                                 if not eval_result['acceptable'] and len(words) < 8:
-                                    words2, audio2 = broca.speak_from_state(
-                                        belief_vec=top.centroid,
-                                        body_state=agent.body,
+                                    words2, audio2, _ = agent.speak(
+                                        broca=broca,
                                         query_vec=query,
+                                        belief_vec=top.centroid,
                                         valence=v,
                                         arousal=a,
                                         temperature=temp * 1.5,
                                         max_words=20,
+                                        use_phrase_structure=False,
                                     )
                                     response2 = "".join(words2) if words2 else ""
                                     if response2 and len("".join(words2)) > len(response):
@@ -1251,13 +1285,14 @@ def run_dialogue():
 
                         # ---- 反重复: 最近说过的话不重复 ----
                         if agent.dialogue_ctx.is_repeating(response):
-                            words2, audio2 = broca.speak_from_state(
-                                belief_vec=top.centroid,
-                                body_state=agent.body,
+                            words2, audio2, _ = agent.speak(
+                                broca=broca,
                                 query_vec=query,
+                                belief_vec=top.centroid,
                                 valence=v, arousal=a,
                                 temperature=temp * 1.5,
                                 max_words=20,
+                                use_phrase_structure=False,
                             )
                             response2 = "".join(words2) if words2 else ""
                             if response2 and not agent.dialogue_ctx.is_repeating(response2):
@@ -1354,14 +1389,15 @@ def run_dialogue():
                                      * (1.0 + a * 0.5 + social_need * 0.3))
                         inner_k = max(5, min(20, int(8 + a * 10 + sa * 6)))
 
-                        words, _ = broca.speak_from_state(
-                            belief_vec=top.centroid,
-                            body_state=agent.body,
+                        words, _, _ = agent.speak(
+                            broca=broca,
                             query_vec=inner_query,
+                            belief_vec=top.centroid,
                             valence=v,
                             arousal=a,
                             temperature=inner_temp,
                             max_words=16,
+                            use_phrase_structure=True,
                         )
                         thought = "".join(words) if words else ""
 
