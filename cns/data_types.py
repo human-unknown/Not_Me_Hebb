@@ -78,6 +78,34 @@ D_VISUAL_V5 = (M_PATHWAY_WIDTH + P_PATHWAY_WIDTH + K_PATHWAY_WIDTH +
 # 总感知维度 (v5.0)
 D_V5 = TEXT_V5_WIDTH + D_VISUAL_V5  # 64 + 308 = 372
 
+# ============================================================
+# v5.2 听觉通路布局
+# ============================================================
+
+# 耳蜗核输出: tonotopic spectrum (mel-spaced channels)
+CN_WIDTH = 32
+CN_START, CN_END = D_V5, D_V5 + CN_WIDTH              # s[372:404]
+
+# 上橄榄复合体输出: binaural spatial (ITD + ILD)
+SOC_WIDTH = 24
+SOC_START, SOC_END = CN_END, CN_END + SOC_WIDTH        # s[404:428]
+
+# 下丘输出: integrated frequency×space×time features
+IC_WIDTH = 24
+IC_START, IC_END = SOC_END, SOC_END + IC_WIDTH         # s[428:452]
+
+# 听皮层输出: auditory objects/scene features
+AC_WIDTH = 16
+AC_START, AC_END = IC_END, IC_END + AC_WIDTH           # s[452:468]
+
+# 总听觉维度
+D_AUDIO = CN_WIDTH + SOC_WIDTH + IC_WIDTH + AC_WIDTH   # 96
+D_V52 = D_V5 + D_AUDIO                                 # 372 + 96 = 468
+
+# 更新全局感知维度 (v5.2)
+D = D_V52
+S_CORE = D - 10                                        # 感觉核心
+
 
 # ============================================================
 # 核心数据结构

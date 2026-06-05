@@ -105,6 +105,11 @@ class Agent:
         self._current_visual_result: dict = {}  # 存本次 step 的视觉处理结果
         self._current_image: np.ndarray = None  # 当前帧图像 (由外部设置)
 
+        # v5.2: 听觉层级管线 (耳蜗核→SOC→IC→MGB→听皮层)
+        from cerebrum.temporal_lobe.auditory_hierarchy import AuditoryHierarchy
+        self.auditory_hierarchy: AuditoryHierarchy = AuditoryHierarchy()
+        self._current_auditory_result: dict = {}  # 存本次 step 的听觉处理结果
+
         # v5.1: 自听回路状态 (从 sensory 向量中移出, 变为 Agent 内部状态)
         self._audio_semantic: np.ndarray = np.zeros(64, dtype=np.float32)
         self._self_sentiment: np.ndarray = np.zeros(8, dtype=np.float32)
@@ -177,6 +182,41 @@ class Agent:
                     }
             else:
                 self._current_visual_result = {
+                    'F_accuracy': 0.0, 'PE_total': 0.0, 'diagnostics': {},
+                }
+
+        # ---- v5.2 Phase 0b: 听觉层级处理 (耳蜗核→SOC→IC→MGB→听皮层) ----
+        # 使用语义代理模式: 从text段合成伪频谱驱动听觉通路
+        from cns.data_types import CN_START, AC_END, CN_WIDTH, SOC_WIDTH, IC_WIDTH, AC_WIDTH
+        AUD_START, AUD_END = CN_START, AC_END  # s[372:468]
+        aud_active = True  # 听觉管线常开 (语义代理模式)
+
+        if aud_active and hasattr(self, 'auditory_hierarchy'):
+            try:
+                # 语义代理: text[0:64] → 伪频谱 → 全听觉通路
+                text_vec = sensory[0:64].copy()
+                brainstem_arousal = float(np.clip(
+                    self.arousal_history[-1] if self.arousal_history else 0.5,
+                    0.1, 1.0))
+                # 视觉空间信息 (用于ICx多感官整合)
+                vis_spatial = None
+                if 'sensory' in self._current_visual_result:
+                    vis_vec = self._current_visual_result.get('sensory', None)
+                    if vis_vec is not None:
+                        vis_spatial = vis_vec[VIS_START:VIS_START+16]  # 取视觉空间段
+
+                aud_result = self.auditory_hierarchy.process(
+                    semantic_vec=text_vec,
+                    arousal=brainstem_arousal,
+                    fpn=self.fpn if hasattr(self, 'fpn') else None,
+                    visual_spatial=vis_spatial,
+                    learn=True,
+                )
+                # 将听觉管线输出写入感知向量的听觉段
+                sensory[AUD_START:AUD_END] = aud_result['sensory'][:AUD_END-AUD_START]
+                self._current_auditory_result = aud_result
+            except Exception:
+                self._current_auditory_result = {
                     'F_accuracy': 0.0, 'PE_total': 0.0, 'diagnostics': {},
                 }
 

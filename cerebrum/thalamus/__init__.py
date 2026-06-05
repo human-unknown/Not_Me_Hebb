@@ -30,5 +30,6 @@ v4.1: 按图2 (大脑各结构功能分工) 从边缘系统中独立出来，
 
 from cerebrum.thalamus.lgn import LGN
 from cerebrum.thalamus.pulvinar import Pulvinar
+from cerebrum.thalamus.mgb import MedialGeniculateBody  # v5.2
 
-__all__ = ['LGN', 'Pulvinar']
+__all__ = ['LGN', 'Pulvinar', 'MedialGeniculateBody']
