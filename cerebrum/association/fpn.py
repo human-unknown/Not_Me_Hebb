@@ -70,12 +70,15 @@ class FrontoparietalNetwork:
       - DMN↔TPN 跷跷板中的任务执行侧
     """
 
-    def __init__(self, input_dim: int = 468, wm_capacity: int = 4):
+    def __init__(self, input_dim: int = None, wm_capacity: int = 4):
         """
         Args:
-            input_dim: 感知输入维度 (D=468, v5.2 含听觉)
+            input_dim: 感知输入维度 (默认 data_types.D, 当前 D_V54=516)
             wm_capacity: 工作记忆容量 (经典 7±2, 但核心瓶颈 ~4 项)
         """
+        if input_dim is None:
+            from cns.data_types import D as _D
+            input_dim = _D
         self.input_dim = input_dim
         self.wm_capacity = wm_capacity
 

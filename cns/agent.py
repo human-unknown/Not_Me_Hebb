@@ -141,6 +141,13 @@ class Agent:
         self._current_auditory_result: dict = {}  # 存本次 step 的听觉处理结果
         self._current_audio_data: dict = None     # v5.3: 真实音频输入数据 (由外部设置)
 
+        # v5.4: 痛觉层级管线 (背角闸门→双通路→丘脑→皮层→PAG→RVM下行)
+        from brainstem_cerebellum.nociception_hierarchy import NociceptionHierarchy
+        self.nociception_hierarchy: NociceptionHierarchy = NociceptionHierarchy()
+        self._current_pain_result: dict = {}      # 存本次 step 的痛觉处理结果
+        self._current_pain_input: float = 0.0     # 当前痛觉输入强度 (由外部/环境设置)
+        self._current_abeta_input: float = 0.0    # 当前Aβ触觉输入 (按摩/触摸)
+
         # v5.1: 自听回路状态 (从 sensory 向量中移出, 变为 Agent 内部状态)
         self._audio_semantic: np.ndarray = np.zeros(64, dtype=np.float32)
         self._self_sentiment: np.ndarray = np.zeros(8, dtype=np.float32)
@@ -273,6 +280,92 @@ class Agent:
                     'F_accuracy': 0.0, 'PE_total': 0.0, 'diagnostics': {},
                 }
 
+        # ---- v5.4 Phase 0c: 痛觉层级处理 (背角闸门→双通路→丘脑→皮层→PAG→RVM下行) ----
+        from cns.data_types import PAIN_DH_START, PAIN_THALAMIC_END, D_PAIN
+        PAIN_START, PAIN_END = PAIN_DH_START, PAIN_THALAMIC_END  # s[468:516]
+
+        # 从身体状态推导伤害性输入
+        if self.body is not None and hasattr(self, 'nociception_hierarchy'):
+            try:
+                body_b = self.body.b
+                # b[-1] for pain if available (text mode has 9, grid has 5)
+                if len(body_b) >= 9:
+                    tissue_integrity = float(body_b[8])
+                    tissue_damage = float(np.clip(tissue_integrity, 0.0, 1.0))
+                else:
+                    # Grid mode: use overall body deviation as proxy
+                    tissue_damage = float(np.clip(
+                        self.body.compute_deviation() * 0.5, 0.0, 1.0))
+                # v5.4: 伤害性输入 = max(身体组织损伤, 外部输入)
+                # 外部输入主导 (环境伤害), 身体组织损伤提供持续背景
+                nociceptive = float(np.clip(
+                    max(tissue_damage * 0.6, self._current_pain_input), 0.0, 1.0))
+
+                # Aβ触觉输入 (来自外部, 如按摩/触摸 = 关闭闸门)
+                abeta_input = float(self._current_abeta_input)
+
+                # 从当前状态获取情感/认知参数
+                v = self.valence_history[-1] if self.valence_history else 0.0
+                a = self.arousal_history[-1] if self.arousal_history else 0.5
+                # ACC情感信号 = F_body归一化
+                f_body_now = self.F_body_history[-1] if self.F_body_history else 0.0
+                acc_affect = float(np.clip(f_body_now * 0.5, 0.0, 1.0))
+                # 杏仁核恐惧 = 负效价 × 唤醒
+                amygdala_fear = float(np.clip(max(0.0, -v) * a, 0.0, 1.0))
+                # PFC认知调控 = TPN激活度 (任务模式 → 更强的下行抑制)
+                pfc_cognitive = float(self.tpn.tpn_activation if hasattr(self, 'tpn') else 0.3)
+                # 应激水平 = 高唤醒 + 高F_body
+                stress = float(np.clip(a * 0.6 + f_body_now * 0.4, 0.0, 1.0))
+                # 安慰剂预期 = 正效价 + 低F_body (预期好转)
+                placebo = float(np.clip(max(0.0, v) * (1.0 - f_body_now), 0.0, 1.0))
+
+                pain_result = self.nociception_hierarchy.process(
+                    nociceptive_input=nociceptive,
+                    tissue_damage=tissue_damage,
+                    abeta_input=abeta_input,
+                    valence=v,
+                    arousal=a,
+                    body_vector=body_b,
+                    acc_affect=acc_affect,
+                    insula_intero=0.0,       # 首次运行无岛叶反馈
+                    amygdala_fear=amygdala_fear,
+                    pfc_cognitive=pfc_cognitive,
+                    stress_level=stress,
+                    placebo_expectation=placebo,
+                    fpn=self.fpn if hasattr(self, 'fpn') else None,
+                    learn=True,
+                )
+
+                # 将痛觉管线输出写入感知向量的痛觉段
+                sensory[PAIN_START:PAIN_END] = pain_result['sensory'][:D_PAIN]
+                self._current_pain_result = pain_result
+
+                # 痛觉反馈 → 身体状态
+                pain_intensity = pain_result['pain_intensity']
+                # 高疼痛 → b[2] 压力↑ (所有模式通用)
+                if len(self.body.b) >= 3:
+                    self.body.b[2] = min(1.0,
+                        self.body.b[2] + 0.003 * pain_intensity)
+                # 疼痛 → b[0] 社交需求(安慰)↑ (所有模式通用)
+                if len(self.body.b) >= 1 and pain_intensity > 0.3:
+                    self.body.b[0] = max(0.0,
+                        self.body.b[0] - 0.002 * pain_intensity)
+                # b[8] 组织完整性: text模式专有
+                if len(body_b) >= 9:
+                    if pain_intensity > 0.5:
+                        self.body.b[8] = min(1.0,
+                            self.body.b[8] + 0.002 * (pain_intensity - 0.5))
+                    # 下行调控: analgesia → 恢复加速
+                    if pain_result.get('descending_signal', 0) > 0.3:
+                        self.body.b[8] = max(0.0,
+                            self.body.b[8] - 0.001 * pain_result['descending_signal'])
+
+            except Exception:
+                self._current_pain_result = {
+                    'F_accuracy': 0.0, 'PE_total': 0.0,
+                    'pain_intensity': 0.0, 'diagnostics': {},
+                }
+
         # ---- L0: 学习感知 + 周期性睡眠 ----
         self.net.learn(sensory)
 
@@ -304,6 +397,13 @@ class Agent:
         belief = self._belief_vector()
         F = compute_free_energy(belief, sensory, self.net, self.theta,
                                 self.hab, self.beliefs, self.body, social_ctx)
+
+        # v5.4: 痛觉预测误差汇入 F_total
+        pain_pe = 0.0
+        if hasattr(self, '_current_pain_result') and self._current_pain_result:
+            pain_pe = float(self._current_pain_result.get('PE_total', 0.0))
+            # 将痛觉PE加入F (权重 0.3 = 痛觉预测误差的影响)
+            F.total += 0.3 * pain_pe
         self.hab.update(F.total)
         self.F_history.append(F.total)
         self.F_body_history.append(F.body)
@@ -327,6 +427,15 @@ class Agent:
             acc_change = abs(self.F_accuracy_history[-1] - self.F_accuracy_history[-2])
             novelty = float(np.tanh(acc_change * 5.0))
         urgency = float(np.tanh(self.body.compute_deviation() * 3.0)) if self.body is not None else 0.0
+        # v5.4: 痛觉增强紧迫感
+        if hasattr(self, '_current_pain_result') and self._current_pain_result:
+            pain_intensity = float(self._current_pain_result.get('pain_intensity', 0.0))
+            urgency = float(np.clip(urgency + pain_intensity * 0.5, 0.0, 1.0))
+            # 疼痛新颖性: allodynia/hyperalgesia → 异常状态 → 新颖
+            if self._current_pain_result.get('allodynia', False):
+                novelty += 0.2
+            if self._current_pain_result.get('hyperalgesia', False):
+                novelty += 0.1
 
         self.tpn.receive_salience(conflict_signal=conflict, novelty_signal=novelty, urgency=urgency)
 
@@ -647,6 +756,20 @@ class Agent:
                          'is_stereo': 是否立体声
         """
         self._current_audio_data = audio_data
+
+    def set_pain_input(self, nociceptive: float = 0.0,
+                       abeta_input: float = 0.0):
+        """v5.4: 设置外部痛觉输入 (供环境/场景驱动疼痛).
+
+        Args:
+            nociceptive: 伤害性信号强度 [0, 1]
+                         >0.5 = 组织损伤/有害刺激
+                         >0.8 = 严重损伤
+            abeta_input: Aβ触觉输入 [0, 1]
+                         按摩/触摸/摩擦 → 关闭闸门 → 缓解疼痛
+        """
+        self._current_pain_input = float(np.clip(nociceptive, 0.0, 1.0))
+        self._current_abeta_input = float(np.clip(abeta_input, 0.0, 1.0))
 
     def evaluate_own_response(self, response_vec: np.ndarray) -> dict:
         """ACC+OFC —— 评估自己刚生成的回应"""

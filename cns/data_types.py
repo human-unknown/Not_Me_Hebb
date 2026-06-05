@@ -102,8 +102,32 @@ AC_START, AC_END = IC_END, IC_END + AC_WIDTH           # s[452:468]
 D_AUDIO = CN_WIDTH + SOC_WIDTH + IC_WIDTH + AC_WIDTH   # 96
 D_V52 = D_V5 + D_AUDIO                                 # 372 + 96 = 468
 
-# 更新全局感知维度 (v5.2)
-D = D_V52
+# ============================================================
+# v5.4 痛觉通路布局
+# ============================================================
+
+# 脊髓背角输出: 闸门控制后的痛觉信号
+PAIN_DH_WIDTH = 16
+PAIN_DH_START, PAIN_DH_END = D_V52, D_V52 + PAIN_DH_WIDTH     # s[468:484]
+
+# 外侧脊髓丘脑束: 感觉-辨别 (快痛Aδ → VPL → S1/S2)
+PAIN_LATERAL_WIDTH = 12
+PAIN_LATERAL_START, PAIN_LATERAL_END = PAIN_DH_END, PAIN_DH_END + PAIN_LATERAL_WIDTH  # s[484:496]
+
+# 内侧脊髓丘脑束: 情感-动机 (慢痛C → CM-Pf/MD → ACC/岛叶)
+PAIN_MEDIAL_WIDTH = 12
+PAIN_MEDIAL_START, PAIN_MEDIAL_END = PAIN_LATERAL_END, PAIN_LATERAL_END + PAIN_MEDIAL_WIDTH  # s[496:508]
+
+# 丘脑痛觉中继: VPL + CM-Pf + MD + Po 整合
+PAIN_THALAMIC_WIDTH = 8
+PAIN_THALAMIC_START, PAIN_THALAMIC_END = PAIN_MEDIAL_END, PAIN_MEDIAL_END + PAIN_THALAMIC_WIDTH  # s[508:516]
+
+# 总痛觉维度
+D_PAIN = PAIN_DH_WIDTH + PAIN_LATERAL_WIDTH + PAIN_MEDIAL_WIDTH + PAIN_THALAMIC_WIDTH  # 48
+D_V54 = D_V52 + D_PAIN                                           # 468 + 48 = 516
+
+# 更新全局感知维度 (v5.4)
+D = D_V54
 S_CORE = D - 10                                        # 感觉核心
 
 
@@ -265,18 +289,20 @@ class BodyVector:
 
     def __post_init__(self):
         if self.mode == 'text':
-            self.M = 8
+            self.M = 9  # v5.4: +1 痛觉维度
             if self.b is None:
-                self.b = np.array([0.7, 0.7, 0.0, 0.0, 0.3, 0.3, 0.3, 0.5], dtype=float)
-            elif len(self.b) < 8:
-                self.b = np.concatenate([self.b, np.zeros(8 - len(self.b))])
+                self.b = np.array([0.7, 0.7, 0.0, 0.0, 0.3, 0.3, 0.3, 0.5, 0.0], dtype=float)
+            elif len(self.b) < 9:
+                self.b = np.concatenate([self.b, np.zeros(9 - len(self.b))])
             if self.setpoints is None:
-                self.setpoints = np.array([0.7, 0.7, 0.0, 0.0, 0.3, 0.3, 0.3, 0.5], dtype=float)
-            elif len(self.setpoints) < 8:
-                self.setpoints = np.concatenate([self.setpoints, np.array([0.3, 0.3, 0.5])])
+                self.setpoints = np.array([0.7, 0.7, 0.0, 0.0, 0.3, 0.3, 0.3, 0.5, 0.0], dtype=float)
+            elif len(self.setpoints) < 9:
+                self.setpoints = np.concatenate([self.setpoints, np.array([0.0])])
             if self.decays is None:
                 self.decays = np.array([-0.003, 0.0, 0.002, 0.0, 0.0,
-                                        -0.003, -0.003, 0.001], dtype=float)
+                                        -0.003, -0.003, 0.001, -0.001], dtype=float)
+                # b[8] 痛觉/组织完整性: 缓慢自愈 (负漂移=增大→恢复正常)
+                # 实际痛觉信号由 nociception_hierarchy 基于 b[8] 偏离计算
         else:
             if self.b is None:
                 self.b = np.array([0.7, 0.7, 0.0, 0.0, 0.3], dtype=float)
@@ -305,6 +331,9 @@ class BodyVector:
                 self.b[2] = max(0.0, self.b[2] - 0.03)
             elif action_type >= 0:
                 self.b[2] = min(1.0, self.b[2] + 0.005)
+            # v5.4: b[8] 组织完整性 — 自愈趋势 (向setpoint回归)
+            if len(self.b) >= 9:
+                self.b[8] += 0.001 * (self.setpoints[8] - self.b[8])  # 缓慢自愈
         else:
             if action_type == 0 or action_type == 2:
                 if env_field > 0.1:
