@@ -28,4 +28,6 @@ v4.1: 按图2 (大脑各结构功能分工) 从边缘系统中独立出来，
 # 当 Thalamus 类实现后:
 #   from cerebrum.thalamus.thalamus import Thalamus
 
-__all__: list = []
+from cerebrum.thalamus.lgn import LGN
+
+__all__ = ['LGN']
