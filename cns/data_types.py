@@ -302,9 +302,10 @@ class BodyVector:
             elif len(self.setpoints) < 9:
                 self.setpoints = np.concatenate([self.setpoints, np.array([0.0])])
             if self.decays is None:
-                self.decays = np.array([-0.003, 0.0, 0.002, 0.0, 0.0,
-                                        -0.003, -0.003, 0.001, -0.001], dtype=float)
-                # b[8] 痛觉/组织完整性: 缓慢自愈 (负漂移=增大→恢复正常)
+                # v5.7: 加强漂移速率 → 更多自由能动态
+                self.decays = np.array([-0.006, 0.0, 0.004, 0.0, 0.0,
+                                        -0.005, -0.005, 0.002, -0.001], dtype=float)
+                # b[8] 痛觉/组织完整性: 缓慢自愈 (正漂移=恢复至1.0)
                 # 实际痛觉信号由 nociception_hierarchy 基于 b[8] 偏离计算
         else:
             if self.b is None:
@@ -318,9 +319,23 @@ class BodyVector:
         """单步 ODE 更新
 
         Args:
-            action_type: 执行的行��类型 (-1 = 无行动)
+            action_type: 执行的动作类型 (-1 = 无行动)
             env_field: 当前位置的环境场值 (用于 b₃ 漂移)
         """
+        # 防御: 确保 decays/setpoints 与 b 维度一致 (修复持久化恢复时的不一致)
+        if self.decays is None or len(self.decays) != len(self.b):
+            if len(self.b) == 9:
+                self.decays = np.array([-0.003, 0.0, 0.002, 0.0, 0.0,
+                                        -0.003, -0.003, 0.001, -0.001], dtype=float)
+            else:
+                self.decays = np.array([-0.003, -0.002, 0.004, 0.0, 0.001], dtype=float)
+        if self.setpoints is None or len(self.setpoints) != len(self.b):
+            if len(self.b) == 9:
+                self.setpoints = np.array([0.7, 0.7, 0.0, 0.0, 0.3, 0.3, 0.3, 0.5, 0.0], dtype=float)
+            else:
+                self.setpoints = np.array([0.7, 0.7, 0.0, 0.0, 0.3], dtype=float)
+        self.M = len(self.b)
+
         # 基础漂移
         self.b = self.b + self.decays
         self.b[3] += 0.01 * (env_field - self.b[3])

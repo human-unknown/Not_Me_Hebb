@@ -18,6 +18,8 @@ Thumbs.db
 
 # Cache & generated
 .cache/
+.notme/
+word_audio/
 
 # Audio output (generated TTS)
 audio_output/

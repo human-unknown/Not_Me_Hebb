@@ -251,31 +251,79 @@ class Agent:
         VIS_START, VIS_END = M_V1_START, BINDING_END  # s[64:372]
         vis_active = bool(np.any(np.abs(sensory[VIS_START:VIS_END]) > 0.01))
 
-        if vis_active and hasattr(self, 'visual_hierarchy') and hasattr(self, 'fpn'):
-            # 如果有当前图像帧, 驱动全视觉层级管线
-            if self._current_image is not None:
-                try:
-                    # 估算脑干唤醒度 (从 arousal history)
-                    brainstem_arousal = float(np.clip(
-                        self.arousal_history[-1] if self.arousal_history else 0.5,
-                        0.1, 1.0))
+        # v5.7: 视觉层级常开 — 有真实图像时用全管线, 无图像时用语义代理
+        # 这确保 _current_visual_result 始终被填充 (perception面板不再显示inactive)
+        if hasattr(self, 'visual_hierarchy') and hasattr(self, 'fpn'):
+            try:
+                brainstem_arousal = float(np.clip(
+                    self.arousal_history[-1] if self.arousal_history else 0.5,
+                    0.1, 1.0))
+                if self._current_image is not None:
+                    # 模式A: 真实图像 → 全视觉层级管线
                     vis_result = self.visual_hierarchy.process(
                         self._current_image,
                         brainstem_arousal=brainstem_arousal,
                         fpn=self.fpn,
                         learn=True,
                     )
-                    # 用全管线输出替换感知向量的视觉段
                     sensory[VIS_START:VIS_END] = vis_result['sensory'][VIS_START:VIS_END]
                     self._current_visual_result = vis_result
-                except Exception:
-                    # 视觉管线失败时保持旧路径的感知
+                elif vis_active:
+                    # 模式B: cross-modal视觉补全已填充sensory → 保持现有值
                     self._current_visual_result = {
-                        'F_accuracy': 0.0, 'PE_total': 0.0, 'diagnostics': {},
+                        'F_accuracy': 0.05, 'PE_total': 0.0,
+                        'diagnostics': {
+                            'V1_mean_norm': float(np.mean(np.abs(
+                                sensory[VIS_START:VIS_START+64]))),
+                            'V2_mean_norm': float(np.mean(np.abs(
+                                sensory[VIS_START+64:VIS_START+128]))),
+                            'V4_mean_norm': float(np.mean(np.abs(
+                                sensory[VIS_START+128:VIS_START+192]))),
+                            'IT_mean_norm': float(np.mean(np.abs(
+                                sensory[VIS_START+240:VIS_END]))),
+                            'mode': 'crossmodal_fill',
+                        },
                     }
-            else:
+                else:
+                    # 模式C: 语义代理 — 从文本生成低分辨率视觉特征
+                    text_vec = sensory[0:64].copy()
+                    if np.linalg.norm(text_vec) > 0.01:
+                        # 用 Hebb 网络跨模态补全: text → vision
+                        # 简单实现: text_vec → 网络检索 → 最佳匹配质心的视觉段
+                        vis_proxy = np.zeros(D_VISUAL_V5, dtype=np.float32)
+                        if self.net.n_clusters > 0:
+                            c = self.net.recall(text_vec[:48])
+                            if c is not None:
+                                vis_proxy = c.centroid[VIS_START:VIS_END].copy()
+                        # 即使质心全零也没关系 — 至少结果已填充
+                        sensory[VIS_START:VIS_END] = vis_proxy
+                        self._current_visual_result = {
+                            'F_accuracy': 0.05, 'PE_total': 0.0,
+                            'diagnostics': {
+                                'V1_mean_norm': float(np.mean(np.abs(vis_proxy[:64]))),
+                                'V2_mean_norm': float(np.mean(np.abs(vis_proxy[64:128]))),
+                                'V4_mean_norm': float(np.mean(np.abs(vis_proxy[128:192]))),
+                                'IT_mean_norm': float(np.mean(np.abs(vis_proxy[240:]))),
+                                'mode': 'semantic_proxy',
+                            },
+                        }
+                    else:
+                        self._current_visual_result = {
+                            'F_accuracy': 0.0, 'PE_total': 0.0,
+                            'diagnostics': {
+                                'V1_mean_norm': 0.0, 'V2_mean_norm': 0.0,
+                                'V4_mean_norm': 0.0, 'IT_mean_norm': 0.0,
+                                'mode': 'no_input',
+                            },
+                        }
+            except Exception:
                 self._current_visual_result = {
-                    'F_accuracy': 0.0, 'PE_total': 0.0, 'diagnostics': {},
+                    'F_accuracy': 0.0, 'PE_total': 0.0,
+                    'diagnostics': {
+                        'V1_mean_norm': 0.0, 'V2_mean_norm': 0.0,
+                        'V4_mean_norm': 0.0, 'IT_mean_norm': 0.0,
+                        'mode': 'error',
+                    },
                 }
 
         # ---- v5.2 Phase 0b: 听觉层级处理 (耳蜗核→SOC→IC→MGB→听皮层) ----
@@ -332,7 +380,12 @@ class Agent:
                 self._current_auditory_result = aud_result
             except Exception:
                 self._current_auditory_result = {
-                    'F_accuracy': 0.0, 'PE_total': 0.0, 'diagnostics': {},
+                    'F_accuracy': 0.0, 'PE_total': 0.0,
+                    'diagnostics': {
+                        'CN_mean_norm': 0.0, 'SOC_ITD_std': 0.0,
+                        'IC_mean_norm': 0.0, 'AC_mean_norm': 0.0,
+                        'n_asa_streams': 0, 'mode': 'error',
+                    },
                 }
 
         # ---- v5.4 Phase 0c: 痛觉层级处理 (背角闸门→双通路→丘脑→皮层→PAG→RVM下行) ----
@@ -418,7 +471,9 @@ class Agent:
             except Exception:
                 self._current_pain_result = {
                     'F_accuracy': 0.0, 'PE_total': 0.0,
-                    'pain_intensity': 0.0, 'diagnostics': {},
+                    'pain_intensity': 0.0, 'diagnostics': {
+                        'DH_gate_output': 0.0, 'mode': 'error',
+                    },
                 }
 
         # ---- v5.5 Phase 0d: 下丘脑稳态调节 (动态调定点 + 驱力 + HPA轴) ----
@@ -817,9 +872,10 @@ class Agent:
 
     def comprehend(self, human_vec: np.ndarray,
                    human_sentiment: np.ndarray = None,
-                   speaker_name: str = None
+                   speaker_name: str = "human",
+                   human_text: str = None
                    ) -> tuple[np.ndarray, dict]:
-        """Wernicke 区等价物 —— 理解人类输入 (v5.6: 集成TPJ+语音回路).
+        """Wernicke 区等价物 —— 理解人类输入 (v5.7: TPJ常驻+角回双路径).
 
         调用 dialogue_memory.comprehend()，传入当前身体/情感状态。
         理解向量驱动 Broca 区生成回应，而不是直接用原始输入检索。
@@ -828,11 +884,15 @@ class Agent:
           - 语音回路: 将输入词写入语音工作记忆
           - TPJ: 推断说话人意图, 语用丰富化理解
           - 语言PE: N400/P600 分量追踪
+        v5.7 增强:
+          - TPJ: 默认 speaker_name="human", 始终活跃
+          - AngularGyrus: 双路径阅读 (脑路径+快速路径混合)
 
         Args:
             human_vec: 人类输入的语义编码 (64,)
             human_sentiment: 情感信号 (8,), 可选
-            speaker_name: 说话人标识 (用于TPJ意图推断), 可选
+            speaker_name: 说话人标识 (用于TPJ意图推断), 默认 "human"
+            human_text: 原始文本 (用于AngularGyrus阅读通路), 可选
 
         Returns:
             (comprehension_vec, understanding_dict)
@@ -856,8 +916,8 @@ class Agent:
             arousal=a,
         )
 
-        # v5.6: TPJ 语用丰富化 (如果有说话人信息)
-        if speaker_name is not None and hasattr(self, 'tpj'):
+        # v5.7: TPJ 语用丰富化 (默认活跃, speaker_name="human")
+        if hasattr(self, 'tpj'):
             try:
                 ctx_vec = self.dialogue_ctx.get_context_vector()
                 intent_vec, tpj_inference = self.tpj.infer_speaker_intent(
@@ -878,6 +938,22 @@ class Agent:
             except Exception:
                 understanding['pragmatic_enriched'] = False
 
+        # v5.7: Angular Gyrus 双路径阅读 (脑路径 + 快速路径混合)
+        if human_text is not None and hasattr(self, 'angular_gyrus'):
+            try:
+                ag_phon, ag_conf = self.angular_gyrus.read(
+                    human_text, context_vec=human_vec)
+                understanding['ag_phon_norm'] = float(np.linalg.norm(ag_phon))
+                understanding['ag_confidence'] = float(ag_conf)
+                # 双路径混合: 脑路径(AG)权重随训练量增长
+                ag_weight = min(0.4, 0.1 + ag_conf * 0.3)
+                if ag_conf > 0.15:
+                    comp_vec = ((1.0 - ag_weight) * comp_vec
+                                + ag_weight * ag_phon).astype(np.float32)
+                understanding['ag_weight'] = float(ag_weight)
+            except Exception:
+                understanding['ag_confidence'] = 0.0
+
         # v5.6: 追踪语言PE
         if 'F_language' in understanding:
             self.F_language_history.append(understanding['F_language'])
@@ -896,7 +972,8 @@ class Agent:
               belief_vec: np.ndarray = None,
               valence: float = 0.0, arousal: float = 0.0,
               max_words: int = 18, temperature: float = 0.7,
-              use_phrase_structure: bool = True
+              use_phrase_structure: bool = True,
+              human_text: str = None,
               ) -> tuple[list[str], np.ndarray | None, dict]:
         """v5.6: 全语言产出管线 — AF → Broca → Motor Cortex.
 
@@ -916,6 +993,7 @@ class Agent:
             max_words: 最大词数
             temperature: 生成温度
             use_phrase_structure: 是否启用短语结构约束
+            human_text: 原始人类输入文本 (v5.7: 用于婴儿模仿模式)
 
         Returns:
             (words, audio, speech_diagnostics)
@@ -927,11 +1005,21 @@ class Agent:
             'self_monitoring_pe': 0.0,
         }
 
+        from cns.data_types import D
+
         if query_vec is None:
             query_vec = self._last_comprehension.copy()
 
         if belief_vec is None:
-            belief_vec = self._belief_vector()
+            # Use top cluster's full centroid (D-dim) — broca expects >=64 dims
+            if self.net.n_clusters > 0:
+                top = max(self.net.clusters, key=lambda c: c.activation)
+                if top.activation > 0:
+                    belief_vec = top.centroid.copy()
+                else:
+                    belief_vec = np.zeros(D, dtype=np.float32)
+            else:
+                belief_vec = np.zeros(D, dtype=np.float32)
 
         # ---- Step 1: AF 腹侧通路 → 言语种子 ----
         comprehension_vec = self._last_comprehension
@@ -947,7 +1035,10 @@ class Agent:
             query_vec = (0.5 * query_vec[:64] + 0.5 * af_seed_vec[:64]
                         ).astype(np.float32)
 
-        # ---- Step 3: Broca 词序 Hebb 链生成 ----
+        # ---- Step 3: Broca 词序 Hebb 链生成 (v5.7: 短语结构约束) ----
+        phrase_net = self.phrase_structure if (
+            use_phrase_structure and hasattr(self, 'phrase_structure')
+            and self.phrase_structure._trained) else None
         words, audio = broca.speak_from_state(
             belief_vec=belief_vec,
             body_state=self.body,
@@ -956,6 +1047,9 @@ class Agent:
             arousal=arousal,
             max_words=max_words,
             temperature=temperature,
+            phrase_network=phrase_net,
+            phrase_strength=0.25,
+            human_text=human_text,
         )
 
         # ---- Step 4: 短语结构约束 (v5.6) ----
@@ -1111,6 +1205,74 @@ class Agent:
         """
         self._current_pain_input = float(np.clip(nociceptive, 0.0, 1.0))
         self._current_abeta_input = float(np.clip(abeta_input, 0.0, 1.0))
+
+    # ================================================================
+    # 会话持久化 (v5.7)
+    # ================================================================
+
+    def save(self, path: str = None, name: str = None,
+             n_sessions: int = 1, n_turns: int = 0) -> str:
+        """保存 Agent 完整状态到磁盘.
+
+        Args:
+            path: 完整路径 (优先)
+            name: 存档名 (不含路径)
+            n_sessions: 累计会话数
+            n_turns: 当前对话轮数
+
+        Returns:
+            保存路径
+        """
+        from cns.persistence import save_agent
+        return save_agent(self, path=path, name=name,
+                         n_sessions=n_sessions,
+                         extra={'total_turns': n_turns,
+                                'total_steps': self.meta.step_count
+                                if hasattr(self, 'meta') else 0})
+
+    @classmethod
+    def load(cls, path: str, rng=None, agent_id: int = 0,
+             n_agents: int = 1, verbose: bool = True):
+        """从存档加载 Agent.
+
+        创建全新 Agent 实例并用存档数据恢复所有状态.
+        跳过热身和预训练 — 网络已有知识.
+
+        Args:
+            path: 存档路径
+            rng: 随机数生成器 (可选)
+            agent_id: Agent ID
+            n_agents: Agent 数量
+            verbose: 是否打印恢复进度
+
+        Returns:
+            (agent, metadata) — agent 实例和存档元数据
+        """
+        from cns.persistence import load_agent_state, restore_agent
+
+        if rng is None:
+            rng = np.random.default_rng()
+
+        data = load_agent_state(path)
+        agent = cls(rng=rng, agent_id=agent_id, n_agents=n_agents)
+
+        if verbose:
+            print(f"  [Persistence] Loading agent from: {path}")
+            print(f"    Version: {data.get('version', 'unknown')}")
+            print(f"    Sessions: {data.get('n_sessions', 1)}")
+            print(f"    Turns: {data.get('total_turns', 0)}")
+
+        restore_agent(agent, data, verbose=verbose)
+
+        metadata = {
+            'version': data.get('version', 'unknown'),
+            'n_sessions': data.get('n_sessions', 1),
+            'total_turns': data.get('total_turns', 0),
+            'total_steps': data.get('total_steps', 0),
+            'timestamp': data.get('timestamp', 0),
+        }
+
+        return agent, metadata
 
     def evaluate_own_response(self, response_vec: np.ndarray) -> dict:
         """ACC+OFC —— 评估自己刚生成的回应"""

@@ -16,7 +16,7 @@
 子模块:
 ├── prefrontal.py     前额叶皮层 — EFE 行动选择、递归多层次 G (L2)
 ├── broca.py          BA44/45 布罗卡区 — Hebb 词序链语言生成
-├── motor_cortex.py   BA4/6 运动皮层 — 运动规划与执行 [待实现]
+├── motor_cortex.py   BA4/6 运动皮层 — 运动规划与执行 [v5.6 已实现]
 └── orbitofrontal.py  BA11 眶额皮层 — 价值评估与奖赏预测 [待实现]
 """
 

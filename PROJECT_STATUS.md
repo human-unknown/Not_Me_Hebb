@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v5.6 — 语言系统完善: 弓状束 + 语音回路 + 短语结构 + 角回 + 运动皮层 + TPJ + N400/P600
+> **版本**: v5.7 — 发育年龄系统 + 会话持久化 + 多模态同步输入 + 实时传感器流 + Rich 终端 UI
 > **日期**: 2026-06-06
-> **基于**: 语言与大脑——神经科学视角下的语言研究 (Broca, Wernicke, Geschwind, Hickok & Poeppel, Baddeley, Sperry & Gazzaniga 等经典研究)
+> **基于**: 发育心理学 (Piaget, Vygotsky 最近发展区) + 语言习得理论 (婴儿模仿学习) + 多模态感觉整合 (Stein & Meredith)
 
 ---
 
@@ -22,6 +22,7 @@
 | **v5.4** | **2026-06-05** | **痛觉系统 — 7条知觉规律, 闸门控制, 双通路, 下行调控PAG→RVM闭环, D=516, 8个新增/升级脑区** |
 | **v5.5** | **2026-06-05** | **神经调节系统 — 下丘脑稳态调节(SetpointModel+DriveSystem+HPA轴) + VTA RPE(事件驱动学习率) + 蓝斑核NE(phasic/tonic+SNR+RVM连接)** |
 | **v5.6** | **2026-06-06** | **语言系统 — 弓状束(Broca↔Wernicke Hebb桥接) + 语音回路(Baddeley工作记忆) + 短语结构(BA44层级句法) + 角回(阅读通路) + 运动皮层(发音规划) + TPJ(心理理论/语用) + N400/P600(语言预测误差)** |
+| **v5.7** | **2026-06-06** | **发育年龄系统 + 会话持久化 + 多模态同步输入总线 + 摄像头/麦克风实时流 + Rich终端UI + 纯净模式(零预训练)** |
 
 ---
 
@@ -31,10 +32,10 @@
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ★ 已实现 (含 v5.0/v5.2/v5.3/v5.4/v5.5/v5.6 新增) | **52** | 64% |
-| ○ 占位 (接口设计完成, 待实现代码) | 16 | 20% |
+| ★ 已实现 (含 v5.0/v5.2/v5.3/v5.4/v5.5/v5.6/v5.7 新增) | **54** | 65% |
+| ○ 占位 (接口设计完成, 待实现代码) | 16 | 19% |
 | — 配置/工具/入口 (无类定义但功能完备) | 13 | 16% |
-| **合计** | **81** | **100%** |
+| **合计** | **83** | **100%** |
 
 ### 按脑区
 
@@ -259,7 +260,7 @@
 
 ---
 
-## 技术参数 (v5.6 当前)
+## 技术参数 (v5.7 当前)
 
 | 参数 | 值 |
 |------|-----|
@@ -270,23 +271,20 @@
 | 行动数 A | 5 (grid) / 3 (dialogue) |
 | Theta 参数 | **26** (v5.6: +w_semantic +w_syntactic) |
 | 身体维度 M | 5 (grid) / **9 (text, v5.4 +1 痛觉)** |
-| 语料规模 | 50,000 行 |
-| 词表规模 | 12,000 词 |
+| 语料规模 | 50,000 行 (纯净模式不使用语料预训练) |
+| 词表规模 | 12,000 词 (TTS输出用, 认知网络从零生长) |
 | 视觉通路数 | **3 并行** (M/P/K) + 1 快速 (SC→Pulvinar) |
 | 听觉核团数 | **6** (CN, SOC, LL, IC, MGB, AC) |
 | 痛觉核团数 | **6** (DorsalHorn, Spinothalamic, Thalamus-VPL/CM-Pf/MD/Po, Insula, PAG, RVM) |
 | 神经调节模块 | **3** (Hypothalamus, VTA, LocusCoeruleus) |
-| **语言模块 (v5.6)** | **7** (AF, PhonologicalLoop, PhraseStructure, AngularGyrus, MotorCortex, TPJ, +LanguagePE via Wernicke) |
+| 语言模块 (v5.6) | **7** (AF, PhonologicalLoop, PhraseStructure, AngularGyrus, MotorCortex, TPJ, +LanguagePE via Wernicke) |
 | 视觉脑区模块 | **10** (LGN, V1, V2, V4, MT, MST, IT, SC, Pulvinar, FPN-Binding) |
-| 模块总数 | **81** |
-| 已实现核心模块 | **52 (64%)** |
-| v5.2 新增代码 | ~1,500 行 (7 files) |
-| v5.3 新增 | AudioInput 模块 (~330 行) |
-| v5.4 新增代码 | ~1,800 行 (8 files) |
-| v5.5 新增代码 | ~800 行 (3 files) |
-| **v5.6 新增代码** | **~3,200 行 (11 files: 6 new + 4 modified + 1 doc)** |
-| **v5.6 新增脑区** | **4 新建** (AF, PhonologicalLoop, PhraseStructure, AngularGyrus) **+ 2 升级** (MotorCortex, TPJ) **+ 1 增强** (Wernicke: N400/P600) |
-| **v5.6 从占位升级** | **2** (MotorCortex: 发音规划, TPJ: 心理理论+语用) |
+| **v5.7 基础设施** | **5** (Persistence, InputBus, SensorIO, Interactive, UIComponents) |
+| 模块总数 | **83** |
+| 已实现核心模块 | **54 (65%)** — v5.7: +persistence +input_bus +sensor_io +interactive +ui_components |
+| v5.6 新增代码 | ~3,200 行 (11 files: 6 new + 4 modified + 1 doc) |
+| **v5.7 新增代码** | **~5,700 行 (6 new + 10 modified)** |
+| **v5.7 核心变更** | 发育年龄+婴儿模仿+会话持久化+多模态同步输入+摄像头/麦克风实时流+Rich终端UI+纯净模式 |
 
 ---
 
@@ -337,4 +335,91 @@
 
 ---
 
-*由 v5.6 语言系统自动更新 · 基于 语言与大脑——神经科学视角下的语言研究 (Broca 1861, Wernicke 1874, Geschwind 1965, Hickok & Poeppel 2007, Baddeley 1974, Sperry & Gazzaniga 1960s)*
+## v5.7 核心变更
+
+### 开发哲学: 从"预训练demo"到"持续成长的智能体"
+
+v5.7 不是新增脑区模块，而是解决一个根本矛盾: **Agent 有完整的脑，但没有生命。**
+
+- **v5.6 之前**: `main_dialogue.py` 是单次 demo — 启动→预热→演示→丢弃
+- **v5.7**: 会话持久化 + 发育年龄 + 多模态同步 + 实时传感器 — Agent 开始"活"了
+
+### 发育年龄系统 (Developmental Age)
+
+| 阶段 | 年龄 | 回应模式 | 学习策略 | Trigram阈值 |
+|------|------|---------|---------|-------------|
+| 婴儿 | 0 | 纯模仿 (回响人类内容词) | 仅学习人类输入 | <50 |
+| 儿童 | 1 | 模仿+trigram混合 | 人类+长回应(≥6字) | 50-200 |
+| 青少年 | 2 | trigram链生成 | 全部学习 | 200-1000 |
+| 成人 | 3 | 全自主生成 | 全部学习 | >1000 |
+
+- **模仿学习**: `_extract_content_words()` 提取内容词 (≥2字+重要单字), 过滤功能词
+- **防止自我污染**: age=0 时 `learn_from_interaction()` 阻止Agent学习自己的胡话
+- **自动升级**: trigram网络生长到阈值自动晋级, 控制台公告
+- **手动控制**: `/age [0-3]` 命令
+
+### 会话持久化 (Session Persistence)
+
+- **全状态 save/load**: 所有Hebb网络 (L0/AF/AG/TPJ/SelfModel) + 身体稳态 + 神经调节 (Hypothalamus/VTA/LC) + 语言系统 (PhonLoop/PhraseStructure/MotorCortex) + 元学习参数 + 对话上下文 + 追踪历史
+- **自动保存**: 每10轮对话、Ctrl+C/exit时、异常退出时
+- **自动恢复**: 启动时自动加载最新存档, 跳过热身, 继续成长
+- **存档路径**: `.notme/sessions/agent_YYYYMMDD_HHMMSS.pkl`
+- **版本兼容**: 存档包含version字段, 支持跨版本迁移
+- **命令**: `/save [name]`, `/load [name]`
+
+### 多模态同步输入 (Input Bus)
+
+- **核心问题**: 旧版 `if-elif-else` 单选输入 — 每次只能有一个通道活跃, 无法形成 Hebb 跨模态绑定
+- **v5.7 方案**: `InputBus` 每帧同时构建完整感知向量 s∈R^516
+  - 文本+视觉+听觉+痛觉+触觉+说话人身份 同时填入同一个s
+  - Hebb网络一次性学习跨模态共现模式
+- **输入模式**:
+  - 纯文本 / `img:file.jpg` 图像+文本 / `audio:file.wav` 音频+文本
+  - `pain:0.7` 痛觉刺激 / `speaker:name` 说话人身份
+  - `stream start/stop` 实时摄像头+麦克风流
+
+### 实时传感器流 (Camera + Microphone)
+
+- **CameraInput**: OpenCV采集, 可配置FPS+分辨率, 非阻塞, 自动重连
+- **MicrophoneStream**: sounddevice采集, chunk-based (200ms), mel频谱(32ch)兼容耳蜗核
+- **StreamSession**: 组合管理, 异步采集线程与Agent处理线程分离
+- **稀疏响应**: Agent不每帧说话, 只在文本输入/显著事件/内部言语触发时才回应
+- **命令**: `/stream start` / `/stream stop` / `/stream status`
+
+### 纯净模式 (Clean Mode)
+
+- **零预训练**: 不喂corpus.txt到海马, 不训练trigram网络, 不预训练AF/PhraseStructure/AngularGyrus/TPJ
+- **Broca**: `load_corpus=False` — 仅保留12K词表+词向量用于TTS输出
+- **知识生长**: 所有语言知识从与用户的对话中在线学习
+- **婴儿起点**: 初始年龄=0, trigram=0, L0 cluster=0, 句记忆=0
+- **杏仁核种子**: 45个中文情感词弱先验 (低count + 低weight, 易被后续学习覆盖)
+
+### Claude Code 风格终端 UI
+
+- **Rich 渲染**: Panel/Table/Layout — 彩色终端, 自适应窗口
+- **prompt_toolkit 输入**: Tab自动补全、输入历史(跨会话持久化)、多行输入
+- **斜杠命令**: `/status` `/diag` `/memory` `/body` `/pain` `/touch` `/speaker` `/read` `/save` `/load` `/reset` `/stream` `/age` `/help`
+- **Header**: 常驻顶栏 — Version/Session/Turns/Clusters/F/V/A/Age/Trigrams
+- **信息密度分级**: Header (默认) → `/status` 展开五面板 (语言/感知/神经调节/身体/自由能)
+
+### DEAD 模块激活
+
+| 模块 | v5.6 状态 | v5.7 状态 |
+|------|----------|----------|
+| TPJ | 已定义, 需要手动传speaker_name | ✅ `comprehend()`默认speaker="human", 始终活跃 |
+| AngularGyrus | 已训练, `read()`从未被调用 | ✅ `comprehend()`自动调用AG阅读通路 |
+| PhraseStructure | 训练5000样本但仅打印诊断 | ✅ `broca.speak_from_state()`接受phrase_network并实际调制词选择 |
+| 双重管线 | main_dialogue手动填s + agent.step重新处理 | ✅ InputBus统一构建, agent.step()是唯一处理入口 |
+
+### 已知问题 (v5.7)
+
+1. **v5.7 纯净模式网络生长慢**: 从零开始, 需要数十轮对话才能形成基本语言能力
+2. **婴儿模仿可能不自然**: 内容词回响有时产生电报式输出 ("你好 天气 真好 呢")
+3. **跨模态绑定需长期互动**: COCO预训练模型被绕过, 视觉↔文本关联需从对话中学习
+4. **小脑内部模型未实现**: 前向/逆向模型预留但无代码
+5. **跨会话持久化格式**: `.pkl` 依赖Python pickle协议, 跨版本兼容性需持续维护
+6. **实时流性能**: 摄像头+麦克风同时采集+视觉/听觉全管线处理, 需测试长时间运行稳定性
+
+---
+
+*由 v5.7 交互系统自动更新 · 基于 发育心理学 (Piaget 婴儿期, Vygotsky 最近发展区, 婴儿指向语言/模仿学习) + 多模态感觉整合 (Stein & Meredith 多感觉神经元) + 自由能原理 (Friston 预测编码)*

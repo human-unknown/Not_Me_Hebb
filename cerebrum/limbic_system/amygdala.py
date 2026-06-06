@@ -235,6 +235,43 @@ class HebbEmotionalLexicon:
             entry[1] += 1.0  # count
             entry[3] = (1.0 - effective_lr) * entry[3] + effective_lr * float(arousal)
 
+    def seed_basic_lexicon(self):
+        """v5.7: 用基本情感词引导词汇网络 (启动后可由Hebb学习覆盖).
+
+        不预设"好/坏"标签 — 而是用弱的先验值初始化,
+        让后续的Hebb反馈学习自然强化或反转这些关联.
+
+        效价值范围 [-1, 1]:
+          -1 = 强负面, +1 = 强正面, 0 = 中性
+        用低 count 和低 weight 初始化, 让 Hebb 反馈主导.
+        """
+        seed_words = {
+            # 正面情感词 (弱先验)
+            "开心": (0.6, 0.5), "高兴": (0.6, 0.5), "喜欢": (0.7, 0.4),
+            "爱": (0.8, 0.6), "谢谢": (0.5, 0.3), "好": (0.4, 0.2),
+            "棒": (0.5, 0.4), "美": (0.5, 0.3), "幸福": (0.8, 0.5),
+            "快乐": (0.7, 0.5), "不错": (0.3, 0.2), "哈哈": (0.6, 0.5),
+            "有趣": (0.4, 0.3), "可爱": (0.5, 0.4), "温暖": (0.6, 0.3),
+            "感动": (0.5, 0.5), "赞": (0.4, 0.3), "太棒": (0.6, 0.5),
+            "厉害": (0.4, 0.3), "完美": (0.5, 0.3),
+            # 负面情感词 (弱先验)
+            "难过": (-0.6, 0.5), "伤心": (-0.7, 0.5), "讨厌": (-0.6, 0.5),
+            "愤怒": (-0.7, 0.7), "生气": (-0.6, 0.6), "恨": (-0.8, 0.7),
+            "痛": (-0.7, 0.6), "害怕": (-0.7, 0.7), "无聊": (-0.4, 0.3),
+            "烦": (-0.5, 0.5), "累": (-0.4, 0.4), "失望": (-0.6, 0.5),
+            "孤独": (-0.7, 0.4), "焦虑": (-0.6, 0.6), "痛苦": (-0.7, 0.7),
+            "糟糕": (-0.5, 0.5), "崩溃": (-0.6, 0.6), "恶心": (-0.7, 0.5),
+            "惨": (-0.5, 0.5), "死": (-0.6, 0.6),
+            # 惊讶/混合 (中性偏正/负)
+            "惊讶": (0.1, 0.6), "震惊": (-0.1, 0.7), "意外": (0.0, 0.5),
+        }
+        base_count = 3.0  # 低计数 → 低权重 → 容易被后续学习覆盖
+        for word, (valence, arousal) in seed_words.items():
+            if word not in self.memory:
+                self.memory[word] = np.array(
+                    [valence * base_count, base_count, valence, arousal],
+                    dtype=np.float32)
+
     def get_stats(self) -> dict:
         """返回词汇网络统计"""
         if not self.memory:
@@ -262,10 +299,11 @@ _emotional_lexicon: Optional[HebbEmotionalLexicon] = None
 
 
 def get_emotional_lexicon() -> HebbEmotionalLexicon:
-    """获取全局情感词汇网络 (单例)"""
+    """获取全局情感词汇网络 (单例) — v5.7: 自动种子基本词汇"""
     global _emotional_lexicon
     if _emotional_lexicon is None:
         _emotional_lexicon = HebbEmotionalLexicon()
+        _emotional_lexicon.seed_basic_lexicon()  # v5.7: 引导启动
     return _emotional_lexicon
 
 

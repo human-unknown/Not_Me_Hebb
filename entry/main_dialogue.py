@@ -795,9 +795,9 @@ def run_dialogue():
           f"AG={agent.angular_gyrus.n_grapheme_clusters}glyphs, "
           f"TPJ={agent.tpj._n_intents}intents")
     if vis_brain:
-        print("  🖼️ 输入 'img:path/to/image.jpg' 让 Agent \"看到\" 图片")
-    print("  🎵 输入 'audio:path/to/sound.wav' 让 Agent \"听到\" 声音")
-    print("  🎤 输入 'mic:3' 从麦克风录制 3 秒")
+        print("  [img] 输入 'img:path/to/image.jpg' 让 Agent \"看到\" 图片")
+    print("  [audio] 输入 'audio:path/to/sound.wav' 让 Agent \"听到\" 声音")
+    print("  [mic] 输入 'mic:3' 从麦克风录制 3 秒")
     print("-" * 60)
     print("  输入文字后回车 · 输入 'exit' 退出 · Ctrl+C 退出")
     print("-" * 60)
@@ -992,7 +992,7 @@ def run_dialogue():
                         last_human_vec, human_sent)
 
                     # 显示
-                    print(f"\n[You] 🖼️: {human_text.strip()}")
+                    print(f"\n[You] [img]: {human_text.strip()}")
                     print(f"       → Agent 看到: {visual_context}")
                     if vis_attr_text:
                         print(f"       → 视觉属性: {vis_attr_text}")
@@ -1056,7 +1056,7 @@ def run_dialogue():
                     # 显示
                     duration_str = f"{audio_data['duration']:.1f}s"
                     stereo_str = '立体声' if audio_data.get('is_stereo') else '单声道'
-                    print(f"\n[You] 🎵: {human_text.strip()}")
+                    print(f"\n[You] [audio]: {human_text.strip()}")
                     print(f"       → Agent 听到: {audio_features['description']}, "
                           f"{duration_str}, {stereo_str}")
                     if audio_features:
@@ -1127,7 +1127,7 @@ def run_dialogue():
                         n_cross_modal += 1
                         vis_attrs = cross_modal_info['visual_attrs']
                         attr_text = _build_visual_attribute_text(vis_attrs)
-                        print(f"       🧠 视觉联想: {cross_modal_info['zh_category']} "
+                        print(f"       [vision] 视觉联想: {cross_modal_info['zh_category']} "
                               f"(sim={cross_modal_info['similarity']:.3f})")
                         if attr_text:
                             print(f"       → 视觉属性: {attr_text}")

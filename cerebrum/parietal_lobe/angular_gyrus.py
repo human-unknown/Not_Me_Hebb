@@ -217,7 +217,7 @@ class AngularGyrus:
             - phonological_vec: 语音向量 (64,)
             - confidence: 阅读置信度 [0,1]
         """
-        if not text:
+        if text is None or (isinstance(text, str) and not text):
             return np.zeros(64, dtype=np.float32), 0.0
 
         # ---- 快速路径: 缓存命中 ----

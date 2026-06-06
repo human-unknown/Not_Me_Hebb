@@ -12,12 +12,14 @@ import numpy as np, re, os
 
 
 class Broca:
-    def __init__(self, text_env=None):
+    def __init__(self, text_env=None, load_corpus: bool = False):
         """初始化 Broca 区。
 
         Args:
             text_env: TextEnvironment 实例。如果提供，共享其 encoder 和 PCA，
                       确保检索空间与 Agent 感知空间一致。
+            load_corpus: 是否从语料预训练网络 (v5.7默认False=纯净启动，
+                        trigram/句/概念词网络从零开始，从互动中在线学习)
         """
         base = os.path.dirname(__file__)
         # 优先使用扩展词表 (12,000 词), 回退到原始词表 (543 词)
@@ -35,24 +37,6 @@ class Broca:
         self._word_to_idx: dict[str, int] = {
             w: i for i, w in enumerate(self.word_list)}
 
-        corpus_path = os.path.join(base, 'corpus.txt')
-        # Fallback to project root (monorepo layout)
-        root_corpus = os.path.join(base, '..', '..', 'corpus.txt')
-        if not os.path.exists(corpus_path) and os.path.exists(root_corpus):
-            corpus_path = root_corpus
-        with open(corpus_path, 'r', encoding='utf-8') as f: text = f.read()
-        raw_sentences = [s.strip() for s in re.split(r'[。！？；\n]+', text)
-                         if len(s.strip()) > 5]
-        # 过滤角色名前缀短句: "格雷亚姆：哼" → 1字符内容 → 丢弃
-        self.sentences = []
-        for s in raw_sentences:
-            cleaned = re.sub(r'^[一-鿿\w/·]{1,6}[：:]\s*', '', s)
-            if len(cleaned) >= 2:  # 实际内容至少2个字符
-                self.sentences.append(s)
-        dropped = len(raw_sentences) - len(self.sentences)
-        if dropped > 0:
-            print(f"  Filtered {dropped} name-prefix-only sentences")
-
         # ---- 共享 PCA 空间 (v3) ----
         self._text_env = text_env
         self._sentence_net = None       # ClusterNetwork — 每句一个集群
@@ -60,15 +44,45 @@ class Broca:
 
         from cns.data_types import Theta, D
         from cerebrum.limbic_system.hippocampus import ClusterNetwork
+
+        # 词序网络: trigram Hebb 链 — 纯净模式从空开始
         theta = Theta(); theta.cluster_threshold = 0.05
         self.word_order_net = ClusterNetwork(theta)
 
-        # v3: 概念→词 Hebb 联想网络 — 替代语料桥
-        # 学习: 每个句子编码→概念向量, 与该句中的词建立 Hebb 关联
-        # 检索: 给定概念向量 → recall() → 最相关的 centroid[64:128]=关联词向量
+        # 概念→词 Hebb 联想网络 — 纯净模式从空开始
         cw_theta = Theta(); cw_theta.cluster_threshold = 0.15
         self.concept_word_net = ClusterNetwork(cw_theta)
         self._concept_word_built = False
+
+        if load_corpus:
+            # 旧模式: 从语料加载并预训练所有网络
+            self._load_corpus_and_train()
+        else:
+            # v5.7 纯净模式: 网络从零开始, 从互动中在线学习
+            self.sentences = []
+            print(f"Broca: clean mode — {len(self.word_list)} words, "
+                  f"0 trigram clusters, 0 sentences "
+                  f"(networks grow from interaction)")
+
+    def _load_corpus_and_train(self):
+        """从语料加载句子并构建 trigram/句/概念词网络 (旧模式)."""
+        base = os.path.dirname(__file__)
+        corpus_path = os.path.join(base, 'corpus.txt')
+        root_corpus = os.path.join(base, '..', '..', 'corpus.txt')
+        if not os.path.exists(corpus_path) and os.path.exists(root_corpus):
+            corpus_path = root_corpus
+        with open(corpus_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        raw_sentences = [s.strip() for s in re.split(r'[。！？；\n]+', text)
+                         if len(s.strip()) > 5]
+        self.sentences = []
+        for s in raw_sentences:
+            cleaned = re.sub(r'^[一-鿿\w/·]{1,6}[：:]\s*', '', s)
+            if len(cleaned) >= 2:
+                self.sentences.append(s)
+        dropped = len(raw_sentences) - len(self.sentences)
+        if dropped > 0:
+            print(f"  Filtered {dropped} name-prefix-only sentences")
 
         self._build_word_order()
         print(f"Broca: {self.word_order_net.n_clusters} word-order clusters, "
@@ -217,6 +231,100 @@ class Broca:
 
         return n_added
 
+    def learn_from_interaction(self, human_text: str, agent_response: str,
+                               age: int = 0):
+        """v5.7 纯净模式: 从真实对话中在线学习 trigram
+
+        每次人机对话后调用，从双方的文本中增量构建词序网络。
+        这是"从零生长"的语言能力 — 不依赖任何预训练语料。
+
+        年龄感知过滤 (v5.7):
+          - age=0 (婴儿): 只学习人类输入, 不学自己的输出 (避免胡话污染)
+          - age=1 (儿童): 学习人类+Agent (Agent回应如太短跳过)
+          - age=2+: 全部学习
+
+        Args:
+            human_text: 用户输入的文本
+            agent_response: Agent 的回应文本
+            age: 发育年龄 (0=婴儿只模仿, 1=儿童, 2=青少年, 3=成人)
+
+        Returns:
+            (n_human_trigrams, n_agent_trigrams) 新增 trigram 数
+        """
+        n_human = self._learn_from_sentence(human_text) if human_text else 0
+
+        # 年龄感知过滤
+        if age <= 0:
+            # 婴儿: 不学自己的输出 (胡话会污染网络)
+            n_agent = 0
+        elif age == 1 and agent_response:
+            # 儿童: 只在回应足够长时学习 (短回应通常是模仿, 安全)
+            if len(agent_response) >= 6:
+                n_agent = self._learn_from_sentence(agent_response)
+            else:
+                n_agent = 0
+        else:
+            # 青少年+: 正常学习
+            n_agent = self._learn_from_sentence(agent_response) if agent_response else 0
+
+        # 同时学习概念→词映射 (始终学习人类输入)
+        if human_text:
+            try:
+                concept_vec = None
+                if self._text_env is not None:
+                    concept_vec = self._text_env.encode_text(human_text)
+                if concept_vec is not None:
+                    import jieba
+                    # 从人类输入学概念→词 (始终安全)
+                    words = [w for w in jieba.lcut(human_text)
+                            if len(w.strip()) >= 1]
+                    self._learn_concept_word(concept_vec, words)
+            except Exception:
+                pass
+
+        return (n_human, n_agent)
+
+    def learn_sentence_online(self, text: str, text_vec: np.ndarray = None):
+        """v5.7 纯净模式: 将对话中的句子增量存入句集群网络。
+
+        Args:
+            text: 句子文本
+            text_vec: 预编码的文本向量 (64,), 可选
+        """
+        from cns.data_types import D, Cluster
+
+        if self._sentence_net is None:
+            # 懒初始化空句网络
+            from cns.data_types import Theta
+            theta = Theta(); theta.cluster_threshold = -1.0
+            self._sentence_net = ClusterNetwork(theta)
+            self._sentence_net.clusters = []
+            self._sentence_net.buckets = {}
+
+        # 编码
+        if text_vec is None and self._text_env is not None:
+            try:
+                text_vec = self._text_env.encode_text(text)
+            except Exception:
+                text_vec = np.zeros(64, dtype=np.float32)
+        if text_vec is None:
+            text_vec = np.zeros(64, dtype=np.float32)
+
+        padded = np.zeros(D, dtype=np.float32)
+        padded[:64] = text_vec[:64].astype(np.float32)
+        padded = np.tanh(padded + 1e-8).astype(np.float32)
+
+        h = self._sentence_net.hash_features(padded)
+        c = Cluster(centroid=h.copy())
+        c.count = 1
+        c.activation = 0.3
+        c.age = len(self._sentence_net.clusters)
+        self._sentence_net.clusters.append(c)
+        hash_key = self._sentence_net._hash_to_bucket(h)
+        self._sentence_net.buckets.setdefault(hash_key, []).append(c)
+        self.sentences.append(text)
+        self._cluster_to_sentence[id(c)] = len(self.sentences) - 1
+
     def next_word(self, prev1_vec: np.ndarray,
                   prev2_vec: np.ndarray = None) -> np.ndarray | None:
         """trigram 词预测: 给出前两个词，预测第三个词。
@@ -260,8 +368,18 @@ class Broca:
         每句话 → 一个 Cluster (centroid = hash_features(padded_embedding)).
         检索时: hash(query) → bucket → 桶内 _masked_cosine 竞争 → 胜出集群.
         不是全局余弦扫描, 是 Hebb 记忆检索.
+
+        v5.7: 纯净模式下句子列表为空 → 跳过构建, 保持空网络.
         """
         if self._sentence_net is not None:
+            return
+        if len(self.sentences) == 0:
+            # 纯净模式: 无语料, 跳过构建. speak_sentence() 会返回空.
+            from cns.data_types import Theta
+            theta = Theta(); theta.cluster_threshold = -1.0
+            self._sentence_net = ClusterNetwork(theta)
+            self._sentence_net.clusters = []
+            self._sentence_net.buckets = {}
             return
 
         MAX_SENTENCES = 12000  # 生物容量上限 — 只保留最可记忆的句子
@@ -540,6 +658,11 @@ class Broca:
         if self._concept_word_built:
             return
 
+        # v5.7 纯净模式: 无语料 → 跳过构建, 保持空网络
+        if len(self.sentences) == 0:
+            self._concept_word_built = True
+            return
+
         import jieba, os, pickle
         from cns.data_types import D, Theta, Cluster
 
@@ -735,6 +858,156 @@ class Broca:
                 result.append((w, float(sims[int(idx)])))
         return result[:k]
 
+    # ================================================================
+    # v5.7: 婴儿模仿模式 — 空网络时的连贯回应
+    # ================================================================
+
+    # 功能词 (语法粒子) — 用于模仿时添加自然语气
+    _GRAMMAR_PARTICLES = {'的', '了', '呢', '吗', '吧', '啊', '呀', '哦',
+                          '嗯', '是', '在', '有', '和', '也', '都', '就',
+                          '会', '要', '能', '很', '太', '不', '没'}
+
+    # 重要的单字内容词 (模仿时保留)
+    _IMPORTANT_1CHAR = {'你', '我', '他', '她', '它', '好', '爱', '想',
+                        '说', '看', '吃', '去', '来', '做', '写', '读',
+                        '听', '走', '跑', '笑', '哭', '大', '小', '多',
+                        '少', '新', '旧', '快', '慢', '高', '低', '热',
+                        '冷', '亮', '暗', '甜', '苦', '花', '猫', '狗',
+                        '鸟', '鱼', '树', '草', '水', '火', '天', '地',
+                        '人', '心', '手', '头', '门', '路', '车', '书'}
+
+    def _extract_content_words(self, text: str, max_n: int = 12
+                               ) -> list[str]:
+        """从文本中提取内容词, 过滤纯功能词.
+
+        模仿模式的核心 — 从人类输入中提取有意义的内容词,
+        保留原序, 用于构建连贯的模仿回应.
+
+        Args:
+            text: 输入文本
+            max_n: 最多提取词数
+
+        Returns:
+            内容词列表 (保持原序)
+        """
+        if not text or not text.strip():
+            return []
+
+        import jieba
+        words = [w for w in jieba.lcut(text.strip()) if len(w.strip()) >= 1]
+        if not words:
+            return []
+
+        # 内容词过滤: ≥2字 或 在重要单字集合中
+        content = []
+        for w in words:
+            w_clean = w.strip()
+            if not w_clean:
+                continue
+            if len(w_clean) >= 2:
+                content.append(w_clean)
+            elif w_clean in self._IMPORTANT_1CHAR:
+                content.append(w_clean)
+            # 跳过单字功能词 (保留在语法粒子集合中的)
+            elif w_clean in self._GRAMMAR_PARTICLES and len(content) > 0:
+                # 功能词只在已有内容词后才偶尔保留 (避免纯功能词回应)
+                pass
+
+        # 如果全是功能词 → 保留全部
+        if not content:
+            content = [w for w in words if len(w.strip()) >= 1][:max_n]
+
+        return content[:max_n]
+
+    def _speak_imitate(self, human_text: str, query_vec: np.ndarray = None,
+                       valence: float = 0.0, arousal: float = 0.0,
+                       max_words: int = 10) -> list[str]:
+        """v5.7: 婴儿模仿模式 — 用人类输入的内容词构建回应.
+
+        当 trigram 网络为空或极稀疏时, 不使用词向量相似度随机选词
+        (会产生胡话), 而是从人类输入中提取内容词并回响.
+
+        这是人类婴儿学习语言的方式 — 父母说 → 婴儿模仿关键音节.
+
+        模仿策略 (按trigram网络成熟度分级):
+          - 0 trigrams: 纯回响 — 保留原序, 截断至 max_words
+          - <50 trigrams: 轻度重排 — 内容词+少量语法粒子, 微调顺序
+          - 50+: 混合模式 — trigram链+模仿回退
+
+        Args:
+            human_text: 原始人类输入文本
+            query_vec: 编码的查询向量 (用于情感调制)
+            valence: 当前效价
+            arousal: 当前唤醒
+            max_words: 最多输出的词数
+
+        Returns:
+            词列表
+        """
+        content = self._extract_content_words(human_text, max_n=12)
+        if not content:
+            # 无内容词 → 使用最小安全回应
+            if valence > 0.2:
+                return ["嗯", "好"]
+            elif valence < -0.2:
+                return ["嗯"]
+            else:
+                return ["嗯"]
+
+        n_tri = self.word_order_net.n_clusters
+
+        if n_tri == 0:
+            # === 纯模仿 (0 trigrams): 回响内容词 ===
+            result = content[:max_words]
+
+            # 添加简单的情感粒子
+            if len(result) > 0:
+                if valence > 0.3:
+                    if result[-1] not in ('呢', '呀', '啊', '吧'):
+                        result.append('呢')
+                elif valence < -0.2:
+                    pass  # 负面时保持简洁
+
+            return result
+
+        elif n_tri < 50:
+            # === 轻度模仿 (<50 trigrams): 内容词 + 情感调制 ===
+            result = content[:max(4, max_words - 2)]
+
+            # 根据情感替换或添加词
+            if valence > 0.4 and len(result) < max_words:
+                if '好' not in result:
+                    result.insert(0, '好')
+            elif valence < -0.3 and len(result) < max_words:
+                if '不' not in result[-2:]:
+                    idx = max(0, len(result) - 1)
+                    result.insert(idx, '不')
+
+            return result[:max_words]
+
+        else:
+            # === 混合模式 (50+ trigrams): 模仿+网络 ===
+            # 从内容词中选种子, 让 trigram 链扩展
+            if len(content) >= 2:
+                seed1 = content[0]
+                seed2 = content[1] if len(content) > 1 else content[0]
+                seed1_vec = self._word_to_vec(seed1)
+                seed2_vec = self._word_to_vec(seed2)
+
+                if seed1_vec is not None and seed2_vec is not None:
+                    # 尝试 trigram 扩展
+                    candidates = self._next_words_topk(seed1_vec, seed2_vec, k=8)
+                    if candidates:
+                        # trigram 有候选 → 混合模式
+                        result = content[:3]  # 以人类的内容词开头
+                        for word, score, _ in candidates[:3]:
+                            if word not in result:
+                                result.append(word)
+                        return result[:max_words]
+
+            # trigram 无候选 → 回退到纯模仿
+            return content[:max_words]
+
     def speak_from_state(self,
                          belief_vec: np.ndarray,
                          body_state,
@@ -743,9 +1016,12 @@ class Broca:
                          arousal: float = 0.0,
                          max_words: int = 18,
                          temperature: float = 0.7,
-                         anti_repeat_window: int = 8
+                         anti_repeat_window: int = 8,
+                         phrase_network = None,
+                         phrase_strength: float = 0.3,
+                         human_text: str = None,
                          ) -> tuple[list[str], np.ndarray | None]:
-        """Agent 用"自己的话"说话——词序 Hebb 链逐词生成。
+        """Agent 用"自己的话"说话——词序 Hebb 链逐词生成 (v5.7: 短语结构约束).
 
         与 speak_sentence() 的根本区别:
         ┌──────────────────────┬──────────────────────────────────┐
@@ -757,6 +1033,7 @@ class Broca:
         └──────────────────────┴──────────────────────────────────┘
 
         流程:
+        0. (v5.7) 网络为空 → 婴儿模仿模式: 提取人类输入内容词回响
         1. 信念 + 人类输入混合 → 概念向量
         2. 概念向量 → 最近语料句 → 提取种子词 (corpus bridge)
         3. 种子词 → word_order_net._next_words_topk() → 逐词采样
@@ -772,11 +1049,45 @@ class Broca:
             max_words: 最大词数
             temperature: 基础温度 (越高越随机)
             anti_repeat_window: 反重复窗口大小
+            human_text: 原始人类输入文本 (v5.7: 用于婴儿模仿模式)
 
         Returns:
             (words, audio) — words 是词列表, audio 是 numpy 数组或 None
         """
         import numpy as np
+
+        # ---- Step 0: v5.7 婴儿模仿模式 — trigram网络为空时的连贯回应 ----
+        # 当网络从零开始时, 词向量相似度会选出语义相关但语法上
+        # 无意义的词序列 (胡话). 模仿人类输入的内容词 → 连贯回应,
+        # 同时通过 learn_from_interaction() 积累 trigram 网络.
+        n_tri = self.word_order_net.n_clusters
+        is_clean_mode = (n_tri == 0
+                        and (self._sentence_net is None
+                             or len(self._sentence_net.clusters) == 0))
+
+        if is_clean_mode and human_text and human_text.strip():
+            # 纯模仿: 回响人类输入的内容词 (像婴儿学语)
+            words = self._speak_imitate(
+                human_text, query_vec, valence, arousal, max_words)
+            if words:
+                audio = self._sentence_to_audio(words)
+                return words, audio
+        elif is_clean_mode and not human_text:
+            # v5.7: 无人类输入+空网络 (如内部言语) → 安全默认回应
+            # 避免词向量相似度产生胡话
+            if valence > 0.2:
+                return (["嗯", "好"],
+                        self._sentence_to_audio(["嗯", "好"]))
+            else:
+                return (["嗯"],
+                        self._sentence_to_audio(["嗯"]))
+        elif n_tri < 50 and human_text and human_text.strip():
+            # 轻度模仿: trigram极少时仍用模仿, 确保连贯性
+            words = self._speak_imitate(
+                human_text, query_vec, valence, arousal, max_words)
+            if words:
+                audio = self._sentence_to_audio(words)
+                return words, audio
 
         # ---- Step 1: 混合概念 (v3: 身体状态驱动, 不用硬编码系数) ----
         # F_body 高 → 更关注自身需求 → 信念主导 (内生)
@@ -829,6 +1140,10 @@ class Broca:
 
         chain_temp = temperature * (0.6 + arousal * 0.8)
 
+        # v5.7: 短语结构追踪 (用于 modulate_candidates)
+        current_phrase_words: list[str] = words[:]  # 当前短语中的词
+        phrase_active = phrase_network is not None and phrase_network._trained
+
         # v3: 无手写终结词 — 自然终止条件:
         # 1. trigram 网络找不到后继 (候选为空或相似度太低)
         # 2. 已达最大长度
@@ -860,6 +1175,11 @@ class Broca:
                         candidates = self._next_words_topk(p1_vec, None, k=10)
                 if not candidates:
                     break
+
+            # v5.7: 短语结构约束 — 调制候选词得分
+            if phrase_active:
+                candidates = phrase_network.modulate_candidates(
+                    candidates, current_phrase_words, phrase_strength)
 
             # 反重复: 最近用过的词大幅降权
             adjusted: list[tuple[str, float, np.ndarray]] = []
@@ -899,29 +1219,44 @@ class Broca:
             if len(recent_words) > anti_repeat_window * 2:
                 recent_words.pop(0)
 
+            # v5.7: 短语结构追踪 — 检测短语边界
+            if phrase_active:
+                current_phrase_words.append(chosen_word)
+                closure = phrase_network.phrase_closure_probability(
+                    current_phrase_words)
+                # 短语结束概率高 → 开启新短语
+                if closure > 0.5 and len(current_phrase_words) >= 2:
+                    current_phrase_words = []  # 重置为新短语
+
         # ---- Step 4: 后处理 + 混合回退 ----
         sentence = ''.join(words)
 
-        # 4a. 太短 → 用 Hebb 检索相关语料片段补全 (不是整句引用)
-        if len(words) < 4:
+        # v5.7 纯净模式: 网络为空时用词向量直接选择 (无语料回退)
+        if self.word_order_net.n_clusters == 0 and self._sentence_net is None:
+            # 无预训练网络 → 用词向量语义相似度直接选择多个相关词
+            if len(words) < max(3, target_len // 2):
+                extra = self._find_seed_words_fallback(concept, k=12)
+                seen = set(words)
+                for word, score in extra:
+                    if word not in seen and len(words) < target_len:
+                        seen.add(word)
+                        words.append(word)
+                sentence = ''.join(words)
+
+        # 4a. 太短 → 语料句补全 (仅当语料网络可用时)
+        if len(words) < 4 and self._sentence_net is not None:
             # 检索最相关的语料句
             fallback_words, _ = self.speak_sentence(query_vec, temperature=0.3, top_k=3)
             if fallback_words and len(fallback_words) > len(words):
-                # 取语料句的前半段 (不是整句) + 附加词序链
                 import jieba
                 fb_sentence = ''.join(fallback_words)
                 fb_parts = [w for w in jieba.lcut(fb_sentence) if w.strip()]
-
-                # 只取前 3-6 个词作为"骨架"
                 fragment_len = min(len(fb_parts), max(3, min(6, target_len // 2)))
                 fragment = fb_parts[:fragment_len]
-
-                # 如果骨架与当前链不同，用骨架替换
                 if fragment != words[:len(fragment)]:
                     words = fragment
                     sentence = ''.join(words)
-
-                    # 尝试从骨架末尾继续词序链 (bigram 回退)
+                    # 尝试从骨架末尾继续词序链
                     if len(words) >= 2:
                         p1 = self._word_to_vec(words[-2])
                         p2 = self._word_to_vec(words[-1])
@@ -945,17 +1280,24 @@ class Broca:
                                     break
                             sentence = ''.join(words)
 
-        # 4b. 仍然太短 → 完整的语料片段 (非整句)
+        # 4b. 仍太短 → 最终回退
         if len(words) < 2:
-            fallback_words, _ = self.speak_sentence(query_vec, temperature=0.3, top_k=2)
-            if fallback_words and len(fallback_words) >= 2:
-                # 只取前半 — 确保不是完整的语料引用
-                half = max(2, len(fallback_words) // 2 + 1)
-                words = fallback_words[:half]
-                sentence = ''.join(words)
+            if self._sentence_net is not None:
+                fallback_words, _ = self.speak_sentence(query_vec, temperature=0.3, top_k=2)
+                if fallback_words and len(fallback_words) >= 2:
+                    half = max(2, len(fallback_words) // 2 + 1)
+                    words = fallback_words[:half]
+                    sentence = ''.join(words)
+                else:
+                    # v5.7: 语义回退 — 取与query最相似的3-5个词
+                    extra = self._find_seed_words_fallback(concept, k=5)
+                    words = [w for w, _ in extra[:4]] if extra else ["嗯"]
+                    sentence = ''.join(words)
             else:
-                words = ["嗯", "..."]
-                sentence = "嗯..."
+                # v5.7 纯净模式: 语义回退
+                extra = self._find_seed_words_fallback(concept, k=5)
+                words = [w for w, _ in extra[:4]] if extra else ["嗯"]
+                sentence = ''.join(words)
 
         import jieba
         final_words = [w for w in jieba.lcut(sentence) if w.strip()]

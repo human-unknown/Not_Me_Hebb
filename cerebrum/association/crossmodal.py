@@ -43,17 +43,21 @@ from brainstem_cerebellum.neuromodulatory.meta_learning import create_default_th
 
 
 # ================================================================
-# Sensory Layout (v5.1: D=372, expanded for V5 compatibility)
+# Sensory Layout (v5.4+: D=516)
 # ================================================================
-# NOTE: v5.1 changes D from 330 to 372. Old .pkl models (D=330)
-# are incompatible. Retrain: python stage2_crossmodal.py --dataset coco --n 5000 --mode all
+# NOTE: D changed 330→372(v5.1)→468(v5.2)→516(v5.4).
+# Cross-modal training only uses text[0:64] + vision[64:372].
+# Audio[372:468] and pain[468:516] channels exist in D=516 but
+# are left as zeros during cross-modal training.
+# Old .pkl models (D=330/372) are incompatible. Retrain if needed.
 
 TEXT_WIDTH  = 64
 V1_WIDTH    = 96
 V2_WIDTH    = 64
-V4_WIDTH    = 64       # v5.1: expanded 45->64 (V5 V4_shape + V4_color)
+V4_WIDTH    = 64       # v5.1: expanded 45→64 (V5 V4_shape + V4_color)
 GESTALT_WIDTH = 19     # Module A: Gestalt grouping features
-COLOR_WIDTH = 65       # v5.1: expanded 42->65 (fill D=372)
+COLOR_WIDTH = 65       # v5.1: expanded 42→65 (fill D=372)
+VIS_END     = 372      # End of visual channels
 
 TEXT_START,    TEXT_END    = 0,   TEXT_WIDTH                          # s[0:64]
 V1_START,      V1_END      = 64,  64 + V1_WIDTH                       # s[64:160]
@@ -62,7 +66,9 @@ V4_START,      V4_END      = 224, 224 + V4_WIDTH                      # s[224:28
 GESTALT_START, GESTALT_END = 288, 288 + GESTALT_WIDTH                 # s[288:307]
 COLOR_START,   COLOR_END   = 307, 307 + COLOR_WIDTH                   # s[307:372]
 
-assert COLOR_END == D, f"Layout ends at {COLOR_END}, expected {D}"
+assert COLOR_END == VIS_END, f"Layout ends at {COLOR_END}, expected {VIS_END}"
+# Visual channels end at 372, matching project layout (M_V1_START + D_VISUAL_V5 = 64 + 308)
+# D may be larger (516 in v5.4+); extra channels are audio+pain, left as zeros
 
 
 # ================================================================
