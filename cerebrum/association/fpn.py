@@ -226,3 +226,99 @@ class FrontoparietalNetwork:
 
         total = float(np.sum(spatial_focus)) + 1e-8
         return spatial_focus / total
+
+    # ================================================================
+    # v6.0: 中央执行器 (Central Executive)
+    # ================================================================
+
+    def allocate_attention(self, task_demand: float,
+                          wm_load: float = 0.0,
+                          novelty: float = 0.0) -> dict:
+        """Central executive: allocate limited attentional resources across subsystems.
+
+        High task demand → more resources to current task
+        High novelty → redirect resources to new stimulus
+        High WM load → reduce new information intake
+
+        Args:
+            task_demand: task demand intensity [0, 1]
+            wm_load: working memory load [0, 1]
+            novelty: novelty signal [0, 1]
+
+        Returns:
+            dict: {attn_focus, suppression_level, switch_triggered, switch_cost}
+        """
+        # Base attention focus = task demand
+        attn_focus = task_demand
+
+        # WM load modulation: high load → reduce new info intake
+        effective_attn = attn_focus * (1.0 - wm_load * 0.5)
+
+        # Novelty modulation: high novelty → possible attention switch
+        switch_triggered = False
+        if novelty > 0.6 and task_demand < 0.5:
+            effective_attn = novelty * 0.8
+            self._task_switch_cost = 0.3
+            switch_triggered = True
+        else:
+            self._task_switch_cost = getattr(self, '_task_switch_cost', 0.0) * 0.9
+
+        # Distractor suppression = f(task focus)
+        self._distractor_suppression = 0.2 + 0.6 * task_demand
+
+        return {
+            'attn_focus': float(effective_attn),
+            'suppression_level': float(self._distractor_suppression),
+            'switch_triggered': switch_triggered,
+            'switch_cost': float(self._task_switch_cost),
+        }
+
+    def filter_distractors_v2(self, sensory: np.ndarray) -> np.ndarray:
+        """Suppress sensory input irrelevant to current task goal.
+
+        Uses current attention template and distractor suppression strength.
+        Non-target dimensions are attenuated (but not zeroed — preserves
+        response to sudden threats).
+
+        Args:
+            sensory: (D,) raw sensory input
+
+        Returns:
+            (D,) filtered sensory input
+        """
+        template = self.attention_template.copy()
+        level = getattr(self, '_distractor_suppression', 0.3)
+
+        # Build suppression mask: low-template dims are suppressed
+        template_range = template.max() - template.min()
+        if template_range > 0:
+            suppress_mask = ((template - template.min()) / (template_range + 1e-8))
+        else:
+            suppress_mask = np.ones_like(template)
+        suppress_mask = level + (1.0 - level) * suppress_mask
+
+        return (sensory * suppress_mask).astype(np.float32)
+
+    def coordinate_subsystems(self,
+                             phonological_load: float = 0.0,
+                             visuospatial_load: float = 0.0,
+                             episodic_buffer_load: float = 0.0) -> dict:
+        """Coordinate WM subsystems — allocate attention across them.
+
+        Phonological loop and visuospatial sketchpad compete for
+        attentional resources. The central executive decides priority.
+
+        Returns:
+            dict: attention weights for each subsystem
+        """
+        total_load = (phonological_load + visuospatial_load
+                     + episodic_buffer_load)
+        if total_load < 0.01:
+            return {'phonological': 0.33, 'visuospatial': 0.33,
+                   'episodic_buffer': 0.34}
+
+        return {
+            'phonological': phonological_load / max(total_load, 0.01),
+            'visuospatial': visuospatial_load / max(total_load, 0.01),
+            'episodic_buffer': episodic_buffer_load / max(total_load, 0.01),
+        }
