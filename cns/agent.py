@@ -198,6 +198,10 @@ class Agent:
         # v5.6: 颞顶联合区 — 心理理论与语用语言
         self.tpj: TPJ = TPJ()
 
+        # v6.0: 语义记忆 — 皮层知识存储 (慢学慢衰大容量)
+        from cerebrum.temporal_lobe.semantic_memory import SemanticMemory
+        self.semantic_memory: SemanticMemory = SemanticMemory(max_clusters=1024)
+
         # v5.6: 语言预测误差追踪
         self.F_language_history: list[float] = []
         self.language_pe_history: list[dict] = []
@@ -571,6 +575,21 @@ class Agent:
         self.net.learn(sensory)
         # v5.5: 学习后重置 VTA 学习率调制 (避免跨步累积)
         self.net.learn_rate_modifier = 1.0
+
+        # v6.0: 语义记忆并行学习 (慢速, 主旨提取)
+        # 每 5 步学习一次语义记忆 (减少开销)
+        if hasattr(self, 'semantic_memory') and step_count % 5 == 0:
+            from cns.data_types import D
+            gist_vec = np.zeros(D, dtype=np.float32)
+            gist_vec[:64] = sensory[:64]  # 文本段
+            # 身体+情感快照
+            if self.body is not None and len(self.body.b) >= 8:
+                gist_vec[64:72] = self.body.b[:8].astype(np.float32)
+            v = self.valence_history[-1] if self.valence_history else 0.0
+            a = self.arousal_history[-1] if self.arousal_history else 0.0
+            gist_vec[72] = v
+            gist_vec[73] = a
+            self.semantic_memory.learn_fact(gist_vec, weight=0.3)
 
         if step_count > 0 and step_count % 100 == 0:
             # Phase 1: 对话记忆巩固 (海马 → 皮层, 在衰减前)
@@ -963,6 +982,24 @@ class Agent:
                 'phonological_pe': understanding.get('phonological_pe', 0.0),
                 'F_language': understanding['F_language'],
             })
+
+        # v6.0: 语义记忆查询 — 用已学知识丰富理解
+        if hasattr(self, 'semantic_memory'):
+            try:
+                semantic_hits = self.semantic_memory.query(human_vec, top_k=3)
+                understanding['semantic_knowledge'] = [
+                    {'sim': float(sim), 'activation': float(c.activation)}
+                    for c, sim in semantic_hits
+                ]
+                familiarity = self.semantic_memory.knows_about(human_vec)
+                understanding['familiarity'] = familiarity
+                # 熟悉度高 → 理解更"确信" (类似语义启动效应)
+                if familiarity > 0.3:
+                    boost = min(0.2, familiarity * 0.2)
+                    comp_vec = comp_vec + boost * np.sign(comp_vec).astype(np.float32)
+            except Exception:
+                understanding['semantic_knowledge'] = []
+                understanding['familiarity'] = 0.0
 
         # 存储最近的理解向量 (供自听回路和AF使用)
         self._last_comprehension = comp_vec
