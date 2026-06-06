@@ -1381,6 +1381,55 @@ class Agent:
             return self.consolidate_dialogue(broca=broca)
         return None
 
+    # ================================================================
+    # v6.0: 跨会话系统巩固 (海马 → 皮层语义记忆)
+    # ================================================================
+
+    def consolidate_across_sessions(self) -> dict:
+        """跨会话系统巩固: 海马情景记忆 → 皮层语义记忆。
+
+        在每次会话结束时调用。模拟 NREM 睡眠期间的海马-皮层对话:
+        - 活跃的情景簇被提取主旨
+        - 主旨存入语义记忆
+        - 使语义知识随会话次数持续增长
+
+        Returns:
+            dict: {episodic_clusters, semantic_before, semantic_after,
+                   n_extracted, n_new_facts, n_updated}
+        """
+        result = {
+            'episodic_clusters': self.net.n_clusters,
+            'semantic_before': 0,
+            'semantic_after': 0,
+            'n_extracted': 0,
+            'n_new_facts': 0,
+            'n_updated': 0,
+        }
+
+        if not hasattr(self, 'semantic_memory'):
+            return result
+
+        result['semantic_before'] = self.semantic_memory.n_clusters
+
+        v = self.valence_history[-1] if self.valence_history else 0.0
+        a = self.arousal_history[-1] if self.arousal_history else 0.0
+
+        stats = self.semantic_memory.consolidate_from_episodic(
+            episodic_net=self.net,
+            n_top=50,                    # 处理 top 50 活跃情景簇
+            min_activation=0.05,         # 最低激活阈值
+            body_vec=self.body,
+            valence=v,
+            arousal=a,
+        )
+
+        result['semantic_after'] = self.semantic_memory.n_clusters
+        result['n_extracted'] = stats['n_processed']
+        result['n_new_facts'] = stats['n_new']
+        result['n_updated'] = stats['n_updated']
+
+        return result
+
     def _auto_update_self_model(self, sensory: np.ndarray, F,
                                 arousal: float, valence: float):
         """DMN 自动耦合: 高唤醒/高情感时刻 → 自传体记忆。

@@ -373,6 +373,15 @@ def save_agent(agent, path: str = None, name: str = None,
         'dialogue_since': agent.dialogue_since_consolidation,
     }
 
+    # ---- v6.0: Semantic Memory ----
+    if hasattr(agent, 'semantic_memory') and agent.semantic_memory is not None:
+        sm = agent.semantic_memory
+        data['semantic_memory'] = _save_cluster_network(sm.net)
+        data['semantic_memory_meta'] = {
+            'n_facts': sm.n_facts,
+            'consolidation_count': sm.consolidation_count,
+        }
+
     # ---- 写入磁盘 ----
     with open(path, 'wb') as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -571,6 +580,18 @@ def restore_agent(agent, data: dict, verbose: bool = True):
             tpj._n_intents = tpj_data.get('_n_intents', 0)
             if verbose:
                 print(f"  TPJ: {tpj._n_intents} intents restored")
+
+    # ---- v6.0: Semantic Memory ----
+    if 'semantic_memory' in data and hasattr(agent, 'semantic_memory'):
+        sm = agent.semantic_memory
+        if sm is not None:
+            _restore_cluster_network(sm.net, data['semantic_memory'])
+            meta = data.get('semantic_memory_meta', {})
+            sm.n_facts = meta.get('n_facts', 0)
+            sm.consolidation_count = meta.get('consolidation_count', 0)
+            if verbose:
+                print(f"  Semantic: {sm.n_clusters} clusters, "
+                      f"{sm.n_facts} facts restored")
 
     # Consolidation
     if 'consolidation' in data:
