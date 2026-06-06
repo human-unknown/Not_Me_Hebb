@@ -202,6 +202,14 @@ class Agent:
         from cerebrum.temporal_lobe.semantic_memory import SemanticMemory
         self.semantic_memory: SemanticMemory = SemanticMemory(max_clusters=1024)
 
+        # v6.0: 纹状体 — 程序性记忆与习惯学习
+        from cerebrum.basal_ganglia.striatum import Striatum
+        self.striatum: Striatum = Striatum(
+            n_actions=5,
+            d1_d2_balance=self.theta.d1_d2_balance,
+        )
+        self._last_habit_action: Optional[int] = None  # 上次习惯动作 (诊断用)
+
         # v5.6: 语言预测误差追踪
         self.F_language_history: list[float] = []
         self.language_pe_history: list[dict] = []
@@ -814,6 +822,26 @@ class Agent:
                 'step': step_count,
                 **self.theta.to_dict(),
             })
+
+        # ---- v6.0: 纹状体学习 + 习惯查询 ----
+        if hasattr(self, 'striatum') and hasattr(self, '_vta_result'):
+            try:
+                da_signal = float(self._vta_result.get('rpe', 0.0))
+                reward = float(self._vta_result.get('total_da', 0.3))
+                self.striatum.learn(
+                    state_vec=attended_sensory,
+                    action=action.index,
+                    da_signal=da_signal,
+                    reward=reward,
+                    automation_rate=self.theta.habit_automation_rate,
+                )
+                # 查询习惯 (不影响动作选择, 仅诊断)
+                novelty = float(np.tanh(
+                    abs(F.total - self.hab.running_F) * 2.0))
+                self._last_habit_action = self.striatum.get_habit_action(
+                    sensory, novelty=novelty)
+            except Exception:
+                self._last_habit_action = None
 
         # ---- 追踪 ----
         self.last_action = action

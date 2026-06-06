@@ -382,6 +382,19 @@ def save_agent(agent, path: str = None, name: str = None,
             'consolidation_count': sm.consolidation_count,
         }
 
+    # ---- v6.0: Striatum ----
+    if hasattr(agent, 'striatum') and agent.striatum is not None:
+        st = agent.striatum
+        data['striatum'] = {
+            'd1_weights': {str(k): v.tolist() for k, v in st.d1_weights.items()},
+            'd2_weights': {str(k): v.tolist() for k, v in st.d2_weights.items()},
+            'habit_strength': {str(k): float(v) for k, v in st.habit_strength.items()},
+            'cooccurrence': {f"{k[0]}_{k[1]}": v
+                           for k, v in st.cooccurrence.items()},
+            'n_learn_events': st.n_learn_events,
+            '_habit_ema': float(st._habit_ema),
+        }
+
     # ---- 写入磁盘 ----
     with open(path, 'wb') as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -592,6 +605,29 @@ def restore_agent(agent, data: dict, verbose: bool = True):
             if verbose:
                 print(f"  Semantic: {sm.n_clusters} clusters, "
                       f"{sm.n_facts} facts restored")
+
+    # ---- v6.0: Striatum ----
+    if 'striatum' in data and hasattr(agent, 'striatum'):
+        st = agent.striatum
+        if st is not None:
+            st_data = data['striatum']
+            st.d1_weights = {int(k): np.array(v, dtype=np.float32)
+                           for k, v in st_data.get('d1_weights', {}).items()}
+            st.d2_weights = {int(k): np.array(v, dtype=np.float32)
+                           for k, v in st_data.get('d2_weights', {}).items()}
+            st.habit_strength = {int(k): float(v)
+                               for k, v in st_data.get('habit_strength', {}).items()}
+            cooc_data = st_data.get('cooccurrence', {})
+            st.cooccurrence = {}
+            for k, v in cooc_data.items():
+                parts = k.split('_')
+                if len(parts) == 2:
+                    st.cooccurrence[(int(parts[0]), int(parts[1]))] = v
+            st.n_learn_events = st_data.get('n_learn_events', 0)
+            st._habit_ema = float(st_data.get('_habit_ema', 0.0))
+            if verbose:
+                print(f"  Striatum: {st.get_state()['n_states_known']} states, "
+                      f"habit={st.global_habit_strength:.3f}")
 
     # Consolidation
     if 'consolidation' in data:
