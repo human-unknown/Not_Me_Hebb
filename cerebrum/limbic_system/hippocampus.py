@@ -71,6 +71,8 @@ class ClusterNetwork:
         self.theta = theta
         self.hash_offset = hash_offset  # 用于视觉/音频等非文本通道的哈希偏移
         self.learn_rate_modifier: float = 1.0  # v5.5: VTA RPE → 事件驱动学习率调制
+        self._context_dim: int = 8            # v6.0: 情境向量维度 (身体+情感快照)
+        self._context_vector: np.ndarray = np.zeros(8, dtype=np.float32)
 
     # ----- 特征哈希 -----
     def hash_features(self, s: np.ndarray) -> np.ndarray:
@@ -88,6 +90,24 @@ class ClusterNetwork:
         offset = self.hash_offset
         bits = (h[offset:offset+8] > 0).astype(int)
         return int(sum(bits[i] << i for i in range(8)))
+
+    # ----- 情境设置 (v6.0) -----
+    def set_context(self, body_b: np.ndarray = None,
+                    valence: float = 0.0, arousal: float = 0.0):
+        """设置当前情境向量 — 用于编码特异性原则的提取匹配。
+
+        Args:
+            body_b: 身体状态 (前6维)
+            valence: 当前效价 [-1, 1]
+            arousal: 当前唤醒 [0, 1]
+        """
+        ctx = np.zeros(self._context_dim, dtype=np.float32)
+        if body_b is not None:
+            n = min(len(body_b), 6)
+            ctx[:n] = body_b[:n]
+        ctx[6] = valence
+        ctx[7] = arousal
+        self._context_vector = ctx
 
     # ----- 连续相似度 (M2) -----
     def best_similarity(self, s: np.ndarray) -> float:
@@ -127,6 +147,22 @@ class ClusterNetwork:
             if sim > best_sim:
                 best_sim = sim
                 best_c = c
+
+        # ---- v6.0 编码特异性: 情境不匹配 → 提取变难 ----
+        # 当前身体/情感状态 vs 编码时的状态
+        if best_c is not None and np.any(self._context_vector):
+            # 从质心中提取身体快照段 (centroid[64:72] 通常存身体状态)
+            if best_c.centroid.shape[0] > 72:
+                encoded_ctx = best_c.centroid[64:72]
+                if np.any(np.abs(encoded_ctx) > 0.01):
+                    ctx_sim = _masked_cosine(
+                        self._context_vector[:8],
+                        encoded_ctx[:8],
+                        np.ones(8, dtype=bool))
+                    # 情境不匹配 → 降低有效相似度
+                    # ctx_sim in [-1, 1] → mapped to [0.3, 1.0]
+                    ctx_factor = 0.3 + 0.7 * max(0.0, ctx_sim)
+                    best_sim *= ctx_factor
 
         # 自适应阈值: 部分查询 → 放宽要求
         active_ratio = float(np.sum(mask)) / max(len(mask), 1)
@@ -254,31 +290,62 @@ class ClusterNetwork:
                 self.buckets[old_key] = [
                     c for c in self.buckets[old_key] if c is not existing]
                 self.buckets.setdefault(new_key, []).append(existing)
+
+            # ---- v6.0 倒摄干扰: 新学习轻微衰减桶内高相似旧簇 ----
+            ri_bucket = self.buckets.get(new_key, [])
+            for other_c in ri_bucket:
+                if other_c is not existing:
+                    sim_to_new = _masked_cosine(h, other_c.centroid,
+                                              np.ones(len(h), dtype=bool))
+                    if sim_to_new > 0.75:
+                        other_c.activation *= 0.97  # 被"覆盖"的旧记忆衰减3%
+
             return existing
 
         # 无匹配 → 创建新簇（新颖性检测）
+        # ---- v6.0 前摄干扰: 桶内相似簇过多 → 新簇质心被"稀释" ----
+        hash_key = self._hash_to_bucket(h)
+        bucket = self.buckets.get(hash_key, [])
+        pi_n_similar = sum(1 for c in bucket
+                          if _masked_cosine(h, c.centroid,
+                                          np.ones(len(h), dtype=bool)) > 0.65)
+        # 相似簇越多 → 前摄干扰越强 → 新记忆形成越弱
+        pi_factor = 1.0 / (1.0 + pi_n_similar * 0.12)
+        centroid_new = h.copy() * pi_factor
+        newly_created = None
         if len(self.clusters) < K:
-            c = Cluster(centroid=h.copy())
+            c = Cluster(centroid=centroid_new)
             self.clusters.append(c)
-            hash_key = self._hash_to_bucket(h)
+            hash_key = self._hash_to_bucket(centroid_new)
             self.buckets.setdefault(hash_key, []).append(c)
-            return c
+            newly_created = c
+        else:
+            # 容量满 → 替换最旧簇
+            oldest = min(self.clusters, key=lambda c: c.age)
+            # 从旧桶移除 (用 id 比较避免 numpy array == 歧义)
+            old_key = self._hash_to_bucket(oldest.centroid)
+            if old_key in self.buckets:
+                self.buckets[old_key] = [
+                    c for c in self.buckets[old_key] if c is not oldest]
+            oldest.centroid = centroid_new
+            oldest.count = 1
+            oldest.age = 0
+            oldest.activation = 0.0
+            # 入新桶
+            hash_key = self._hash_to_bucket(centroid_new)
+            self.buckets.setdefault(hash_key, []).append(oldest)
+            newly_created = oldest
 
-        # 容量满 → 替换最旧簇
-        oldest = min(self.clusters, key=lambda c: c.age)
-        # 从旧桶移除 (用 id 比较避免 numpy array == 歧义)
-        old_key = self._hash_to_bucket(oldest.centroid)
-        if old_key in self.buckets:
-            self.buckets[old_key] = [
-                c for c in self.buckets[old_key] if c is not oldest]
-        oldest.centroid = h.copy()
-        oldest.count = 1
-        oldest.age = 0
-        oldest.activation = 0.0
-        # 入新桶
-        new_key = self._hash_to_bucket(h)
-        self.buckets.setdefault(new_key, []).append(oldest)
-        return oldest
+        # ---- v6.0 倒摄干扰: 新簇衰减桶内高相似旧簇 ----
+        ri_bucket = self.buckets.get(hash_key, [])
+        for other_c in ri_bucket:
+            if other_c is not newly_created:
+                sim_to_new = _masked_cosine(h, other_c.centroid,
+                                          np.ones(len(h), dtype=bool))
+                if sim_to_new > 0.75:
+                    other_c.activation *= 0.97
+
+        return newly_created
 
     # ----- 桶迁移 -----
     def _migrate_bucket(self, cluster: Cluster, old_centroid: np.ndarray):
