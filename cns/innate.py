@@ -28,6 +28,13 @@ PURE_MODE_THETA_OVERRIDES = {
     'critical_window': 5000,     # Extended critical period (language learning)
     'w_social': 2.0,             # Stronger social drive (infant attachment)
     'temperature': 1.5,          # Higher temperature (more random exploration)
+    # v6.1: 发育优化 — 纯净模式从婴儿期开始
+    'glun2b_ratio': 0.95,        # Start with very high GluN2B (max plasticity)
+    'stdp_lr': 0.03,             # Higher STDP learning (rapid temporal association)
+    'stdp_weight': 0.4,          # Higher STDP influence (learn causal direction)
+    'pnn_formation_rate': 0.0005,  # Slower PNN formation (infant = highly plastic)
+    'candidate_max': 80,         # More silent synapses (rapid vocabulary growth)
+    'protection_decay': 0.99,    # Faster protection decay (more turnover)
 }
 
 # ============================================================

@@ -33,6 +33,10 @@ from cerebrum.basal_ganglia.action_gating import MoEGate
 from brainstem_cerebellum.neuromodulatory.meta_learning import (
     create_default_theta, MetaLearner,
 )
+# v6.1: 可塑性调节器
+from brainstem_cerebellum.neuromodulatory.plasticity import (
+    PlasticityRegulator,
+)
 from cerebrum.temporal_lobe.wernicke import (
     DialogueContext, comprehend, evaluate_response,
     consolidate_dialogue_memory, micro_consolidation,
@@ -179,6 +183,10 @@ class Agent:
         from brainstem_cerebellum.pons.locus_coeruleus import LocusCoeruleus
         self.locus_coeruleus: LocusCoeruleus = LocusCoeruleus()
         self._lc_result: dict = {}                # 存本次 step 的 LC 结果
+
+        # v6.1: 可塑性调节器 (整合 GluN2B + 事件 + 稳态 + 神经调质)
+        self.plasticity_regulator: PlasticityRegulator = PlasticityRegulator()
+        self._plasticity_result: dict = {}         # 存本次 step 的可塑性结果
 
         # v5.6: 弓状束 — 连接 Wernicke ↔ Broca (腹侧+背侧双通路)
         self.arcuate_fasciculus: ArcuateFasciculus = ArcuateFasciculus()
@@ -579,6 +587,27 @@ class Agent:
                                   'total_ne': 0.2, 'snr_gain': 1.0,
                                   'yd_performance': 0.5, 'exploration_bias': 0.0}
 
+        # ---- v6.1 Phase 0g: 可塑性调节 (整合 GluN2B + 事件 + 稳态 + 神经调质) ----
+        if hasattr(self, 'plasticity_regulator'):
+            try:
+                mean_act = (sum(c.activation for c in self.net.clusters)
+                           / max(self.net.n_clusters, 1)) if self.net.n_clusters > 0 else 0.0
+                pr_result = self.plasticity_regulator.process(
+                    glun2b_ratio=self.theta.glun2b_ratio,
+                    rpe=self._vta_result.get('rpe', 0.0) if self._vta_result else 0.0,
+                    novelty=novelty_est if 'novelty_est' in dir() else 0.0,
+                    da_tonic=self._vta_result.get('tonic_da', 0.3) if self._vta_result else 0.3,
+                    da_phasic=self._vta_result.get('phasic_da', 0.0) if self._vta_result else 0.0,
+                    ne_tonic=self._lc_result.get('tonic_ne', 0.2) if self._lc_result else 0.2,
+                    mean_activation=mean_act,
+                )
+                self._plasticity_result = pr_result
+            except Exception:
+                self._plasticity_result = {
+                    'plasticity_factor': 1.0, 'ltp_bias': 1.0,
+                    'developmental_factor': 1.0,
+                }
+
         # ---- L0: 学习感知 + 周期性睡眠 ----
         self.net.learn(sensory)
         # v5.5: 学习后重置 VTA 学习率调制 (避免跨步累积)
@@ -643,6 +672,15 @@ class Agent:
         self.valence_history.append(F.valence)
         self.arousal_history.append(F.arousal)
         self.attention_history.append(F.attention_precision)
+
+        # ---- v6.1: PNN 消化 (高唤醒+高新颖性 → MMP-9 降解 PNN) ----
+        novelty_now = float(np.tanh(
+            abs(F.total - self.hab.running_F) * 2.0))
+        if F.arousal * novelty_now > 0.15:
+            try:
+                self.net.digest_pnn(F.arousal, novelty_now)
+            except Exception:
+                pass
 
         # ---- 社会信念更新 (M3) ----
         if my_pos is not None and self.n_agents > 1:
@@ -895,13 +933,14 @@ class Agent:
         self.net.learn(pattern)
 
     def get_state_summary(self) -> dict:
-        """返回智能体状态摘要"""
+        """返回智能体状态摘要 (v6.1: +发育数据)"""
+        dev_factors = self.meta.get_developmental_factors()
         return {
             'top_activation': float(max((c.activation for c in self.net.clusters), default=0.0)),
             'n_clusters': self.net.n_clusters,
             'total_activation': self.net.total_activation,
             'F_latest': self.F_history[-1] if self.F_history else 0.0,
-            'valence': 0.0,  # 由 step 中的 F 提供
+            'valence': 0.0,
             'arousal': 0.0,
             'meta_step': self.meta.step_count,
             'is_critical': self.meta.is_critical,
@@ -911,6 +950,16 @@ class Agent:
             'cognitive_effort': self.tpn.cognitive_effort,
             'task_fatigue': self.tpn.task_fatigue,
             'fpn_gain_mean': self.fpn_gain_mean_history[-1] if self.fpn_gain_mean_history else 1.0,
+            # v6.1: 发育状态
+            'developmental_stage': dev_factors['stage'],
+            'stage_name': dev_factors['stage_name'],
+            'glun2b_ratio': dev_factors['glun2b_ratio'],
+            'n_candidates': self.net.n_candidates,
+            'n_stdp_links': self.net.n_stdp_links,
+            'mean_pnn': self.net.mean_pnn,
+            'mean_protection': self.net.mean_protection,
+            'plasticity_factor': self._plasticity_result.get('plasticity_factor', 1.0)
+                if self._plasticity_result else 1.0,
         }
 
     # ================================================================

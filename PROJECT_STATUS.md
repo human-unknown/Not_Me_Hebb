@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v6.0 — 记忆系统完整实现 + 长期常驻学习 + 跨会话巩固 + 零预训练纯净启动
+> **版本**: v6.1 — 长期常驻学习 & 发育优化 (STDP + GluN2B轨迹 + PNN锁定 + 保护信号 + 沉默突触)
 > **日期**: 2026-06-06
-> **基于**: 记忆神经科学综述 (Squire, Tulving, Baddeley, Yin & Knowlton) + 系统巩固模型 (Standard Consolidation + Multiple Trace Theory)
+> **基于**: 《脑连接的形成》神经发育综述 + 自由能原理 + Hebb 可塑性
 
 ---
 
@@ -24,6 +24,7 @@
 | **v5.6** | **2026-06-06** | **语言系统 — 弓状束+语音回路+短语结构+角回+运动皮层+TPJ+N400/P600** |
 | **v5.7** | **2026-06-06** | **发育年龄系统 + 会话持久化 + 多模态同步输入 + 实时传感器流 + Rich TUI + 纯净模式** |
 | **v6.0** | **2026-06-06** | **记忆系统完整实现 — 语义记忆/程序性记忆/干扰遗忘/跨会话系统巩固/零预训练纯净启动** |
+| **v6.1** | **2026-06-06** | **发育优化 — STDP时序学习 + GluN2B→GluN2A轨迹 + PNN结构锁定 + 保护信号(CD47) + 沉默突触 + 4阶段发育年龄** |
 
 ---
 
@@ -33,8 +34,8 @@
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ★ 已实现 (含 v6.0 新增) | **58** | 68% |
-| ○ 占位 (接口设计完成, 待实现代码) | 14 | 16% |
+| ★ 已实现 (含 v6.1 新增) | **60** | 70% |
+| ○ 占位 (接口设计完成, 待实现代码) | 12 | 14% |
 | — 配置/工具/入口 (无类定义但功能完备) | 14 | 16% |
 | **合计** | **86** | **100%** |
 
@@ -74,7 +75,7 @@
 | V4 (BA19) | `occipital_lobe/v4.py` | ★ v5.0 (M/P/K汇合) |
 | 视觉层级管线 | `occipital_lobe/visual_hierarchy.py` | ★ v5.0 (10模块编排) |
 | **边缘系统** | | |
-| 海马 | `limbic_system/hippocampus.py` | **★ UPGRADED v6.0** (+前摄/倒摄干扰 + 编码特异性 + 情景缓冲器) |
+| 海马 | `limbic_system/hippocampus.py` | **★ UPGRADED v6.1** (+STDP时序学习 + 保护信号 + 沉默突触候选集群 + PNN结构锁定) |
 | 杏仁核 | `limbic_system/amygdala.py` | **★ UPGRADED v6.0** (+恐惧条件作用) |
 | 扣带回/ACC | `limbic_system/cingulate.py` | ★ 已实现 (自由能计算) |
 | 岛叶 (BA13-16) | `limbic_system/insula.py` | ★ v5.4 (内感受+突显网络) |
@@ -122,8 +123,8 @@
 | 运动协调 | `cerebellum/motor_coordination.py` | ○ 占位 |
 | 时序预测 | `cerebellum/predictive_timing.py` | ○ 占位 |
 | **神经调节** | | |
-| 元学习 | `neuromodulatory/meta_learning.py` | ★ 已实现 (MetaLearner) |
-| 可塑性调节 | `neuromodulatory/plasticity.py` | ○ 占位 |
+| 元学习 | `neuromodulatory/meta_learning.py` | **★ UPGRADED v6.1** (GluN2B→GluN2A轨迹 + 4阶段发育年龄 + get_developmental_factors) |
+| 可塑性调节 | `neuromodulatory/plasticity.py` | **★ NEW v6.1** (PlasticityRegulator: 发育+事件驱动+稳态+神经调质LTP/LTD门控) |
 
 #### 身体 + 脊髓 + 工具 + CNS
 
@@ -228,6 +229,78 @@ v5.7 让 Agent 有了生命周期（发育年龄 + 会话持久化）。v6.0 让
 
 ---
 
+## v6.1 核心变更 — 发育优化 & 长期常驻学习
+
+### 设计哲学: 发育不是开关，是连续轨迹
+
+v6.0 让 Agent 有了完整的记忆系统分类。v6.1 让 Agent 的**学习过程本身**按照真实的神经发育规律进行——从高可塑性的婴儿期到精确稳定的成年期。
+
+### 六个核心机制
+
+| 机制 | 神经科学基础 | v6.1 实现 | 关键效果 |
+|------|------------|----------|---------|
+| **STDP 时序学习** | 脑连接 §4.3.1 — pre→post=LTP, post→pre=LTD | `hippocampus.py` _stdp_update(), diffuse()混合STDP权重 | 词序生成有了**因果方向性** |
+| **保护信号 (CD47)** | 脑连接 §3.2.3 — CD47-SIRPα"别吃我" | Cluster.protection_score, 修剪阈值=0.01/(1+prot×5) | 重要记忆**不被误删** |
+| **GluN2B→GluN2A** | 脑连接 §6.3 — NMDA亚基发育转换 | glun2b_ratio 指数衰减 (半衰期~5000步) | 学习率从2×**连续降到0.7×** |
+| **PNN 结构锁定** | 脑连接 §6.1.3 — 周围神经网络 | Cluster.pnn_level, digest_pnn()情感消化 | 熟练知识**自动固化** |
+| **沉默突触** | 脑连接 §2.3.2 — NMDA-only→AMPA插入 | CandidateCluster, 3次亚阈值→觉醒 | **快速学习**从少量暴露 |
+| **4阶段发育年龄** | 脑连接 §1 + Piaget | DevelopmentalStage枚举, get_developmental_factors() | 婴儿→儿童→青春期→成年 |
+
+### GluN2B 发育轨迹
+
+```
+GluN2B 占比 = 0.1 + 0.8 × exp(-steps / 5000)
+
+Stage 1 婴儿 (0-2000):    GluN2B=0.90→0.65  learn×2.0  阈值×0.7  高可塑性
+Stage 2 儿童 (2000-8000):  GluN2B=0.65→0.25  learn×1.3  阈值×0.85 修剪开始
+Stage 3 青春期 (8000-20000): GluN2B=0.25→0.12 learn×1.0  阈值×1.0  PNN加速
+Stage 4 成年 (20000+):     GluN2B<0.12        learn×0.7  阈值×1.15 稳定精确
+```
+
+### STDP 时序学习
+
+```
+A 激活 → B 激活 (pre→post, dt<3步):  A.stdp_links[B] += 0.02 × time_factor  (LTP)
+B 激活 → A 激活 (post→pre):           A.stdp_links[B] 不变 (无增强)
+
+diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
+```
+
+### Theta 参数扩展到 40 个
+
+| 新增参数 | 默认值 | 功能 |
+|---------|-------|------|
+| `stdp_lr` | 0.02 | STDP 学习率 |
+| `stdp_window` | 3 | STDP 时间窗口 (步) |
+| `stdp_weight` | 0.3 | STDP 在关联中的权重 |
+| `glun2b_ratio` | 0.9 | GluN2B 占比 (动态更新) |
+| `pnn_formation_rate` | 0.001 | PNN 形成速率 |
+| `developmental_stage` | 1 | 当前发育阶段 (1-4) |
+| `protection_decay` | 0.995 | 保护信号衰减率 |
+| `candidate_max` | 64 | 候选集群上限 |
+
+### PlasticityRegulator — 统一可塑性调节
+
+整合四个维度的可塑性调制:
+- **发育可塑性**: GluN2B 连续轨迹
+- **事件驱动可塑性**: RPE → 临时学习率增强 (最高 3×)
+- **稳态可塑性**: 网络平均激活 → 全局缩放 (维持 0.15 目标)
+- **神经调质门控**: DA (D1→LTP, D2→LTD) + NE (β→LTP) + ACh (novelty→LTP)
+
+### 文件变更
+
+| 变更类型 | 文件 |
+|---------|------|
+| **新增实现** | `plasticity.py` (PlasticityRegulator, 120行) |
+| **重大升级** | `hippocampus.py` (+STDP/保护/PNN/沉默突触, ~200行) |
+| **重大升级** | `meta_learning.py` (+GluN2B轨迹/发育阶段) |
+| **数据扩展** | `data_types.py` (+CandidateCluster +Cluster新字段 +DevelopmentalStage +8参数) |
+| **集成** | `agent.py` (+PlasticityRegulator +PNN消化 +发育摘要) |
+| **修复** | `persistence.py` (+新字段序列化 +桶重建修复) |
+| **更新** | `params.py` (+8参数), `innate.py` (+6覆盖) |
+
+---
+
 ## 图3 六大规则实现状态
 
 | 规则 | 核心机制 | 实现状态 | 关键模块 |
@@ -236,10 +309,10 @@ v5.7 让 Agent 有了生命周期（发育年龄 + 会话持久化）。v6.0 让
 | **2. 双向加工** | 前馈+反馈+语言双流+AF自我监控 | ✅ v5.6 | `fpn.py`, `arcuate_fasciculus.py` |
 | **3. 并行分布式** | M/P/K三流+听觉6核团+**6记忆系统并行** | ✅ **增强 v6.0** | 情景/语义/程序性/情感/自我/WM 六系统独立运行 |
 | **4. 注意力瓶颈** | FPN探照灯+TPN↔DMN跷跷板+**WM容量限制+中央执行器协调** | ✅ **增强 v6.0** | `fpn.py` 中央执行器, `working_memory.py`, `phonological_loop.py` |
-| **5. 赫布可塑性** | LTP/LTD+睡眠巩固+**干扰遗忘(前摄/倒摄/编码特异性)+纹状体D1/D2+恐惧条件作用** | ✅ **增强 v6.0** | `hippocampus.py`, `striatum.py`, `amygdala.py` |
+| **5. 赫布可塑性** | LTP/LTD+睡眠巩固+干扰遗忘+STDP时序学习+GluN2B轨迹+PNN锁定+保护信号+沉默突触+纹状体D1/D2+恐惧条件 | ✅ **增强 v6.1** | `hippocampus.py`, `striatum.py`, `amygdala.py`, `plasticity.py`, `meta_learning.py` |
 | **6. 预测编码** | 自由能最小化+N400/P600+**语义熟悉度调制理解确信度** | ✅ **增强 v6.0** | `semantic_memory.py` knows_about()→理解boost, `cingulate.py` |
 
-### 规则实现度: 6/6 有代码支撑 (v6.0 全部六条规则进一步增强 — 记忆域全覆盖)
+### 规则实现度: 6/6 有代码支撑 (v6.1 规则5进一步增强 — STDP+GluN2B+PNN+保护信号+沉默突触)
 
 ---
 
@@ -251,14 +324,14 @@ v5.7 让 Agent 有了生命周期（发育年龄 + 会话持久化）。v6.0 让
 | 隐状态 H | 16 |
 | 最大簇数 K | 256 (情景) / 1024 (语义) |
 | 行动数 A | 5 (grid) / 3 (dialogue) |
-| Theta 参数 | **32** (v6.0: +semantic_threshold, semantic_learn_rate, semantic_decay_rate, habit_threshold, habit_automation_rate, d1_d2_balance) |
+| Theta 参数 | **40** (v6.1: +stdp_lr, stdp_window, stdp_weight, glun2b_ratio, pnn_formation_rate, developmental_stage, protection_decay, candidate_max) |
 | 身体维度 M | 5 (grid) / 9 (text) |
 | 记忆系统 | **6** (情景+语义+程序性+情感+自我+工作记忆) |
 | 独立 ClusterNetwork 实例 | **8** (agent.net, self_model.net, AF.ventral, AF.dorsal, AG.grapheme_to_phoneme, TPJ.speaker_net, TPJ.intent_net, semantic_memory.net) |
 | 模块总数 | **86** |
-| 已实现核心模块 | **58 (68%)** — v6.0: +semantic_memory +working_memory +innate +striatum(重写) |
+| 已实现核心模块 | **60 (70%)** — v6.1: plasticity.py从占位→实现 + meta_learning/hippocampus重大升级 |
 | 语料规模 | 0 (纯净模式, 零预训练) |
-| v6.0 新增代码 | ~1,250 行 (4 new + 1 rewrite + 7 modified) |
+| v6.1 新增/修改代码 | ~600 行 (1 new + 2 major upgrades + 5 modified) |
 
 ---
 
@@ -272,6 +345,8 @@ v5.7 让 Agent 有了生命周期（发育年龄 + 会话持久化）。v6.0 让
 6. **跨会话持久化格式**: `.pkl` 依赖Python pickle协议, 跨版本兼容性需持续维护
 7. **实时流性能**: 摄像头+麦克风同时采集+全管线处理, 需测试长时间运行稳定性
 8. **v6.0 模块未经长期运行验证**: 语义记忆/纹状体/干扰遗忘的长时间交互效果需观察
+9. **v6.1 发育轨迹需长运行验证**: GluN2B半衰期5000步, PNN累积, 4阶段过渡需要在真实长对话中观察
+10. **STDP 效果依赖序列输入**: 当前对话模式下时序信息有限, STDP主要受益在词序链生成(Broca diffuse)
 
 ---
 
@@ -284,6 +359,7 @@ v5.7 让 Agent 有了生命周期（发育年龄 + 会话持久化）。v6.0 让
 4. ✅ 痛觉 + 神经调节 (v5.4-v5.5)
 5. ✅ 发育年龄 + 持久化 + 多模态 (v5.7)
 6. ✅ **完整记忆系统 (v6.0)**
+7. ✅ **发育优化 & 长期常驻学习 (v6.1)**
 
 ### P1 — 功能扩展
 7. ✅ 真实音频 (v5.3)
@@ -302,4 +378,4 @@ v5.7 让 Agent 有了生命周期（发育年龄 + 会话持久化）。v6.0 让
 
 ---
 
-*由 v6.0 记忆系统自动更新 · 基于 记忆神经科学 (Squire, Tulving, Baddeley, Yin & Knowlton) + 系统巩固模型 (Standard Consolidation + Multiple Trace Theory) + 自由能原理 (Friston 预测编码)*
+*由 v6.1 发育优化自动更新 · 基于《脑连接的形成》神经发育综述 + Hebb可塑性 + 自由能原理 (Friston 预测编码)*

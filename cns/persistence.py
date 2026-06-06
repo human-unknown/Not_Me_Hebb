@@ -68,10 +68,10 @@ def latest_save() -> Optional[str]:
 # ================================================================
 
 def _save_cluster_network(net) -> dict:
-    """序列化 ClusterNetwork 状态."""
+    """序列化 ClusterNetwork 状态 (v6.1: +保护/PNN/STDP/候选)."""
     if net is None:
         return {'n_clusters': 0, 'clusters': [], 'buckets': {},
-                'total_activation': 0.0}
+                'total_activation': 0.0, 'candidate_clusters': []}
     clusters_data = []
     for c in net.clusters:
         clusters_data.append({
@@ -80,6 +80,20 @@ def _save_cluster_network(net) -> dict:
             'G_ema': float(c.G_ema),
             'count': int(c.count),
             'age': int(getattr(c, 'age', 0)),
+            # v6.1: 新字段
+            'protection_score': float(getattr(c, 'protection_score', 0.0)),
+            'pnn_level': float(getattr(c, 'pnn_level', 0.0)),
+            'stdp_links': {str(k): float(v) for k, v
+                          in getattr(c, 'stdp_links', {}).items()},
+        })
+    # v6.1: 候选集群
+    candidates_data = []
+    for cc in getattr(net, '_candidate_clusters', []):
+        candidates_data.append({
+            'centroid': cc.centroid.copy(),
+            'exposure_count': int(cc.exposure_count),
+            'max_similarity': float(cc.max_similarity),
+            'age': int(getattr(cc, 'age', 0)),
         })
     return {
         'n_clusters': net.n_clusters,
@@ -91,14 +105,17 @@ def _save_cluster_network(net) -> dict:
             'learn_rate_l0': float(net.theta.learn_rate_l0),
             'decay_rate': float(net.theta.decay_rate),
         },
+        # v6.1
+        'candidate_clusters': candidates_data,
+        'n_candidates': len(candidates_data),
     }
 
 
 def _restore_cluster_network(net, data: dict):
-    """从序列化数据恢复 ClusterNetwork."""
+    """从序列化数据恢复 ClusterNetwork (v6.1: +保护/PNN/STDP/候选)."""
     if net is None or not data:
         return
-    from cns.data_types import Cluster, D as D_DIM
+    from cns.data_types import Cluster, CandidateCluster, D as D_DIM
     net.clusters = []
     for cd in data.get('clusters', []):
         centroid = np.array(cd['centroid'], dtype=np.float32)
@@ -111,14 +128,36 @@ def _restore_cluster_network(net, data: dict):
         c.G_ema = float(cd['G_ema'])
         c.count = int(cd.get('count', 0))
         c.age = int(cd.get('age', 0))
+        # v6.1: 恢复新字段
+        c.protection_score = float(cd.get('protection_score', 0.0))
+        c.pnn_level = float(cd.get('pnn_level', 0.0))
+        c.stdp_links = {int(k): float(v) for k, v
+                       in cd.get('stdp_links', {}).items()}
         net.clusters.append(c)
     net._n_clusters = len(net.clusters)
-    net.buckets = {int(k): list(v) for k, v in data.get('buckets', {}).items()}
-    # total_activation is a computed property — restored clusters handle it
+    # v6.1: 从恢复的簇重建桶 (旧桶引用指向序列化的旧对象)
+    net.buckets = {}
+    for c in net.clusters:
+        key = net._hash_to_bucket(c.centroid)
+        net.buckets.setdefault(key, []).append(c)
     if 'theta' in data:
         net.theta.cluster_threshold = float(data['theta']['cluster_threshold'])
         net.theta.learn_rate_l0 = float(data['theta']['learn_rate_l0'])
         net.theta.decay_rate = float(data['theta']['decay_rate'])
+
+    # v6.1: 恢复候选集群
+    net._candidate_clusters = []
+    for ccd in data.get('candidate_clusters', []):
+        centroid = np.array(ccd['centroid'], dtype=np.float32)
+        if len(centroid) < D_DIM:
+            padded = np.zeros(D_DIM, dtype=np.float32)
+            padded[:len(centroid)] = centroid
+            centroid = padded
+        cc = CandidateCluster(centroid=centroid)
+        cc.exposure_count = int(ccd.get('exposure_count', 1))
+        cc.max_similarity = float(ccd.get('max_similarity', 0.0))
+        cc.age = int(ccd.get('age', 0))
+        net._candidate_clusters.append(cc)
 
 
 def _default_setpoints(mode: str) -> np.ndarray:

@@ -3,7 +3,7 @@ params.py —— 默认参数常量
 自由能原理智能体 — M1 单智能体生存
 """
 
-# 默认 Theta 参数字典（23 个）
+# 默认 Theta 参数字典（40 个 — v6.1: 32 + 8 发育优化）
 DEFAULT_THETA_DICT = {
     # L0 (6): 生成模型
     'sigma_z': 0.1,
@@ -40,6 +40,15 @@ DEFAULT_THETA_DICT = {
     'habit_threshold': 0.3,
     'habit_automation_rate': 0.05,
     'd1_d2_balance': 0.5,
+    # L5 (8): v6.1 发育优化 (STDP + GluN2B + PNN + 保护信号)
+    'stdp_lr': 0.02,
+    'stdp_window': 3,
+    'stdp_weight': 0.3,
+    'glun2b_ratio': 0.9,
+    'pnn_formation_rate': 0.001,
+    'developmental_stage': 1,
+    'protection_decay': 0.995,
+    'candidate_max': 64,
 }
 
 # 参数边界 [min, max] —— 为 M4 参数扫描预留
@@ -75,4 +84,13 @@ PARAM_BOUNDS = {
     'habit_threshold': (0.05, 0.8),
     'habit_automation_rate': (0.01, 0.2),
     'd1_d2_balance': (0.1, 0.9),
+    # v6.1: 发育优化参数边界
+    'stdp_lr': (0.001, 0.1),
+    'stdp_window': (1, 10),
+    'stdp_weight': (0.05, 0.8),
+    'glun2b_ratio': (0.05, 1.0),
+    'pnn_formation_rate': (0.0001, 0.01),
+    'developmental_stage': (1, 4),
+    'protection_decay': (0.9, 0.999),
+    'candidate_max': (16, 128),
 }

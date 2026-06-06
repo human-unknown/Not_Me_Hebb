@@ -10,14 +10,14 @@
 ├── 乙酰胆碱 (ACh)    基底前脑 → 皮层/海马 — 学习、记忆、注意力
 
 在 NotMe 中映射到:
-  MetaLearner — 有限差分梯度下降在线调整 24 个 Theta 参数
-  关键期 (critical_window)  — 早期高可塑性
-  可塑性衰减 (plasticity_decay) — 随步数降低学习率
+  MetaLearner — 有限差分梯度下降在线调整 Theta 参数
+  GluN2B→GluN2A 发育轨迹 (v6.1)
+  PlasticityRegulator — 整合可塑性调制 (v6.1)
   创伤模拟 (apply_trauma) — 永久修改社会参数
 
 子模块:
 ├── meta_learning.py  元学习 — 有限差分梯度下降 (L3 MetaLearner)
-└── plasticity.py     可塑性调节 — 关键期/衰减/稳态可塑性 [待实现]
+└── plasticity.py     ★ v6.1 可塑性调节 — GluN2B + 事件驱动 + 稳态 + 神经调质门控
 """
 
 # 元学习
@@ -25,4 +25,9 @@ from brainstem_cerebellum.neuromodulatory.meta_learning import (
     create_default_theta, MetaLearner,
 )
 
-__all__ = ['create_default_theta', 'MetaLearner']
+# v6.1: 可塑性调节
+from brainstem_cerebellum.neuromodulatory.plasticity import (
+    PlasticityRegulator,
+)
+
+__all__ = ['create_default_theta', 'MetaLearner', 'PlasticityRegulator']

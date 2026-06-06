@@ -3,17 +3,19 @@ layer3_meta.py —— L3 元参数管理 (M5 激活)
 自由能原理智能体
 
 功能:
-- create_default_theta(): 20 参数默认配置
+- create_default_theta(): 参数默认配置
 - MetaLearner: 在线元学习（M5 真实有限差分梯度下降）
 
-发育机制:
-- 关键期: critical_window 步内学习率 2×
+v6.1 发育机制:
+- GluN2B→GluN2A 连续轨迹 (指数衰减, 半衰期 ~5000 步)
+- 4 阶段发育年龄系统 (婴儿→儿童→青少年→成人)
+- 发育因子调制 (learn_rate, threshold, PNN rate, silent synapse, pruning)
 - 可塑性衰减: plasticity_decay 逐步降低更新幅度
 - 创伤模拟: apply_trauma() 永久修改社会参数
 """
 
 import numpy as np
-from cns.data_types import Theta, FreeEnergy
+from cns.data_types import Theta, FreeEnergy, DevelopmentalStage
 
 
 # ============================================================
@@ -21,7 +23,7 @@ from cns.data_types import Theta, FreeEnergy
 # ============================================================
 
 def create_default_theta() -> Theta:
-    """返回 23 个参数的默认配置"""
+    """返回 40 个参数的默认配置 (v6.1)"""
     return Theta(
         sigma_z=0.1, sigma_x=1.0, decay_rate=0.01,
         cluster_threshold=0.85, learn_rate_l0=0.05,
@@ -32,6 +34,11 @@ def create_default_theta() -> Theta:
         n_policy_samples=16, urgency_weight=0.3,
         meta_lr=0.01, grad_epsilon=0.001,
         plasticity_decay=0.999, critical_window=1000,
+        # v6.1: 发育优化新参数
+        stdp_lr=0.02, stdp_window=3, stdp_weight=0.3,
+        glun2b_ratio=0.9, pnn_formation_rate=0.001,
+        developmental_stage=1, protection_decay=0.995,
+        candidate_max=64,
     )
 
 
@@ -86,9 +93,13 @@ class MetaLearner:
 
     M5 机制:
     - 每 META_INTERVAL 步: 对 8 个参数做有限差分 → 梯度下降
-    - 关键期: step < critical_window → 学习率 2×
     - 可塑性衰减: update *= plasticity_decay^step
     - 创伤: apply_trauma() → 社会参数骤降
+
+    v6.1 发育机制:
+    - GluN2B→GluN2A 指数衰减 (半衰期 ~5000 步)
+    - 4 阶段发育年龄 (婴儿→儿童→青少年→成人)
+    - get_developmental_factors() 返回当前阶段调制因子
     """
 
     META_INTERVAL = 50  # 元更新间隔
@@ -97,8 +108,12 @@ class MetaLearner:
         self.theta = theta
         self.history: list[tuple[Theta, float]] = []
         self.step_count: int = 0
-        self.is_critical: bool = True
+        self.is_critical: bool = True   # v6.1: 保留向后兼容，由 GluN2B 推导
         self.trauma_applied: bool = False
+        # v6.1: 发育追踪
+        self.developmental_stage: int = 1
+        self.stage_name: str = "婴儿期 (Infant)"
+        self._glun2b_half_life: float = 5000.0  # GluN2B 转换半衰期 (步)
 
     # ================================================================
     # 真实有限差分梯度估计 (M5)
@@ -143,17 +158,14 @@ class MetaLearner:
     # ================================================================
 
     def _apply_gradients(self, grads: dict):
-        """应用梯度下降: θ -= lr × grad × plasticity × critical_bonus
+        """应用梯度下降: θ -= lr × grad × plasticity
 
-        约束:
-        - 关键期学习率 2×
-        - 可塑性衰减
-        - 非负 + 边界裁剪
+        v6.1: 使用 GluN2B 连续调制替代二元关键期。
+        高 GluN2B → 高 meta_lr (发育早期可塑性高).
         """
-        # 有效学习率
-        effective_lr = self.theta.meta_lr
-        if self.is_critical:
-            effective_lr *= 2.0
+        # 有效学习率: GluN2B 调制 × 可塑性衰减
+        glun2b_mod = 0.5 + 0.5 * self.theta.glun2b_ratio  # [0.55, 1.0]
+        effective_lr = self.theta.meta_lr * glun2b_mod
         effective_lr *= self.theta.plasticity_decay ** self.step_count
 
         for param_name, grad in grads.items():
@@ -167,6 +179,37 @@ class MetaLearner:
             setattr(self.theta, param_name, float(new_val))
 
     # ================================================================
+    # v6.1: 发育因子
+    # ================================================================
+
+    def get_developmental_factors(self) -> dict:
+        """返回当前发育阶段的所有调制因子.
+
+        Returns:
+            dict with:
+              stage, stage_name, glun2b_ratio,
+              learn_rate_mult, threshold_mult, pnn_rate,
+              silent_synapse_bonus, prune_aggressiveness,
+              is_infant, is_child, is_adolescent, is_adult
+        """
+        stage_factors = DevelopmentalStage.get_factors(self.developmental_stage)
+        return {
+            'stage': self.developmental_stage,
+            'stage_name': self.stage_name,
+            'glun2b_ratio': self.theta.glun2b_ratio,
+            'step_count': self.step_count,
+            'learn_rate_mult': stage_factors['learn_rate_mult'],
+            'threshold_mult': stage_factors['threshold_mult'],
+            'pnn_rate': stage_factors['pnn_rate'],
+            'silent_synapse_bonus': stage_factors['silent_synapse_bonus'],
+            'prune_aggressiveness': stage_factors['prune_aggressiveness'],
+            'is_infant': self.developmental_stage == 1,
+            'is_child': self.developmental_stage == 2,
+            'is_adolescent': self.developmental_stage == 3,
+            'is_adult': self.developmental_stage == 4,
+        }
+
+    # ================================================================
     # 单步更新 (核心入口)
     # ================================================================
 
@@ -178,6 +221,8 @@ class MetaLearner:
         M1 行为 (z=None): 仅记录历史快照，不更新参数
         M5 行为 (z!=None): 每 META_INTERVAL 步执行有限差分梯度下降
 
+        v6.1: GluN2B 连续轨迹 + 发育阶段判定
+
         Args:
             F: 当前自由能
             z: 隐状态（M5 需要）
@@ -188,9 +233,19 @@ class MetaLearner:
         """
         self.step_count += 1
 
-        # 关键期判断
-        if self.step_count > self.theta.critical_window:
-            self.is_critical = False
+        # ---- v6.1: GluN2B→GluN2A 指数衰减 (半衰期 ~5000 步) ----
+        self.theta.glun2b_ratio = float(
+            0.1 + 0.8 * np.exp(-self.step_count / self._glun2b_half_life))
+
+        # ---- v6.1: 发育阶段判定 ----
+        new_stage = DevelopmentalStage.get_stage(self.step_count)
+        if new_stage != self.developmental_stage:
+            self.developmental_stage = new_stage
+            self.stage_name = DevelopmentalStage.get_name(new_stage)
+        self.theta.developmental_stage = self.developmental_stage
+
+        # 向后兼容: is_critical = 仍在婴儿/儿童期
+        self.is_critical = (self.developmental_stage <= 2)
 
         # 记录快照（始终执行）
         snapshot = Theta(**self.theta.__dict__)
@@ -219,7 +274,7 @@ class MetaLearner:
     # ================================================================
 
     def get_trajectory(self) -> dict:
-        """返回所有快照的参数发育轨迹"""
+        """返回所有快照的参数发育轨迹 (v6.1: +GluN2B + 发育阶段)"""
         if not self.history:
             return {}
         param_names = list(META_PARAMS_M5)
@@ -227,6 +282,9 @@ class MetaLearner:
         trajectories['F'] = []
         trajectories['step'] = []
         trajectories['is_critical'] = []
+        # v6.1: 发育轨迹
+        trajectories['glun2b_ratio'] = []
+        trajectories['developmental_stage'] = []
         for i, (theta_snap, F_val) in enumerate(self.history):
             for p in param_names:
                 trajectories[p].append(getattr(theta_snap, p))
@@ -234,4 +292,8 @@ class MetaLearner:
             trajectories['step'].append(i)
             trajectories['is_critical'].append(
                 i < self.theta.critical_window)
+            trajectories['glun2b_ratio'].append(
+                getattr(theta_snap, 'glun2b_ratio', 0.5))
+            trajectories['developmental_stage'].append(
+                getattr(theta_snap, 'developmental_stage', 1))
         return trajectories

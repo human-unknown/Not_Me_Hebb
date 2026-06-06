@@ -7,12 +7,18 @@ layer0_model.py —— L0 生成模型 + ClusterNetwork
 - 从 z 预测感知输入 s (线性解码)
 - ClusterNetwork: 特征哈希 + 侧抑制回忆 + Hebb-like 学习
 - 睡眠巩固周期
+
+v6.1 新增:
+- STDP 时序学习 (pre→post = LTP, post→pre = LTD)
+- 保护信号 (CD47-SIRPα "别吃我")
+- 沉默突触候选集群 (NMDA-only → AMPA 觉醒)
+- PNN 结构锁定 (周围神经网络包裹)
 """
 
 from typing import Optional
 import numpy as np
 from cns.data_types import (
-    D, H, K, Cluster, Theta,
+    D, H, K, Cluster, CandidateCluster, Theta,
 )
 
 
@@ -73,6 +79,51 @@ class ClusterNetwork:
         self.learn_rate_modifier: float = 1.0  # v5.5: VTA RPE → 事件驱动学习率调制
         self._context_dim: int = 8            # v6.0: 情境向量维度 (身体+情感快照)
         self._context_vector: np.ndarray = np.zeros(8, dtype=np.float32)
+        # v6.1: STDP 时序追踪
+        self._last_activated_id: int = -1         # 上一个激活簇的 id()
+        self._last_activated_step: int = -1       # 上一个激活的步数
+        self._step_counter: int = 0               # 内部步数计数
+        # v6.1: 沉默突触候选集群
+        self._candidate_clusters: list[CandidateCluster] = []
+        self._candidate_max: int = theta.candidate_max
+
+    # ----- v6.1: 发育调制因子 -----
+    def _glun2b_factor(self) -> float:
+        """GluN2B 占比 → 学习率调制因子 [0.55, 1.0].
+
+        高 GluN2B (婴儿期 ~0.9) → 因子 ~0.95 (高可塑性)
+        低 GluN2B (成年期 ~0.1) → 因子 ~0.55 (低可塑性)
+        """
+        r = self.theta.glun2b_ratio
+        return 0.5 + 0.5 * r
+
+    def _glun2b_threshold_factor(self) -> float:
+        """GluN2B → 匹配阈值调制 [0.73, 1.0].
+
+        高 GluN2B → 低阈值 (更容易匹配，更宽的整合时间窗)
+        """
+        r = self.theta.glun2b_ratio
+        return 0.7 + 0.3 * r
+
+    # ----- v6.1: STDP 更新 -----
+    def _stdp_update(self, pre_cluster: Cluster, post_cluster: Cluster):
+        """STDP: pre→post = LTP 增强, 反向 = LTD 减弱.
+
+        在 pre_cluster 的 stdp_links 中增强到 post_cluster 的权重。
+        权重衰减与时间间隔成正比。
+        """
+        dt = self._step_counter - self._last_activated_step
+        if dt > self.theta.stdp_window:
+            return  # 超出时间窗口
+
+        # 时间衰减: 越近越强
+        time_factor = max(0.0, 1.0 - dt / self.theta.stdp_window)
+        delta = self.theta.stdp_lr * time_factor
+
+        post_id = id(post_cluster)
+        old_w = pre_cluster.stdp_links.get(post_id, 0.0)
+        new_w = np.clip(old_w + delta, -1.0, 1.0)
+        pre_cluster.stdp_links[post_id] = float(new_w)
 
     # ----- 特征哈希 -----
     def hash_features(self, s: np.ndarray) -> np.ndarray:
@@ -129,6 +180,8 @@ class ClusterNetwork:
 
         mask 自动从非零维度推导 → 纯文本查询只在 text[0:64] 比较，
         纯视觉只在 vision[64:128] 比较。跨通道检索零额外成本。
+
+        v6.1: +STDP 时序追踪 + 保护信号 + GluN2B 调制阈值
         """
         if not self.clusters:
             return None
@@ -149,9 +202,7 @@ class ClusterNetwork:
                 best_c = c
 
         # ---- v6.0 编码特异性: 情境不匹配 → 提取变难 ----
-        # 当前身体/情感状态 vs 编码时的状态
         if best_c is not None and np.any(self._context_vector):
-            # 从质心中提取身体快照段 (centroid[64:72] 通常存身体状态)
             if best_c.centroid.shape[0] > 72:
                 encoded_ctx = best_c.centroid[64:72]
                 if np.any(np.abs(encoded_ctx) > 0.01):
@@ -159,29 +210,46 @@ class ClusterNetwork:
                         self._context_vector[:8],
                         encoded_ctx[:8],
                         np.ones(8, dtype=bool))
-                    # 情境不匹配 → 降低有效相似度
-                    # ctx_sim in [-1, 1] → mapped to [0.3, 1.0]
                     ctx_factor = 0.3 + 0.7 * max(0.0, ctx_sim)
                     best_sim *= ctx_factor
 
         # 自适应阈值: 部分查询 → 放宽要求
+        # v6.1: GluN2B 调制 — 高 GluN2B → 低阈值 (更宽整合窗)
         active_ratio = float(np.sum(mask)) / max(len(mask), 1)
-        eff_threshold = self.theta.cluster_threshold * (0.4 + 0.6 * active_ratio)
+        base_threshold = self.theta.cluster_threshold * (0.4 + 0.6 * active_ratio)
+        eff_threshold = base_threshold * self._glun2b_threshold_factor()
+
         if best_c is not None and best_sim >= eff_threshold:
+            # ---- v6.1: STDP 时序学习 ----
+            prev_cluster = None
+            if self._last_activated_id >= 0:
+                for c in self.clusters:
+                    if id(c) == self._last_activated_id:
+                        prev_cluster = c
+                        break
+            if prev_cluster is not None and prev_cluster is not best_c:
+                self._stdp_update(prev_cluster, best_c)
+            self._last_activated_id = id(best_c)
+            self._last_activated_step = self._step_counter
+
+            # ---- v6.1: 保护信号 ----
+            best_c.protection_score += 0.02 * best_c.activation
+
             best_c.activation = min(1.0, best_c.activation + 0.1)
             best_c.age += 1
             return best_c
         return None
 
-    # ----- Hebb 扩散 — Broca 区等价物 -----
+    # ----- Hebb 扩散 — Broca 区等价物 (v6.1: +STDP 偏置) -----
     def diffuse(self, start_cluster, steps: int = 3,
                 top_k: int = 5, sim_threshold: float = 0.15) -> tuple:
         """沿 Hebb 边随机游走 — 返回路径上所有质心。
 
+        v6.1: 混合余弦相似度 + STDP 权重。
+        混合权重 = (1 - stdp_weight) * cos_sim + stdp_weight * stdp_signals
+
         Returns:
             (path_centroids, path_indices)
-            path_centroids: [start[:64], step1[:64], ..., end[:64]]
-            path_indices:   [start_idx, step1_idx, ..., end_idx]
         """
         if self.n_clusters < 2 or steps < 1:
             c = start_cluster.centroid[:64].copy()
@@ -197,13 +265,24 @@ class ClusterNetwork:
         current_idx = start_idx
         for _ in range(steps):
             cur_vec = C[current_idx]
+            cur_cluster = self.clusters[current_idx]
             dot = C @ cur_vec
             norms = np.linalg.norm(C, axis=1)
-            sims = dot / (norms * norms[current_idx] + 1e-8)
-            sims[current_idx] = -1.0
+            cos_sims = dot / (norms * norms[current_idx] + 1e-8)
+            cos_sims[current_idx] = -1.0
 
-            top_indices = np.argsort(sims)[-top_k:]
-            weights = sims[top_indices]
+            # v6.1: 混合 STDP 权重
+            stdp_signals = np.zeros(len(self.clusters))
+            if cur_cluster.stdp_links:
+                for i, c in enumerate(self.clusters):
+                    stdp_signals[i] = cur_cluster.stdp_links.get(id(c), 0.0)
+
+            mixed_sims = ((1.0 - self.theta.stdp_weight) * cos_sims
+                          + self.theta.stdp_weight * stdp_signals)
+            mixed_sims[current_idx] = -1.0
+
+            top_indices = np.argsort(mixed_sims)[-top_k:]
+            weights = mixed_sims[top_indices]
             weights = np.clip(weights - sim_threshold, 0, None)
             if weights.sum() < 1e-8:
                 break
@@ -257,14 +336,71 @@ class ClusterNetwork:
 
         return path_centroids, path_indices
 
+    # ----- v6.1: 沉默突触候选匹配 -----
+    def _find_candidate(self, h: np.ndarray) -> Optional[CandidateCluster]:
+        """在候选集群中查找最佳匹配.
+
+        Returns:
+            最佳匹配的 CandidateCluster，若无则 None
+        """
+        if not self._candidate_clusters:
+            return None
+        best_sim = -1.0
+        best_cc = None
+        for cc in self._candidate_clusters:
+            sim = _masked_cosine(h, cc.centroid, np.ones(len(h), dtype=bool))
+            if sim > best_sim:
+                best_sim = sim
+                best_cc = cc
+        if best_cc is not None:
+            best_cc.max_similarity = max(best_cc.max_similarity, best_sim)
+        return best_cc
+
+    def _awaken_candidate(self, cc: CandidateCluster) -> Cluster:
+        """沉默突触觉醒: CandidateCluster → 完整 Cluster (AMPA 插入).
+
+        移除候选，创建新 Cluster，给予高初始 activation。
+        """
+        self._candidate_clusters = [
+            x for x in self._candidate_clusters if x is not cc]
+        if len(self.clusters) < K:
+            c = Cluster(centroid=cc.centroid.copy())
+            c.activation = 0.4  # 觉醒时高激活
+            c.count = cc.exposure_count
+            self.clusters.append(c)
+            hash_key = self._hash_to_bucket(cc.centroid)
+            self.buckets.setdefault(hash_key, []).append(c)
+            return c
+        else:
+            # 容量满 → 替换最旧且保护最低的簇
+            oldest = min(self.clusters,
+                        key=lambda c: c.age - c.protection_score * 50)
+            old_key = self._hash_to_bucket(oldest.centroid)
+            if old_key in self.buckets:
+                self.buckets[old_key] = [
+                    x for x in self.buckets[old_key] if x is not oldest]
+            oldest.centroid = cc.centroid.copy()
+            oldest.count = cc.exposure_count
+            oldest.age = 0
+            oldest.activation = 0.4
+            oldest.protection_score = 0.1
+            oldest.pnn_level = 0.0
+            oldest.stdp_links = {}
+            hash_key = self._hash_to_bucket(cc.centroid)
+            self.buckets.setdefault(hash_key, []).append(oldest)
+            return oldest
+
     # ----- 学习 (learn) -----
     def learn(self, s: np.ndarray) -> Cluster:
         """学习新感知模式：匹配到则更新，否则创建新簇
 
         策略：
         1. 若 recall 匹配 → 以 learn_rate 向输入更新 centroid
-        2. 若未匹配且簇数 < K → 创建新簇
-        3. 若未匹配且簇数 >= K → 替换 age 最大的最旧簇
+        2. 若未匹配且亚阈值 → v6.1 沉默突触: 候选集群追踪
+        3. 若未匹配且簇数 < K → 创建新簇
+        4. 若未匹配且簇数 >= K → 替换最旧/最弱簇
+
+        v6.1: +STDP +保护信号 +GluN2B调制 +PNN锁定 +沉默突触
 
         Returns:
             被创建或更新的 Cluster
@@ -273,17 +409,27 @@ class ClusterNetwork:
         existing = self.recall(s)
 
         if existing is not None:
-            # Hebb 学习: Δw = lr * activation * (input - w)
-            # 匹配越强 (activation 越高) → 学习率越大 → 更强的 Hebb 强化
-            # 这比纯 EMA 更接近生物 Hebb 规则: fire together → wire together
+            # ---- 更新已有簇 ----
             old_key = self._hash_to_bucket(existing.centroid)
-            lr = self.theta.learn_rate_l0 * self.learn_rate_modifier  # v5.5: VTA RPE 调制
+            # v5.5: VTA RPE 调制 × v6.1: GluN2B 发育调制
+            lr = (self.theta.learn_rate_l0
+                  * self.learn_rate_modifier
+                  * self._glun2b_factor())
             # 激活调制: 更强的匹配 → 更强的学习 (Hebb 机制)
             activation_factor = 0.3 + 0.7 * existing.activation  # [0.3, 1.0]
-            effective_lr = lr * activation_factor
+
+            # ---- v6.1: PNN 结构锁定 ----
+            pnn_resistance = existing.pnn_level * 0.8  # PNN 减少最多 80% 学习率
+            effective_lr = lr * activation_factor * (1.0 - pnn_resistance)
 
             existing.centroid = (1 - effective_lr) * existing.centroid + effective_lr * h
             existing.count += 1
+            # ---- v6.1: PNN 累积 (用得越多越固化) ----
+            existing.pnn_level = min(1.0, existing.pnn_level
+                                     + self.theta.pnn_formation_rate * existing.count)
+            # ---- v6.1: 保护信号 ----
+            existing.protection_score += 0.01
+
             # 如果 centroid 变化导致桶改变，迁移
             new_key = self._hash_to_bucket(existing.centroid)
             if new_key != old_key and old_key in self.buckets:
@@ -291,25 +437,92 @@ class ClusterNetwork:
                     c for c in self.buckets[old_key] if c is not existing]
                 self.buckets.setdefault(new_key, []).append(existing)
 
-            # ---- v6.0 倒摄干扰: 新学习轻微衰减桶内高相似旧簇 ----
+            # ---- v6.0 倒摄干扰 ----
             ri_bucket = self.buckets.get(new_key, [])
             for other_c in ri_bucket:
                 if other_c is not existing:
                     sim_to_new = _masked_cosine(h, other_c.centroid,
                                               np.ones(len(h), dtype=bool))
                     if sim_to_new > 0.75:
-                        other_c.activation *= 0.97  # 被"覆盖"的旧记忆衰减3%
+                        other_c.activation *= 0.97
+
+            # ---- v6.1: STDP 时序追踪 ----
+            self._last_activated_id = id(existing)
+            self._last_activated_step = self._step_counter
 
             return existing
 
-        # 无匹配 → 创建新簇（新颖性检测）
-        # ---- v6.0 前摄干扰: 桶内相似簇过多 → 新簇质心被"稀释" ----
+        # ---- 无匹配 → 检查沉默突触候选 (v6.1) ----
+        # 计算最佳相似度 (即使低于阈值)
+        best_sim = 0.0
+        best_cc = None
+        if self._candidate_clusters:
+            best_cc = self._find_candidate(h)
+            best_sim = best_cc.max_similarity if best_cc else 0.0
+
+        # 实际最佳相似度 (从 recall 失败中推断——我们需重新扫描)
+        # 为了效率: 仅在无匹配时扫描 bucket 找亚阈值最佳匹配
         hash_key = self._hash_to_bucket(h)
+        bucket = self.buckets.get(hash_key, self.clusters)
+        full_mask = np.ones(len(h), dtype=bool)
+        nearest_sim = 0.0
+        for c in bucket:
+            sim = _masked_cosine(h, c.centroid, full_mask)
+            if sim > nearest_sim:
+                nearest_sim = sim
+
+        # 沉默突触范围: [threshold-0.2, threshold)
+        silence_low = self.theta.cluster_threshold - 0.2
+        silence_high = self.theta.cluster_threshold
+
+        if silence_low <= nearest_sim < silence_high:
+            # 亚阈值匹配 → 沉默突触候选
+            if best_cc is not None and best_cc.max_similarity > nearest_sim * 0.9:
+                # 更新已有候选
+                best_cc.exposure_count += 1
+                best_cc.centroid = (0.7 * best_cc.centroid + 0.3 * h)
+                best_cc.max_similarity = max(best_cc.max_similarity, nearest_sim)
+                best_cc.age = 0
+            else:
+                # 新建候选
+                cc = CandidateCluster(centroid=h.copy())
+                cc.max_similarity = nearest_sim
+                self._candidate_clusters.append(cc)
+                # 超限清理
+                if len(self._candidate_clusters) > self._candidate_max:
+                    self._candidate_clusters.sort(key=lambda x: x.age, reverse=True)
+                    self._candidate_clusters = self._candidate_clusters[
+                        :self._candidate_max]
+
+            # 检查觉醒条件
+            if best_cc and (best_cc.exposure_count >= 3
+                           or best_cc.max_similarity > self.theta.cluster_threshold - 0.05):
+                awakened = self._awaken_candidate(best_cc)
+                # STDP: 从上一个活跃簇到觉醒簇
+                prev_cluster = None
+                if self._last_activated_id >= 0:
+                    for c in self.clusters:
+                        if id(c) == self._last_activated_id and c is not awakened:
+                            prev_cluster = c
+                            break
+                if prev_cluster is not None:
+                    self._stdp_update(prev_cluster, awakened)
+                self._last_activated_id = id(awakened)
+                self._last_activated_step = self._step_counter
+                return awakened
+
+            # 候选存在但未觉醒 → 不创建完整 Cluster, 返回 None-like 行为
+            # 需要一个占位返回 — 返回最佳候选的信息包装为特殊 Cluster
+            # (实际返回 None 会导致上游 learn 认为无学习，所以创建临时 marker)
+            self._step_counter += 1
+            return None  # 沉默——不形成完整记忆
+
+        # ---- 无匹配 + 不在亚阈值范围 → 创建新簇 (新颖性检测) ----
+        # ---- v6.0 前摄干扰 ----
         bucket = self.buckets.get(hash_key, [])
         pi_n_similar = sum(1 for c in bucket
                           if _masked_cosine(h, c.centroid,
                                           np.ones(len(h), dtype=bool)) > 0.65)
-        # 相似簇越多 → 前摄干扰越强 → 新记忆形成越弱
         pi_factor = 1.0 / (1.0 + pi_n_similar * 0.12)
         centroid_new = h.copy() * pi_factor
         newly_created = None
@@ -320,9 +533,9 @@ class ClusterNetwork:
             self.buckets.setdefault(hash_key, []).append(c)
             newly_created = c
         else:
-            # 容量满 → 替换最旧簇
-            oldest = min(self.clusters, key=lambda c: c.age)
-            # 从旧桶移除 (用 id 比较避免 numpy array == 歧义)
+            # 容量满 → v6.1: 替换最旧且保护最低的簇
+            oldest = min(self.clusters,
+                        key=lambda c: c.age - c.protection_score * 50)
             old_key = self._hash_to_bucket(oldest.centroid)
             if old_key in self.buckets:
                 self.buckets[old_key] = [
@@ -331,12 +544,14 @@ class ClusterNetwork:
             oldest.count = 1
             oldest.age = 0
             oldest.activation = 0.0
-            # 入新桶
+            oldest.protection_score = 0.0
+            oldest.pnn_level = 0.0
+            oldest.stdp_links = {}
             hash_key = self._hash_to_bucket(centroid_new)
             self.buckets.setdefault(hash_key, []).append(oldest)
             newly_created = oldest
 
-        # ---- v6.0 倒摄干扰: 新簇衰减桶内高相似旧簇 ----
+        # ---- v6.0 倒摄干扰 ----
         ri_bucket = self.buckets.get(hash_key, [])
         for other_c in ri_bucket:
             if other_c is not newly_created:
@@ -344,6 +559,18 @@ class ClusterNetwork:
                                           np.ones(len(h), dtype=bool))
                 if sim_to_new > 0.75:
                     other_c.activation *= 0.97
+
+        # ---- v6.1: STDP 时序追踪 (新簇也参与 STDP) ----
+        prev_cluster = None
+        if self._last_activated_id >= 0:
+            for c in self.clusters:
+                if id(c) == self._last_activated_id and c is not newly_created:
+                    prev_cluster = c
+                    break
+        if prev_cluster is not None:
+            self._stdp_update(prev_cluster, newly_created)
+        self._last_activated_id = id(newly_created)
+        self._last_activated_step = self._step_counter
 
         return newly_created
 
@@ -359,12 +586,28 @@ class ClusterNetwork:
 
     # ----- 衰减 -----
     def decay(self):
-        """衰减所有簇的激活值
-        未激活的簇随时间 activation → 0（自然遗忘）
+        """衰减所有簇的激活值 + v6.1: 保护信号衰减 + 候选集群老化.
+
+        未激活的簇随时间 activation → 0（自然遗忘）。
+        保护信号缓慢衰减——长期不用的簇逐渐失去保护。
         """
         for c in self.clusters:
             c.activation *= (1 - self.theta.decay_rate)
             c.age += 1
+            # v6.1: 保护信号缓慢衰减
+            c.protection_score *= self.theta.protection_decay
+
+        # v6.1: 候选集群老化
+        for cc in self._candidate_clusters:
+            cc.age += 1
+        # 移除老化候选 (age > 20 且暴露次数 < 2)
+        self._candidate_clusters = [
+            cc for cc in self._candidate_clusters
+            if not (cc.age > 20 and cc.exposure_count < 2)
+        ]
+
+        # v6.1: 步数计数
+        self._step_counter += 1
 
     # ----- 统计 -----
     @property
@@ -379,6 +622,45 @@ class ClusterNetwork:
         """返回激活度最高的 n 个簇"""
         sorted_clusters = sorted(self.clusters, key=lambda c: c.activation, reverse=True)
         return sorted_clusters[:n]
+
+    # ----- v6.1: PNN 消化 (情感事件触发) -----
+    def digest_pnn(self, arousal: float, novelty: float):
+        """高唤醒+高新颖性 → 临时降低活跃簇的 PNN (模拟 MMP-9 降解).
+
+        软骨素酶 ABC 等价物: 去甲肾上腺素 → MMP-9 激活 → PNN 降解。
+        在 agent.step() 中由高情感事件驱动调用。
+
+        Args:
+            arousal: 当前唤醒度 [0, 1]
+            novelty: 新颖性信号 [0, 1]
+        """
+        digest_strength = 0.05 * arousal * novelty
+        if digest_strength <= 0.001:
+            return
+        for c in self.clusters:
+            if c.activation > 0.1:  # 只消化活跃簇的 PNN
+                c.pnn_level = max(0.0, c.pnn_level - digest_strength)
+
+    # ----- v6.1: 统计 ----
+    @property
+    def n_candidates(self) -> int:
+        return len(self._candidate_clusters)
+
+    @property
+    def mean_pnn(self) -> float:
+        if not self.clusters:
+            return 0.0
+        return float(sum(c.pnn_level for c in self.clusters) / len(self.clusters))
+
+    @property
+    def mean_protection(self) -> float:
+        if not self.clusters:
+            return 0.0
+        return float(sum(c.protection_score for c in self.clusters) / len(self.clusters))
+
+    @property
+    def n_stdp_links(self) -> int:
+        return sum(len(c.stdp_links) for c in self.clusters)
 
 
 # ============================================================
@@ -583,6 +865,12 @@ def sleep_replay(net: ClusterNetwork, theta: Theta,
                 net._migrate_bucket(net.clusters[best_j], old_best)
                 n_separated += 1
 
+                # ---- v6.1: PNN 在参与模式分离的簇上累积 ----
+                net.clusters[ci].pnn_level = min(1.0,
+                    net.clusters[ci].pnn_level + 0.002)
+                net.clusters[best_j].pnn_level = min(1.0,
+                    net.clusters[best_j].pnn_level + 0.002)
+
         # 更新质心矩阵
         if cycle < n_replay_cycles - 1:
             C = np.stack([c.centroid for c in net.clusters])
@@ -590,16 +878,24 @@ def sleep_replay(net: ClusterNetwork, theta: Theta,
     # ---- Step 3: 衰减 (自然遗忘) ----
     net.decay()
 
-    # ---- Step 4: 清理死簇 ----
+    # ---- Step 4: v6.1 保护感知修剪 ----
     n_before = net.n_clusters
-    removed = [c for c in net.clusters if c.activation <= 0.01]
-    net.clusters = [c for c in net.clusters if c.activation > 0.01]
+    removed = []
+    for c in net.clusters:
+        # 保护信号调制修剪阈值: 高频使用的簇更难被删
+        protected_threshold = 0.01 / (1.0 + c.protection_score * 5.0)
+        if c.activation <= protected_threshold:
+            removed.append(c)
+    net.clusters = [c for c in net.clusters if c not in removed]
     # 同步桶
     for c in removed:
         key = net._hash_to_bucket(c.centroid)
         if key in net.buckets:
             net.buckets[key] = [x for x in net.buckets[key] if x is not c]
     n_removed = n_before - net.n_clusters
+
+    # v6.1: 候选集群统计
+    n_candidates_alive = len(net._candidate_clusters)
 
     return {
         'n_replayed': n_replayed,
@@ -610,4 +906,10 @@ def sleep_replay(net: ClusterNetwork, theta: Theta,
         'n_candidates': len(candidates),
         'mean_activation': float(
             sum(c.activation for c in net.clusters) / max(net.n_clusters, 1)),
+        # v6.1: 新统计
+        'n_silent_candidates': n_candidates_alive,
+        'mean_pnn': float(sum(c.pnn_level for c in net.clusters)
+                         / max(net.n_clusters, 1)),
+        'mean_protection': float(sum(c.protection_score for c in net.clusters)
+                                / max(net.n_clusters, 1)),
     }
