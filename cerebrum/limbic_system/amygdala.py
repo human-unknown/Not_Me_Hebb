@@ -143,6 +143,10 @@ class HebbEmotionalLexicon:
         self._word_vecs: dict[str, np.ndarray] = {}
         self._word_vec_source = None  # 外部设置的词向量源
 
+        # v6.0: 恐惧条件作用
+        self.conditioned_stimuli: dict[str, float] = {}  # {stim_hash → fear_strength}
+        self._fear_threshold: float = 0.5  # 恐惧激活阈值
+
     def set_word_vec_source(self, broca_or_word_speaker):
         """设置词向量来源 (Broca 或 WordSpeaker 实例)"""
         self._word_vec_source = broca_or_word_speaker
@@ -271,6 +275,51 @@ class HebbEmotionalLexicon:
                 self.memory[word] = np.array(
                     [valence * base_count, base_count, valence, arousal],
                     dtype=np.float32)
+
+    # ================================================================
+    # v6.0: 恐惧条件作用 (Fear Conditioning)
+    # ================================================================
+
+    def condition_fear(self, stimulus_vec: np.ndarray,
+                      fear_intensity: float):
+        """Classical fear conditioning: associate a neutral stimulus with
+        high arousal / negative body state.
+
+        One high-intensity negative experience can form a lasting fear memory
+        (rapid learning). This simulates amygdala-LA (lateral amygdala)
+        plasticity — the core substrate of fear memory.
+
+        Args:
+            stimulus_vec: (64,) semantic vector of the stimulus
+            fear_intensity: fear intensity [0, 1] — based on F_body↑ + valence↓
+        """
+        if fear_intensity < 0.3:
+            return  # Not strong enough to form conditioning
+
+        # Hash stimulus (use sign bits of first 16 dimensions)
+        stim_key = ''.join('1' if v > 0 else '0'
+                          for v in stimulus_vec[:16])
+        # Rapid learning: one high-intensity exposure is enough
+        if stim_key in self.conditioned_stimuli:
+            # Reinforce existing fear
+            self.conditioned_stimuli[stim_key] = min(
+                1.0,
+                self.conditioned_stimuli[stim_key] + fear_intensity * 0.3)
+        else:
+            self.conditioned_stimuli[stim_key] = fear_intensity * 0.5
+
+    def get_fear_response(self, stimulus_vec: np.ndarray) -> float:
+        """Get fear response to a stimulus [0, 1].
+
+        0 = no fear, 1 = strong fear.
+        """
+        stim_key = ''.join('1' if v > 0 else '0'
+                          for v in stimulus_vec[:16])
+        return float(self.conditioned_stimuli.get(stim_key, 0.0))
+
+    def is_fear_conditioned(self, stimulus_vec: np.ndarray) -> bool:
+        """Check if stimulus has formed a fear conditioning association."""
+        return self.get_fear_response(stimulus_vec) > self._fear_threshold
 
     def get_stats(self) -> dict:
         """返回词汇网络统计"""

@@ -141,6 +141,15 @@ class CommandHandler:
             sm = agent.self_model
             console.print(f"  SelfModel: {sm.net.n_clusters} clusters, "
                           f"{sm.n_experiences} experiences")
+        # v6.0 modules
+        if hasattr(agent, 'semantic_memory'):
+            ssm = agent.semantic_memory
+            console.print(f"  SemanticMemory: {ssm.n_clusters} concepts, "
+                         f"{ssm.n_facts} facts")
+        if hasattr(agent, 'striatum'):
+            st = agent.striatum
+            console.print(f"  Striatum: {st.get_state()['n_states_known']} states, "
+                         f"habit={st.global_habit_strength:.3f}")
         console.print()
 
     def _body(self, arg):
@@ -380,12 +389,15 @@ class InteractiveSession:
         self._setup_prompt()
 
     def _init_fresh(self):
-        """全新初始化 Agent (v5.7 纯净模式: 无预训练语料, 网络从零生长)."""
+        """全新初始化 Agent (v6.0 纯净模式)."""
         rng = np.random.default_rng(42)
         self.agent = Agent(rng=rng, agent_id=0, n_agents=1)
         self.agent.body = BodyVector(mode='text')
-        self.agent.theta.cluster_threshold = 0.55
-        self.agent.theta.w_social = 2.0
+
+        # v6.0: 使用先天配置替代手动覆盖
+        from cns.innate import apply_innate_config
+        apply_innate_config(self.agent)
+
         self.agent.record_action_consequence = lambda s: None
         ACTION_DIRECTIONS[3] = [0.0, 0.0]
         ACTION_DIRECTIONS[4] = [0.0, 0.0]
@@ -393,11 +405,12 @@ class InteractiveSession:
         self._do_minimal_setup()
 
     def _init_from_save(self, path: str):
-        """从存档恢复 Agent (v5.7 纯净模式)."""
+        """从存档恢复 Agent (v6.0 纯净模式)."""
         self.agent, meta = Agent.load(path, verbose=True)
-        # Re-apply dialogue-specific config
-        self.agent.theta.cluster_threshold = 0.55
-        self.agent.theta.w_social = 2.0
+        # v6.0: Re-apply innate config (not manual overrides)
+        from cns.innate import apply_innate_config
+        apply_innate_config(self.agent)
+
         self.agent.record_action_consequence = lambda s: None
         ACTION_DIRECTIONS[3] = [0.0, 0.0]
         ACTION_DIRECTIONS[4] = [0.0, 0.0]
@@ -542,6 +555,16 @@ class InteractiveSession:
                         human_text = input()
                 except (EOFError, KeyboardInterrupt):
                     console.print("\n  [yellow]Goodbye![/yellow]")
+                    # v6.0: 退出前跨会话巩固
+                    try:
+                        result = agent.consolidate_across_sessions()
+                        console.print(f"  [dim]Consolidated: "
+                                     f"{result['n_extracted']} processed, "
+                                     f"{result['n_new_facts']} new facts[/dim]")
+                        agent.save(name=None, n_sessions=self.n_sessions,
+                                  n_turns=self.n_turns)
+                    except Exception:
+                        pass
                     break
 
                 human_text = human_text.strip()
@@ -549,6 +572,18 @@ class InteractiveSession:
                     continue
 
                 if human_text.lower() == 'exit':
+                    # v6.0: 退出前跨会话巩固 + 保存
+                    console.print("  [cyan]Running cross-session consolidation...[/cyan]")
+                    try:
+                        result = agent.consolidate_across_sessions()
+                        console.print(f"  [green]Consolidated:[/green] "
+                                     f"{result['n_extracted']} processed, "
+                                     f"{result['n_new_facts']} new facts")
+                    except Exception as e:
+                        console.print(f"  [yellow]Consolidation: {e}[/yellow]")
+                    agent.save(name=None, n_sessions=self.n_sessions,
+                              n_turns=self.n_turns)
+                    console.print("  [green]Final state saved[/green]")
                     break
 
                 # ---- Command handler ----
