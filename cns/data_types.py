@@ -177,6 +177,14 @@ class Theta:
     plasticity_decay: float = 0.999  # 可塑性衰减
     critical_window: int = 1000      # 关键期步数
 
+    # L4 (6): v6.0 记忆系统 — 语义 + 程序性
+    semantic_threshold: float = 0.45     # 语义簇匹配阈值
+    semantic_learn_rate: float = 0.01    # 语义学习率
+    semantic_decay_rate: float = 0.003   # 语义衰减率
+    habit_threshold: float = 0.3         # 习惯形成的最低重复比例
+    habit_automation_rate: float = 0.05  # 习惯自动化速度
+    d1_d2_balance: float = 0.5           # D1(Go)/D2(No-Go) 平衡
+
     def to_dict(self) -> dict:
         """转为字典，便于参数扫描"""
         return {
@@ -195,6 +203,12 @@ class Theta:
             'urgency_weight': self.urgency_weight,
             'meta_lr': self.meta_lr, 'grad_epsilon': self.grad_epsilon,
             'plasticity_decay': self.plasticity_decay, 'critical_window': self.critical_window,
+            'semantic_threshold': self.semantic_threshold,
+            'semantic_learn_rate': self.semantic_learn_rate,
+            'semantic_decay_rate': self.semantic_decay_rate,
+            'habit_threshold': self.habit_threshold,
+            'habit_automation_rate': self.habit_automation_rate,
+            'd1_d2_balance': self.d1_d2_balance,
         }
 
     @classmethod
@@ -382,10 +396,10 @@ class BodyVector:
 # ============================================================
 
 def validate_theta(theta: Theta) -> bool:
-    """验证 Theta 参数数量 = 26 (v5.6)"""
+    """验证 Theta 参数数量 = 32 (v6.0)"""
     n = len(theta.to_dict())
-    if n != 26:
-        raise ValueError(f"Theta 必须有 26 个参数，当前有 {n}")
+    if n != 32:
+        raise ValueError(f"Theta 必须有 32 个参数，当前有 {n}")
     return True
 
 
