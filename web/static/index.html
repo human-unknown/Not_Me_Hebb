@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NotMe v6.4 — 自由能原理情感智能体</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
+.header{background:#161b22;padding:8px 16px;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:16px}
+.header h1{font-size:16px;color:#58a6ff;white-space:nowrap}
+.header .status-dot{width:10px;height:10px;border-radius:50%;background:#3fb950;display:inline-block}
+.header .status-dot.asleep{background:#8b949e}
+.header .status-dot.rem{background:#d2a8ff}
+.header .info{font-size:12px;color:#8b949e}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;padding:8px;flex:1;min-height:0}
+.panel{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;display:flex;flex-direction:column;overflow:hidden}
+.panel h3{font-size:12px;color:#8b949e;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
+.chat-bar{background:#161b22;border-top:1px solid #30363d;padding:8px 16px;display:flex;gap:8px;max-height:120px;overflow-y:auto;flex-direction:column}
+.chat-messages{font-size:12px;max-height:60px;overflow-y:auto}
+.chat-msg{margin:2px 0;line-height:1.4}
+.chat-msg .human{color:#58a6ff}
+.chat-msg .agent{color:#3fb950}
+.chat-input{display:flex;gap:8px}
+.chat-input input{flex:1;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:6px 10px;border-radius:4px;font-size:13px}
+.chat-input button{background:#238636;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px}
+.chat-input button:hover{background:#2ea043}
+.valence-gauge{text-align:center;font-size:32px;margin:4px 0}
+.body-bars{display:flex;flex-direction:column;gap:3px;flex:1}
+.body-row{display:flex;align-items:center;gap:6px;font-size:11px}
+.body-row .label{width:24px;color:#8b949e;text-align:right}
+.body-row .bar{flex:1;height:10px;background:#21262d;border-radius:3px;overflow:hidden}
+.body-row .bar-fill{height:100%;border-radius:3px;transition:width .3s}
+.body-row .val{width:32px;font-size:10px;color:#8b949e;text-align:right}
+.viz-panel canvas{width:100%;border-radius:4px;background:#0d1117}
+.viz-bars{display:flex;gap:12px;margin-top:4px;font-size:10px}
+.viz-bar{flex:1;text-align:center}
+.viz-bar .fill{height:8px;background:#21262d;border-radius:2px;overflow:hidden;margin-bottom:2px}
+.viz-bar .fill-inner{height:100%;border-radius:2px;transition:width .3s}
+.audio-panel{display:flex;flex-direction:column;gap:6px}
+.audio-panel canvas{width:100%;border-radius:4px;background:#0d1117}
+.azimuth-compass{position:relative;width:80px;height:40px;margin:0 auto}
+.sleep-indicator{padding:4px 8px;border-radius:4px;font-size:12px;text-align:center}
+.sleep-indicator.awake{background:#1a3a1a;color:#3fb950}
+.sleep-indicator.nrem{background:#1a1a3a;color:#58a6ff}
+.sleep-indicator.rem{background:#2a1a3a;color:#d2a8ff}
+.circa-row{display:flex;justify-content:space-between;font-size:11px;margin:2px 0}
+.circa-row .label{color:#8b949e}
+.trend-canvas{width:100%;border-radius:4px;background:#0d1117;flex:1}
+.mem-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px}
+.mem-stat{text-align:center;padding:4px}
+.mem-stat .num{font-size:18px;font-weight:bold}
+.mem-stat .lbl{color:#8b949e;font-size:10px}
+.reading-info{font-size:10px;color:#8b949e;margin-top:4px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="status-dot" id="sleepDot"></span>
+  <h1>NotMe v6.4</h1>
+  <span class="info" id="headerInfo">initializing...</span>
+</div>
+
+<div class="grid">
+  <!-- 情感仪表 -->
+  <div class="panel" id="emoPanel">
+    <h3>🎭 情感仪表</h3>
+    <div class="valence-gauge" id="valenceEmoji">😐</div>
+    <div style="font-size:11px;text-align:center">
+      V: <span id="valVal" style="color:#3fb950">0.00</span>
+      A: <span id="aroVal" style="color:#f0883e">0.50</span>
+    </div>
+    <canvas id="valenceCanvas" style="width:100%;height:60px;background:#0d1117;border-radius:4px;margin-top:4px"></canvas>
+  </div>
+
+  <!-- 身体状态 -->
+  <div class="panel">
+    <h3>🏃 身体状态</h3>
+    <div class="body-bars" id="bodyBars"></div>
+  </div>
+
+  <!-- 👁 AI看到的画面 -->
+  <div class="panel viz-panel">
+    <h3>👁 AI看到的画面 <span id="vizMode" style="font-size:10px;color:#8b949e"></span></h3>
+    <canvas id="vizCanvas" width="128" height="128"></canvas>
+    <div class="viz-bars">
+      <div class="viz-bar">V1<div class="fill"><div class="fill-inner" id="v1Bar" style="width:0%;background:#58a6ff"></div></div><span id="v1Val">0</span></div>
+      <div class="viz-bar">V2<div class="fill"><div class="fill-inner" id="v2Bar" style="width:0%;background:#3fb950"></div></div><span id="v2Val">0</span></div>
+      <div class="viz-bar">V4<div class="fill"><div class="fill-inner" id="v4Bar" style="width:0%;background:#f0883e"></div></div><span id="v4Val">0</span></div>
+      <div class="viz-bar">IT<div class="fill"><div class="fill-inner" id="itBar" style="width:0%;background:#d2a8ff"></div></div><span id="itVal">0</span></div>
+    </div>
+  </div>
+
+  <!-- 昼夜 + 睡眠 -->
+  <div class="panel">
+    <h3>🕐 昼夜节律 & 睡眠</h3>
+    <div class="sleep-indicator awake" id="sleepInd">清醒</div>
+    <div class="circa-row"><span class="label">🌙 褪黑素</span><span id="melVal">0.00</span></div>
+    <div class="circa-row"><span class="label">☀️ 皮质醇</span><span id="corVal">0.00</span></div>
+    <div class="circa-row"><span class="label">😴 睡眠压力</span><span id="spVal">0.00</span></div>
+    <canvas id="circaCanvas" style="width:100%;height:50px;background:#0d1117;border-radius:4px;margin-top:4px"></canvas>
+  </div>
+
+  <!-- 记忆 & 学习 -->
+  <div class="panel">
+    <h3>🧠 记忆 & 学习</h3>
+    <div class="mem-stats">
+      <div class="mem-stat"><div class="num" id="nClusters" style="color:#58a6ff">0</div><div class="lbl">情景记忆</div></div>
+      <div class="mem-stat"><div class="num" id="nSemantic" style="color:#3fb950">0</div><div class="lbl">语义概念</div></div>
+      <div class="mem-stat"><div class="num" id="nSelf" style="color:#f0883e">0</div><div class="lbl">自我体验</div></div>
+      <div class="mem-stat"><div class="num" id="totalAct" style="color:#d2a8ff">0</div><div class="lbl">总激活</div></div>
+    </div>
+    <canvas id="trendCanvas" class="trend-canvas"></canvas>
+    <div class="reading-info" id="readingInfo"></div>
+  </div>
+
+  <!-- 🔊 AI听到的声音 -->
+  <div class="panel audio-panel">
+    <h3>🔊 AI听到的声音 <span id="audioStatus" style="font-size:10px;color:#8b949e">静默</span></h3>
+    <canvas id="waveCanvas" width="256" height="60"></canvas>
+    <canvas id="melCanvas" width="256" height="40"></canvas>
+    <div style="display:flex;justify-content:center;align-items:center;gap:8px">
+      <canvas id="azimuthCanvas" width="80" height="40"></canvas>
+      <span id="rmsVal" style="font-size:11px;color:#8b949e">RMS: 0.00</span>
+    </div>
+  </div>
+</div>
+
+<div class="chat-bar">
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="chat-input">
+    <input id="chatInput" placeholder="输入消息... (Agent 在后台自主运行)" autofocus>
+    <button onclick="sendChat()">发送</button>
+    <button onclick="startReading()" style="background:#1f6feb">📖</button>
+    <button onclick="stopReading()" style="background:#da3633">⏹</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State & SSE
+// ============================================================
+let state = {};
+let trendData = {valence:[],arousal:[],F:[],maxLen:200};
+let chatMsgs = [];
+
+const evtSource = new EventSource('/api/stream');
+evtSource.onmessage = (e) => {
+  state = JSON.parse(e.data);
+  updateAll();
+};
+
+const visSource = new EventSource('/api/stream/visual');
+visSource.onmessage = (e) => {
+  const vis = JSON.parse(e.data);
+  if (vis.has_frame && vis.frame_b64) {
+    drawCameraFrame(vis.frame_b64);
+  }
+  updateVizBars(vis);
+};
+
+// ============================================================
+// Update all panels
+// ============================================================
+function updateAll() {
+  updateHeader();
+  updateEmotion();
+  updateBody();
+  updateSleep();
+  updateMemory();
+  updateAudio();
+  updateReading();
+}
+
+function updateHeader() {
+  const dot = document.getElementById('sleepDot');
+  const info = document.getElementById('headerInfo');
+  dot.className = 'status-dot';
+  if (state.sleep?.is_rem) { dot.classList.add('rem'); info.textContent = 'REM睡眠'; }
+  else if (state.sleep?.is_asleep) { dot.classList.add('asleep'); info.textContent = 'NREM睡眠'; }
+  else { info.textContent = state.activity?.mode || 'idle'; }
+  if (state.activity?.last_thought) {
+    info.textContent += ' — ' + state.activity.last_thought.slice(0,40);
+  }
+}
+
+function updateEmotion() {
+  const v = state.valence || 0;
+  const a = state.arousal || 0;
+  // Emoji
+  let emo = '😐';
+  if (v > 0.3) emo = '😊';
+  else if (v > 0.05) emo = '🙂';
+  else if (v < -0.3) emo = '😢';
+  else if (v < -0.05) emo = '😟';
+  document.getElementById('valenceEmoji').textContent = emo;
+
+  const vc = v >= 0 ? '#3fb950' : '#da3633';
+  document.getElementById('valVal').innerHTML = `<span style="color:${vc}">${v.toFixed(2)}</span>`;
+  document.getElementById('aroVal').innerHTML = `<span style="color:#f0883e">${a.toFixed(2)}</span>`;
+
+  // Trend canvas
+  trendData.valence.push(v);
+  trendData.arousal.push(a);
+  trendData.F.push(state.F?.total || 0);
+  if (trendData.valence.length > trendData.maxLen) {
+    trendData.valence = trendData.valence.slice(-trendData.maxLen);
+    trendData.arousal = trendData.arousal.slice(-trendData.maxLen);
+    trendData.F = trendData.F.slice(-trendData.maxLen);
+  }
+  drawTrends();
+}
+
+function drawTrends() {
+  const c = document.getElementById('valenceCanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width = c.clientWidth;
+  const H = c.height = 60;
+  ctx.clearRect(0,0,W,H);
+
+  const draw = (data, color, scale) => {
+    if (data.length < 2) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const step = W / Math.max(data.length-1, 1);
+    data.forEach((v,i) => {
+      const x = i * step;
+      const y = H/2 - v * scale * H/2;
+      i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  };
+  draw(trendData.valence, '#3fb950', 1.0);
+  draw(trendData.arousal, '#f0883e', 0.8);
+}
+
+function updateBody() {
+  const body = state.body || [0.7,0.7,0,0,0.3,0.3,0.3,0.5,0.9];
+  const labels = ['社交','能量','压力','新颖','专注','视觉','听觉','认知','组织'];
+  const colors = ['#58a6ff','#3fb950','#da3633','#f0883e','#d2a8ff',
+                  '#58a6ff','#58a6ff','#f0883e','#3fb950'];
+  const setpoints = [0.65,0.70,0.05,0.20,0.40,0.30,0.30,0.50,0.90];
+
+  let html = '';
+  body.forEach((v,i) => {
+    const pct = (v * 100).toFixed(0);
+    const sp = setpoints[i] || 0.5;
+    html += `<div class="body-row">
+      <span class="label">${labels[i]}</span>
+      <div class="bar">
+        <div class="bar-fill" style="width:${pct}%;background:${colors[i]}"></div>
+      </div>
+      <span class="val">${v.toFixed(2)}</span>
+    </div>`;
+  });
+  document.getElementById('bodyBars').innerHTML = html;
+}
+
+function updateSleep() {
+  const s = state.sleep || {};
+  const c = state.circadian || {};
+  const ind = document.getElementById('sleepInd');
+  if (s.is_rem) { ind.textContent = 'REM 做梦'; ind.className = 'sleep-indicator rem'; }
+  else if (s.is_asleep) { ind.textContent = 'NREM 深睡'; ind.className = 'sleep-indicator nrem'; }
+  else { ind.textContent = '清醒'; ind.className = 'sleep-indicator awake'; }
+
+  document.getElementById('melVal').textContent = (c.melatonin||0).toFixed(2);
+  document.getElementById('corVal').textContent = (c.cortisol||0).toFixed(2);
+  document.getElementById('spVal').textContent = (c.sleep_pressure||0).toFixed(2);
+
+  drawCircadian(c);
+}
+
+function drawCircadian(c) {
+  const canvas = document.getElementById('circaCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.clientWidth;
+  const H = canvas.height = 50;
+  ctx.clearRect(0,0,W,H);
+
+  // Phase indicator
+  const phase = c.phase || 0;
+  const cx = W/2, cy = H/2, r = 18;
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
+  const px = cx + Math.cos(phase - Math.PI/2) * r;
+  const py = cy + Math.sin(phase - Math.PI/2) * r;
+  ctx.fillStyle = '#f0883e'; ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
+
+  // Melatonin / Cortisol bars
+  ctx.fillStyle = '#8b949e'; ctx.font = '9px sans-serif';
+  ctx.fillText('🌙', 10, 14);
+  ctx.fillStyle = '#d2a8ff';
+  ctx.fillRect(28, 8, (c.melatonin||0)*60, 8);
+  ctx.fillText('☀️', 10, 32);
+  ctx.fillStyle = '#f0883e';
+  ctx.fillRect(28, 26, (c.cortisol||0)*60, 8);
+}
+
+function updateMemory() {
+  const m = state.memory || {};
+  document.getElementById('nClusters').textContent = m.n_clusters || 0;
+  document.getElementById('nSemantic').textContent = m.n_semantic || 0;
+  document.getElementById('nSelf').textContent = m.n_self || 0;
+  document.getElementById('totalAct').textContent = (m.total_activation||0).toFixed(1);
+
+  // Trend canvas
+  drawMemoryTrend(state.F || {});
+}
+
+function drawMemoryTrend(F) {
+  const c = document.getElementById('trendCanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width = c.clientWidth;
+  const H = c.height = 50;
+  ctx.clearRect(0,0,W,H);
+
+  // Draw latest F components as horizontal bars
+  const comps = [
+    {label:'body', val: F.body||0, color:'#da3633'},
+    {label:'social', val: F.social||0, color:'#58a6ff'},
+    {label:'cognitive', val: F.cognitive||0, color:'#f0883e'},
+    {label:'accuracy', val: F.accuracy||0, color:'#3fb950'},
+  ];
+  comps.forEach((comp, i) => {
+    const y = 8 + i * 11;
+    ctx.fillStyle = '#8b949e'; ctx.font = '9px sans-serif';
+    ctx.fillText(comp.label, 2, y+8);
+    ctx.fillStyle = comp.color;
+    const w = Math.min(Math.abs(comp.val) * W * 0.6, W * 0.7);
+    ctx.fillRect(50, y, w, 9);
+    ctx.fillStyle = '#c9d1d9'; ctx.font = '8px sans-serif';
+    ctx.fillText(comp.val.toFixed(2), 54 + w, y+8);
+  });
+}
+
+function updateAudio() {
+  const aud = state.audio || {};
+  const status = document.getElementById('audioStatus');
+  status.textContent = aud.has_audio ? `RMS: ${(aud.rms_level||0).toFixed(2)}` : '静默';
+  status.style.color = aud.has_audio ? '#3fb950' : '#8b949e';
+  document.getElementById('rmsVal').textContent = `Az: ${(aud.azimuth||0).toFixed(0)}°`;
+
+  if (aud.waveform && aud.waveform.length > 0) drawWaveform(aud.waveform);
+  if (aud.mel_spectrum && aud.mel_spectrum.length > 0) drawMelSpectrum(aud.mel_spectrum);
+  drawAzimuth(aud.azimuth || 0, aud.has_audio);
+}
+
+function drawWaveform(wave) {
+  const c = document.getElementById('waveCanvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle = '#58a6ff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  const step = W / wave.length;
+  wave.forEach((v,i) => {
+    const x = i * step;
+    const y = H/2 - v * H/2 * 0.8;
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+function drawMelSpectrum(spec) {
+  const c = document.getElementById('melCanvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  const barW = W / spec.length;
+  spec.forEach((v,i) => {
+    const h = Math.max(1, v * H * 0.8);
+    const hue = 240 - (i / spec.length) * 200; // blue→orange
+    ctx.fillStyle = `hsl(${hue},70%,${30 + v*50}%)`;
+    ctx.fillRect(i * barW, H - h, barW - 1, h);
+  });
+}
+
+function drawAzimuth(az, hasAudio) {
+  const c = document.getElementById('azimuthCanvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Semi-circle compass
+  const cx = W/2, cy = H-2, r = H-4;
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 0); ctx.stroke();
+
+  if (hasAudio) {
+    // Pointer
+    const angle = Math.PI - (az / 90) * Math.PI/2; // map [-90,90] → [3π/2, π/2]
+    const px = cx + Math.cos(angle) * r * 0.8;
+    const py = cy + Math.sin(angle) * r * 0.8;
+    ctx.fillStyle = '#f0883e';
+    ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
+  }
+
+  ctx.fillStyle = '#8b949e'; ctx.font = '8px sans-serif';
+  ctx.fillText('L', 2, H-2);
+  ctx.fillText('R', W-10, H-2);
+}
+
+function drawCameraFrame(b64) {
+  const img = new Image();
+  img.onload = () => {
+    const c = document.getElementById('vizCanvas');
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+  };
+  img.src = 'data:image/jpeg;base64,' + b64;
+}
+
+function updateVizBars(vis) {
+  document.getElementById('vizMode').textContent = vis.has_frame ? '摄像头' : '语义代理';
+  ['v1','v2','v4','it'].forEach(k => {
+    const v = vis[k+'_mean'] || 0;
+    const pct = Math.min(100, v * 100);
+    document.getElementById(k+'Bar').style.width = pct + '%';
+    document.getElementById(k+'Val').textContent = v.toFixed(2);
+  });
+}
+
+function updateReading() {
+  const r = state.reader;
+  const div = document.getElementById('readingInfo');
+  if (r && r.is_active) {
+    const status = r.is_paused ? '⏸ 暂停' : '📖 阅读中';
+    div.textContent = `${status}: ${r.file_name || ''} ${(r.progress*100).toFixed(0)}% (${r.sentences_read}/${r.total_sentences})`;
+  } else {
+    div.textContent = '';
+  }
+}
+
+// ============================================================
+// Chat
+// ============================================================
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  addChatMsg('human', text);
+  try {
+    const resp = await fetch('/api/chat', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({text})
+    });
+    const data = await resp.json();
+    if (data.response) addChatMsg('agent', data.response);
+  } catch(e) { addChatMsg('agent', '...'); }
+}
+
+function addChatMsg(who, text) {
+  chatMsgs.push({who,text});
+  if (chatMsgs.length > 20) chatMsgs = chatMsgs.slice(-20);
+  const div = document.getElementById('chatMessages');
+  div.innerHTML = chatMsgs.map(m =>
+    `<div class="chat-msg"><span class="${m.who}">${m.who==='human'?'You':'Agent'}:</span> ${m.text}</div>`
+  ).join('');
+  div.scrollTop = div.scrollHeight;
+}
+
+document.getElementById('chatInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendChat();
+});
+
+// ============================================================
+// Reading controls
+// ============================================================
+async function startReading() {
+  const path = prompt('输入文本文件路径:', '');
+  if (!path) return;
+  try {
+    const resp = await fetch('/api/reading/start', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({file_path: path})
+    });
+    const data = await resp.json();
+    if (data.error) alert(data.error);
+    else addChatMsg('agent', `📖 开始阅读: ${data.file_name} (${data.total_sentences} 句)`);
+  } catch(e) { alert('Error: ' + e); }
+}
+
+async function stopReading() {
+  await fetch('/api/reading/stop', {method:'POST'});
+  addChatMsg('agent', '📖 已停止阅读');
+}
+</script>
+</body>
+</html>

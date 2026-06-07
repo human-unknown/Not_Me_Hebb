@@ -182,3 +182,101 @@ class SelfModel:
             'stability': stability,
             'dominant_body_need': dom_body_need,
         }
+
+    # ---- v6.4: 自发回忆与走神链 ----
+
+    def spontaneous_recall(self, agent_net=None) -> np.ndarray | None:
+        """随机回忆一个自我体验 (v6.4)。
+
+        模拟 DMN 在静息状态下的自发活动:
+          从自身网络中随机选一个集群 → 返回其情感/体验质心
+
+        Args:
+            agent_net: Agent 的海马网络 (可选, 混合回忆用)
+
+        Returns:
+            回忆的质心向量 (D,) 或 None
+        """
+        import random
+
+        # 优先从自身网络回忆 (自我相关记忆)
+        if self.net.n_clusters > 0:
+            top_n = min(10, self.net.n_clusters)
+            top_self = sorted(self.net.clusters,
+                            key=lambda c: c.activation, reverse=True)[:top_n]
+            c = random.choice(top_self)
+            # 重新激活该集群 (模拟回忆增强)
+            c.activation = min(1.0, c.activation + 0.02)
+            return c.centroid.copy()
+
+        # 回退: 从 Agent 海马网络回忆
+        if agent_net is not None and agent_net.n_clusters > 0:
+            top_n = min(10, agent_net.n_clusters)
+            top_agent = sorted(agent_net.clusters,
+                             key=lambda c: c.activation, reverse=True)[:top_n]
+            c = random.choice(top_agent)
+            c.activation = min(1.0, c.activation + 0.02)
+            return c.centroid.copy()
+
+        return None
+
+    def mind_wander_chain(self, agent_net=None,
+                          chain_length: int = 3) -> list[np.ndarray]:
+        """自由联想链 — 连续的自发回忆形成思维流 (v6.4)。
+
+        每次回忆作为下一个查询的种子 → 模拟"一个想法引出另一个想法"。
+
+        Args:
+            agent_net: Agent 海马网络
+            chain_length: 联想链长度
+
+        Returns:
+            回忆质心列表 [centroid, ...]
+        """
+        chain = []
+        current_seed = None
+
+        for _ in range(chain_length):
+            if current_seed is not None and len(current_seed) >= 64:
+                # 用上一个回忆作为查询种子
+                recalled = self.net.recall(current_seed[:64])
+                if recalled is not None:
+                    chain.append(recalled.centroid.copy())
+                    current_seed = recalled.centroid
+                    continue
+
+            # 无法链式 → 随机跳跃
+            recalled = self.spontaneous_recall(agent_net=agent_net)
+            if recalled is not None:
+                chain.append(recalled)
+                current_seed = recalled
+            else:
+                break
+
+        return chain
+
+    def get_state_for_save(self) -> dict:
+        """可序列化状态 (用于持久化) — v6.4。"""
+        return {
+            'n_experiences': self.n_experiences,
+            'anchor_alpha': self.anchor_alpha,
+            'anchor': self.anchor[:64].tolist(),
+            'anchor_emotion': self.anchor_emotion.tolist(),
+            'anchor_body': self.anchor_body.tolist(),
+        }
+
+    def restore_from_save(self, data: dict):
+        """从持久化数据恢复 — v6.4。"""
+        if not data:
+            return
+        self.n_experiences = data.get('n_experiences', 0)
+        self.anchor_alpha = data.get('anchor_alpha', 0.15)
+        anchor = data.get('anchor', [])
+        if len(anchor) >= 64:
+            self.anchor[:64] = np.array(anchor[:64], dtype=np.float32)
+        anchor_emotion = data.get('anchor_emotion', [])
+        if len(anchor_emotion) >= 8:
+            self.anchor_emotion = np.array(anchor_emotion[:8], dtype=np.float32)
+        anchor_body = data.get('anchor_body', [])
+        if len(anchor_body) >= 8:
+            self.anchor_body = np.array(anchor_body[:8], dtype=np.float32)

@@ -137,7 +137,7 @@ S_CORE = D - 10                                        # 感觉核心
 
 @dataclass
 class Theta:
-    """48+8 个可学习参数 —— 唯一参数集 (v6.3: +8 睡眠/节律/注意参数)
+    """56+3 个可学习参数 —— 唯一参数集 (v6.4: +3 长期常驻学习)
     L0 (6): 生成模型
     L1 (11): 自由能权重 + 情感偏差 + 精度系数 + 语言PE权重
     L2 (5): 策略推理
@@ -146,6 +146,7 @@ class Theta:
     L5 (8): v6.1 发育优化 — STDP/GluN2B/PNN/保护信号/候选集群
     L6 (8): v6.2 记忆巩固优化 — 标签捕获/持续性/巩固锁
     L7 (8): v6.3 睡眠与时间维度 — SCN节律/双相睡眠/α注意/类淋巴清除
+    L8 (3): v6.4 长期常驻学习 — 阅读疲劳/走神频率/自主步进间隔
     """
     # L0 (6): 生成模型
     sigma_z: float = 0.1             # 状态噪声
@@ -220,6 +221,11 @@ class Theta:
     glymphatic_clear_rate: float = 0.005  # 类淋巴清除最低 activation 阈值
     rem_emotional_processing: float = 0.3 # REM 情绪去刺痛强度
 
+    # L8 (3): v6.4 长期常驻学习 — 阅读 + 走神 + 自主步进
+    reading_fatigue_rate: float = 0.03   # 每句阅读增加的认知负荷
+    mind_wander_frequency: float = 0.15  # 清醒静息时走神的概率 [0, 1]
+    autonomous_step_interval: float = 1.0 # 自主模式步进间隔 (秒)
+
     def to_dict(self) -> dict:
         """转为字典，便于参数扫描"""
         return {
@@ -271,6 +277,10 @@ class Theta:
             'alpha_gating_strength': self.alpha_gating_strength,
             'glymphatic_clear_rate': self.glymphatic_clear_rate,
             'rem_emotional_processing': self.rem_emotional_processing,
+            # v6.4: 长期常驻学习
+            'reading_fatigue_rate': self.reading_fatigue_rate,
+            'mind_wander_frequency': self.mind_wander_frequency,
+            'autonomous_step_interval': self.autonomous_step_interval,
         }
 
     @classmethod
@@ -602,15 +612,29 @@ class SleepState:
     n_sleep_episodes: int = 0            # 睡眠片段数
 
 
+@dataclass
+class ReadingState:
+    """v6.4: 阅读器状态 — 用于持久化"""
+    file_path: str = ""
+    file_name: str = ""
+    total_sentences: int = 0
+    current_index: int = 0
+    sentences_read: int = 0
+    started_at: float = 0.0
+    paused_at: float = 0.0
+    is_active: bool = False
+    is_paused: bool = False
+
+
 # ============================================================
 # 参数验证
 # ============================================================
 
 def validate_theta(theta: Theta) -> bool:
-    """验证 Theta 参数数量 = 56 (v6.3)"""
+    """验证 Theta 参数数量 = 59 (v6.4)"""
     n = len(theta.to_dict())
-    if n != 56:
-        raise ValueError(f"Theta 必须有 56 个参数，当前有 {n}")
+    if n != 59:
+        raise ValueError(f"Theta 必须有 59 个参数，当前有 {n}")
     return True
 
 

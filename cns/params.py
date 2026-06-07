@@ -67,6 +67,10 @@ DEFAULT_THETA_DICT = {
     'alpha_gating_strength': 0.4,
     'glymphatic_clear_rate': 0.005,
     'rem_emotional_processing': 0.3,
+    # v6.4: 长期常驻学习
+    'reading_fatigue_rate': 0.03,
+    'mind_wander_frequency': 0.15,
+    'autonomous_step_interval': 1.0,
 }
 
 # 参数边界 [min, max] —— 为 M4 参数扫描预留
@@ -129,4 +133,8 @@ PARAM_BOUNDS = {
     'alpha_gating_strength': (0.1, 0.9),
     'glymphatic_clear_rate': (0.001, 0.05),
     'rem_emotional_processing': (0.05, 0.8),
+    # v6.4: 长期常驻学习
+    'reading_fatigue_rate': (0.005, 0.15),
+    'mind_wander_frequency': (0.02, 0.6),
+    'autonomous_step_interval': (0.1, 5.0),
 }

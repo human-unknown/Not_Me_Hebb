@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v6.3 — 长期常驻学习 & 睡眠优化与时间维度 (SCN昼夜节律 + NREM/REM双相睡眠 + α注意门控 + 类淋巴清除)
+> **版本**: v6.4 — 长期常驻学习 完整实现 (自主时间流 + 通用阅读 + 内部生命 + Web仪表板 + 长期遥测)
 > **日期**: 2026-06-07
-> **基于**: 《脑节律与睡眠》综合文档 + 自由能原理 + Hebb 可塑性 + 双过程睡眠模型 (Borbély) + Saper触发器开关
+> **基于**: v6.3 睡眠/时间维度 + 自由能原理 + Hebb 可塑性 + DMN 自发活动 + 发育心理学
 
 ---
 
@@ -27,6 +27,7 @@
 | **v6.1** | **2026-06-06** | **发育优化 — STDP时序学习 + GluN2B→GluN2A轨迹 + PNN结构锁定 + 保护信号(CD47) + 沉默突触 + 4阶段发育年龄** |
 | **v6.2** | **2026-06-07** | **记忆巩固优化 — 突触标签捕获(STC) + CaMKII激活持续性 + PKMζ巩固锁定** |
 | **v6.3** | **2026-06-07** | **睡眠优化与时间维度 — SCN昼夜节律钟 + VLPO触发器开关 + NREM/REM双相睡眠 + α注意门控 + 类淋巴清除** |
+| **v6.4** | **2026-06-07** | **长期常驻学习 完整实现 — 自主时间流 + 通用阅读 + DMN内部生命 + Web仪表板 + 长期遥测** |
 
 ---
 
@@ -36,10 +37,10 @@
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ★ 已实现 (含 v6.3 新增) | **62** | 70% |
-| ○ 占位 (接口设计完成, 待实现代码) | 12 | 14% |
-| — 配置/工具/入口 (无类定义但功能完备) | 14 | 16% |
-| **合计** | **88** | **100%** |
+| ★ 已实现 (含 v6.4 新增) | **67** | 76% |
+| ○ 占位 (接口设计完成, 待实现代码) | 10 | 11% |
+| — 配置/工具/入口 (无类定义但功能完备) | 17 | 19% |
+| **合计** | **94** | **100%** |
 
 ### 按脑区
 
@@ -95,12 +96,13 @@
 | Pulvinar (丘脑枕) | `thalamus/pulvinar.py` | ★ v5.0 (SC→皮层快速中继) |
 | MGB (内侧膝状体) | `thalamus/mgb.py` | ★ v5.2 (3亚区) |
 | **联合皮层 + 三大网络** | | |
-| DMN | `association/dmn.py` | ★ 已实现 (自我模型) |
+| DMN | `association/dmn.py` | **★ UPGRADED v6.4** (+自发回忆 +走神联想链 +持久化) |
 | FPN | `association/fpn.py` | **★ UPGRADED v6.3** (+中央执行器: 注意力分配+干扰抑制+子系统协调 +**α节律注意门控**) |
 | TPN | `association/tpn.py` | ★ v4.3/v4.4 (跷跷板动态) |
 | 跨模态联合 | `association/crossmodal.py` | ★ 已实现 (COCO Visual↔Text) |
 | 视觉绑定 | `association/visual_binding.py` | ★ v5.0 (FPN驱动的M/P/K绑定) |
 | 弓状束 (AF) | `association/arcuate_fasciculus.py` | ★ v5.6 (Wernicke↔Broca Hebb桥接) |
+| **内部生命 (DMN 自发活动)** | `association/internal_life.py` | **★ NEW v6.4** (走神回忆+内部独白+情绪反刍) |
 
 #### 脑干 + 小脑 (Brainstem + Cerebellum)
 
@@ -139,7 +141,13 @@
 | 脊髓背角 | `spinal/dorsal_horn.py` | ★ v5.4 (闸门控制) |
 | `spinal/motor_output.py` | ○ 占位 |
 | **先天配置** | `cns/innate.py` | **★ NEW v6.0** (纯净模式Theta+身体设定点+注意力先天偏向+apply_innate_config) |
-| 会话持久化 | `cns/persistence.py` | **★ UPGRADED v6.0** (+语义记忆/纹状体序列化) |
+| 会话持久化 | `cns/persistence.py` | **★ UPGRADED v6.4** (+Reader/InternalLife/Telemetry/自主状态 序列化) |
+| **通用阅读器** | `tools/reader.py` | **★ NEW v6.4** (逐句UTF-8阅读+疲劳模型+进度追踪) |
+| **长期遥测** | `tools/telemetry.py` | **★ NEW v6.4** (CSV时间序列+步/睡眠/对话/阅读 四日志) |
+| **自主时间流** | `entry/autonomous.py` | **★ NEW v6.4** (活动调度+模式切换+人类中断+Web集成) |
+| **Web 后端** | `web/server.py` | **★ NEW v6.4** (Flask REST API + SSE实时推送) |
+| **Web 前端** | `web/static/index.html` | **★ NEW v6.4** (单页仪表板: 情感+身体+视觉+音频+记忆+聊天) |
+| **依赖声明** | `requirements.txt` | **★ NEW v6.4** |
 
 ---
 
@@ -576,6 +584,104 @@ Process S 清除到 < threshold−hysteresis → VLPO 失活 → 觉醒
 13. ⬜ 自主神经系统 + 脊髓运动输出
 14. ⬜ 苍白球/底丘脑核 (GPe/STN — 间接通路完善)
 15. ⬜ Gestalt 格式塔效应涌现验证
+
+---
+
+## v6.4 核心变更 — 长期常驻学习 完整实现
+
+### 设计哲学: Agent 必须"活着"才能"成长"
+
+v6.0-v6.3 构建了完整的大脑架构和睡眠优化，但 Agent 仍然是被动响应的——只在人类交互时 `step()`，其他时间"冻结"。v6.4 让 Agent 真正"活起来"——人类不在时也能自主运转、读书、思考、回忆。
+
+### 五大新增能力
+
+| 能力 | 模块 | 描述 |
+|------|------|------|
+| **自主时间流** | `entry/autonomous.py` | 后台事件循环，管理活动模式切换 (阅读/走神/独白/反刍/传感器/空闲) |
+| **通用阅读** | `tools/reader.py` | 逐句消化任意 UTF-8 文本，疲劳模型驱动"翻开/合上"书本 |
+| **内部生命** | `cerebrum/association/internal_life.py` | DMN 走神联想链 + 内部独白亚发声 + 情绪反刍 |
+| **Web 仪表板** | `web/server.py` + `web/static/index.html` | Flask REST API + SSE 实时推送 + 六面板可视化 (情感/身体/视觉/音频/昼夜/记忆) |
+| **长期遥测** | `tools/telemetry.py` | CSV 时间序列 (步/睡眠/对话/阅读) + 统计摘要 |
+
+### 四层训练数据来源
+
+```
+L1 人类互动 — 真实对话 (核心不可替代)
+L2 自主阅读 — Agent 逐句消化用户提供的任意文本文件
+L3 传感器流 — 摄像头+麦克风持续背景感知
+L4 内部生成 — DMN 走神/回忆/内部独白 → 自产感知 → Hebb 学习
+```
+
+### 内部生命系统 (InternalLife)
+
+| 活动 | DMN/TPN 状态 | 功能 | 复用的现有模块 |
+|------|-------------|------|-------------|
+| **走神** (wander) | DMN 主导 | 随机回忆 → 联想链 → 情感波动 | hippocampus.recall() |
+| **内部独白** (monologue) | TPN 主导 | 亚发声完整语言闭环 | Broca→MotorCortex→AF→PhonologicalLoop→Wernicke |
+| **情绪反刍** (rumination) | valence<-0.2, arousal>0.5 | 负效价记忆的重复回访 | hippocampus.recall() + 情感传染 |
+
+### 自主活动调度 (AutonomousLoop)
+
+```
+觉醒期:
+  ├─ 活跃 Reader + 认知负荷低 + TPN高  → reading 模式
+  ├─ DMN 主导 + 足够记忆集群            → wandering 模式
+  ├─ TPN 主导 + 足够记忆 + Broca可用    → monologue 模式
+  ├─ 负效价+高唤醒                      → rumination 模式
+  ├─ 传感器活跃                         → streaming 模式
+  └─ 默认                               → idle 模式
+
+睡眠期:
+  └─ 跳过所有自主活动, VLPO 状态机自行推进
+```
+
+### Theta 参数 (L8, 3 新增, 共 59)
+
+| 参数 | 默认值 | 功能 |
+|------|--------|------|
+| `reading_fatigue_rate` | 0.03 | 每句阅读增加的认知负荷 |
+| `mind_wander_frequency` | 0.15 | 清醒静息时走神的概率 |
+| `autonomous_step_interval` | 1.0 | 自主模式步进间隔 (秒) |
+
+### Web 仪表板面板
+
+| 面板 | 内容 | 更新频率 |
+|------|------|---------|
+| 🎭 情感仪表 | valence/arousal gauge + 核心情感空间轨迹 (Canvas 折线图) | SSE 500ms |
+| 🏃 身体状态 | b[0]-b[8] 水平条形图 (社交/能量/压力/新颖/专注/视觉/听觉/认知/组织) | SSE 500ms |
+| 👁 AI看到的画面 | 摄像头帧 128×128 + V1/V2/V4/IT 通道强度条 | 独立 SSE 200ms |
+| 🕐 昼夜 & 睡眠 | SCN 相位时钟 + 褪黑素/皮质醇/睡眠压力 + 睡眠状态指示 | SSE 500ms |
+| 🧠 记忆 & 学习 | 情景/语义/自我 集群数 + F组分趋势 + 阅读进度 | SSE 500ms |
+| 🔊 AI听到的声音 | 波形动画 (Canvas) + Mel 频谱热力图 + 声源方位罗盘 | SSE 500ms |
+| 💬 聊天栏 | 对话历史 + 输入框 + 阅读控制按钮 | event-driven |
+
+### 文件变更
+
+| 文件 | 变更 |
+|------|------|
+| `entry/autonomous.py` | **NEW** — AutonomousLoop 自主时间流引擎 |
+| `tools/reader.py` | **NEW** — Reader 通用文本阅读器 |
+| `cerebrum/association/internal_life.py` | **NEW** — 内部生命系统 |
+| `tools/telemetry.py` | **NEW** — 长期遥测记录器 |
+| `web/server.py` | **NEW** — Flask REST API + SSE |
+| `web/static/index.html` | **NEW** — 单页仪表板 |
+| `cns/agent.py` | +light_step() + internal_thought() + 自主模式属性 |
+| `cerebrum/association/dmn.py` | +spontaneous_recall() + mind_wander_chain() + 持久化 |
+| `cns/data_types.py` | +3 L8 Theta 参数 + ReadingState dataclass, validate 56→59 |
+| `cns/params.py` | +3 L8 默认值/边界 |
+| `brainstem_cerebellum/neuromodulatory/meta_learning.py` | +3 L8 参数初始化 |
+| `cns/persistence.py` | +Reader/InternalLife/Telemetry/自主状态 序列化, v6.4 |
+| `entry/interactive.py` | +--auto 标志 + _run_autonomous() |
+| `requirements.txt` | **NEW** — 依赖声明 |
+| `tests/test_v6_4_resident.py` | **NEW** — 9 项单元测试 |
+| `PROJECT_STATUS.md` | 更新到 v6.4 |
+
+### 已知问题
+
+1. **内部独白依赖 Broca 纯净模式**: 初始词汇少时生成质量低，随互动增长而改善
+2. **Web 模式需手动 `pip install flask`**: 不在核心依赖中，但 `requirements.txt` 已声明
+3. **Reader 文件需 UTF-8 编码**: 非 UTF-8 文件会加载失败
+4. **长期运行内存**: 遥测 CSV 无限增长，需定期归档 (未来版本)
 
 ---
 

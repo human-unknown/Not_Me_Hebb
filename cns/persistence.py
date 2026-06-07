@@ -30,7 +30,7 @@ from typing import Optional
 # 版本管理
 # ================================================================
 
-SAVE_VERSION = "6.3"  # v6.3: +SCN/VLPO/circadian/sleep state
+SAVE_VERSION = "6.4"  # v6.4: +autonomous mode/reading/telemetry/internal_life
 SAVE_DIR = ".notme/sessions"
 
 
@@ -475,6 +475,18 @@ def save_agent(agent, path: str = None, name: str = None,
         'sleep_history_len': len(agent.sleep_history),
     }
 
+    # ---- v6.4: Autonomous mode + Reader + InternalLife ----
+    data['autonomous'] = {
+        'mode': getattr(agent, '_autonomous_mode', False),
+        'last_activity': getattr(agent, '_last_activity', 'idle'),
+    }
+    if hasattr(agent, 'reader') and agent.reader is not None:
+        data['reader_state'] = agent.reader.get_state_for_save()
+    if hasattr(agent, 'internal_life') and agent.internal_life is not None:
+        data['internal_life_state'] = agent.internal_life.get_state_for_save()
+    if hasattr(agent, 'telemetry') and agent.telemetry is not None:
+        data['telemetry_meta'] = agent.telemetry.get_session_info()
+
     # ---- v6.0: Semantic Memory ----
     if hasattr(agent, 'semantic_memory') and agent.semantic_memory is not None:
         sm = agent.semantic_memory
@@ -777,6 +789,21 @@ def restore_agent(agent, data: dict, verbose: bool = True):
     if 'sleep_tracking' in data:
         agent._asleep_steps = int(data['sleep_tracking'].get('asleep_steps', 0))
         agent._wake_steps = int(data['sleep_tracking'].get('wake_steps', 0))
+
+    # ---- v6.4: Autonomous mode + Reader + InternalLife ----
+    if 'autonomous' in data:
+        agent._autonomous_mode = data['autonomous'].get('mode', False)
+        agent._last_activity = data['autonomous'].get('last_activity', 'idle')
+    if 'reader_state' in data:
+        if not hasattr(agent, 'reader') or agent.reader is None:
+            from tools.reader import Reader
+            agent.reader = Reader()
+        agent.reader.restore_from_save(data['reader_state'])
+    if 'internal_life_state' in data:
+        if not hasattr(agent, 'internal_life') or agent.internal_life is None:
+            from cerebrum.association.internal_life import InternalLife
+            agent.internal_life = InternalLife()
+        agent.internal_life.restore_from_save(data['internal_life_state'])
 
     # Consolidation
     if 'consolidation' in data:

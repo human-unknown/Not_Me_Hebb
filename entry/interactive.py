@@ -926,15 +926,94 @@ class InteractiveSession:
 def main():
     """入口点."""
     import argparse
-    parser = argparse.ArgumentParser(description='NotMe v5.7 Interactive')
+    parser = argparse.ArgumentParser(description='NotMe v6.4 Interactive')
     parser.add_argument('--fresh', action='store_true',
                        help='Force fresh session (ignore saves)')
     parser.add_argument('--load', type=str, default=None,
                        help='Load specific save by name')
+    parser.add_argument('--auto', action='store_true',
+                       help='Autonomous mode — agent runs continuously')
+    parser.add_argument('--steps', type=int, default=None,
+                       help='Steps to run in --auto mode (default: infinite)')
     args = parser.parse_args()
 
-    session = InteractiveSession(load_path=args.load, fresh=args.fresh)
-    session.run()
+    if args.auto:
+        _run_autonomous(args)
+    else:
+        session = InteractiveSession(load_path=args.load, fresh=args.fresh)
+        session.run()
+
+
+def _run_autonomous(args):
+    """v6.4: 控制台自主模式."""
+    import time
+    from cns.agent import Agent
+    from cns.data_types import BodyVector, ACTION_DIRECTIONS
+    from cns.innate import apply_innate_config
+    from cns.persistence import latest_save
+    from entry.autonomous import AutonomousLoop
+    from cerebrum.association.internal_life import InternalLife
+    from tools.telemetry import Telemetry
+    from tools.reader import Reader
+
+    # 创建或加载 Agent
+    rng = np.random.default_rng(42)
+    if not args.fresh:
+        auto_path = latest_save()
+    else:
+        auto_path = None
+
+    if auto_path and not args.fresh:
+        agent, meta = Agent.load(auto_path, verbose=True)
+        apply_innate_config(agent)
+        agent.internal_life = InternalLife()
+        agent.telemetry = Telemetry()
+        agent.reader = Reader()
+    else:
+        agent = Agent(rng=rng, agent_id=0, n_agents=1)
+        agent.body = BodyVector(mode='text')
+        apply_innate_config(agent)
+        agent.internal_life = InternalLife()
+        agent.telemetry = Telemetry()
+        agent.reader = Reader()
+
+    agent.record_action_consequence = lambda s: None
+    ACTION_DIRECTIONS[3] = [0.0, 0.0]
+    ACTION_DIRECTIONS[4] = [0.0, 0.0]
+
+    # Broca
+    from environments.text_interface import TextEnvironment
+    from cerebrum.frontal_lobe.broca import Broca
+    te = TextEnvironment()
+    broca = Broca(text_env=te, load_corpus=False)
+
+    # Autonomous loop
+    loop = AutonomousLoop(agent, broca=broca, steps_per_second=10)
+    loop.reader = agent.reader
+    loop.telemetry = agent.telemetry
+    loop.internal_life = agent.internal_life
+
+    print("=" * 50)
+    print("  NotMe v6.4 — Autonomous Mode")
+    print(f"  Clusters: {agent.net.n_clusters}")
+    print(f"  Mode: {'fresh' if args.fresh else 'from save'}")
+    print(f"  Steps: {'infinite' if args.steps is None else args.steps}")
+    print("  Press Ctrl+C to stop")
+    print("=" * 50)
+
+    try:
+        stats = loop.run(duration_steps=args.steps, blocking=True)
+        print(f"\n  Run complete: {stats['total_ticks']} ticks")
+        print(f"  Modes: {stats['mode_counts']}")
+        print(f"  Sleep: {stats['sleep_ticks']} ticks ({100*stats['sleep_ticks']/max(1,stats['total_ticks']):.1f}%)")
+    except KeyboardInterrupt:
+        print("\n  Stopping...")
+        loop.stop()
+
+    # 保存
+    agent.telemetry.flush()
+    path = agent.save(name=f"auto_{time.strftime('%Y%m%d_%H%M%S')}")
+    print(f"  Saved: {path}")
 
 
 if __name__ == '__main__':

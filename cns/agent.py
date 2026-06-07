@@ -273,6 +273,14 @@ class Agent:
         self.fpn_gain_mean_history: list[float] = []   # FPN 注意力模板平均增益
         self.attended_sensory: np.ndarray = None       # 最新 FPN 门控后的感知
 
+        # v6.4: 自主模式 & 长期常驻学习
+        self._autonomous_mode: bool = False           # 是否处于自主运行模式
+        self._last_activity: str = 'idle'             # 最近活动类型
+        self._last_thought: str = ""                  # 最近内部思维文本 (用于显示)
+        self.internal_life = None                     # InternalLife (Phase 3 填充)
+        self.telemetry = None                         # Telemetry (Phase 4 填充)
+        self.reader = None                            # Reader (Phase 4 填充)
+
     def step(self, sensory: np.ndarray, step_count: int,
              my_pos: np.ndarray = None,
              social_ctx = None) -> Action:
@@ -1681,3 +1689,397 @@ class Agent:
             comprehension_vec=comp,
             dialogue_ctx_vec=ctx,
         )
+
+    # ================================================================
+    # v6.4: 自主模式 — light_step + internal_thought
+    # ================================================================
+
+    def light_step(self, step_count: int,
+                   activity: str = 'idle',
+                   text_input: str = None) -> dict:
+        """自主模式的轻量 step: 不依赖外部 sensory 输入。
+
+        与 step() 的核心区别:
+          - 不需要外部 sensory 向量 → 全部使用语义代理模式
+          - 视觉/听觉管线用 text 段驱动 (已有模式C)
+          - 不执行行动选择 (无环境需要 Action)
+          - 返回活动摘要 dict 而非 Action
+
+        全管线仍然推进:
+          - SCN 昼夜节律 + VLPO 睡眠/觉醒
+          - 下丘脑稳态 + VTA RPE + LC NE
+          - L0 Hebb 学习 + 语义记忆
+          - FPN/TPN 动态 (弱化版)
+          - 自由能计算 + 情感更新
+          - 身体动力学
+
+        Args:
+            step_count: 当前步数
+            activity: 活动标签 ('idle'|'reading'|'wandering'|'monologue'|'streaming')
+            text_input: 可选 — 文本输入 (阅读句子 / 内部独白种子)
+
+        Returns:
+            dict with activity summary
+        """
+        from cns.data_types import D, M_V1_START, D_VISUAL_V5, BINDING_END
+        from cns.data_types import CN_START, AC_END
+
+        VIS_START, VIS_END = M_V1_START, BINDING_END
+        AUD_START, AUD_END = CN_START, AC_END
+
+        # 构建最小感知向量: 用 text_input 或最近理解向量填充文本段
+        sensory = np.zeros(D, dtype=np.float32)
+        if text_input is not None:
+            try:
+                from environments.text_interface import TextEnvironment
+                te = TextEnvironment()
+                sensory[:64] = te.encode_text(text_input)[:64].astype(np.float32)
+            except Exception:
+                sensory[:64] = self._last_comprehension[:64].copy()
+        else:
+            # 无外部输入 → 用最近理解的衰减版
+            sensory[:64] = (self._last_comprehension[:64] * 0.5).astype(np.float32)
+
+        # ---- Phase -1: SCN 昼夜节律更新 ----
+        effective_light = self._light_level if not self.vlpo.is_asleep else 0.0
+        allostatic_load = 0.0
+        if self.body is not None:
+            allostatic_load = float(np.clip(
+                self.body.b[2] * 0.5 + self.body.compute_deviation() * 0.3,
+                0.0, 1.0))
+
+        sleep_phase_for_scn = 'none'
+        if self.vlpo.is_asleep:
+            sleep_phase_for_scn = 'rem' if self.vlpo.is_in_rem else 'nrem'
+
+        self._circadian_state = self.scn.step(
+            light_level=effective_light,
+            is_asleep=self.vlpo.is_asleep,
+            allostatic_load=allostatic_load,
+            sleep_phase=sleep_phase_for_scn,
+            circa_tau=self.theta.circa_tau,
+            circa_light_sensitivity=self.theta.circa_light_sensitivity,
+        )
+
+        # ---- Phase -0.5: VLPO 睡眠-觉醒评估 ----
+        time_in_sleep_ratio = 0.0
+        if self.vlpo.is_asleep and self._asleep_steps > 0:
+            time_in_sleep_ratio = min(1.0,
+                (1.0 - self._circadian_state.sleep_pressure) / 0.65)
+        nrem_ratio = self.theta.nrem_duration_ratio
+        if time_in_sleep_ratio > 0.5:
+            nrem_ratio = max(0.35, nrem_ratio - 0.3 * (time_in_sleep_ratio - 0.5))
+
+        self._sleep_state = self.vlpo.update(
+            sleep_propensity=self._circadian_state.sleep_propensity,
+            sleep_pressure=self._circadian_state.sleep_pressure,
+            threshold=self.theta.sleep_pressure_threshold,
+            nrem_ratio=nrem_ratio,
+        )
+
+        if self.vlpo.is_asleep:
+            self._asleep_steps += 1
+            self._wake_steps = 0
+        else:
+            self._asleep_steps = 0
+            self._wake_steps += 1
+
+        # ---- Phase 0 (简化): 视觉/听觉语义代理 ----
+        # 视觉语义代理 (已有模式C — 从 text 段检索 Hebb 质心)
+        if hasattr(self, 'visual_hierarchy') and hasattr(self, 'fpn'):
+            try:
+                text_vec = sensory[0:64].copy()
+                if np.linalg.norm(text_vec) > 0.01:
+                    vis_proxy = np.zeros(D_VISUAL_V5, dtype=np.float32)
+                    if self.net.n_clusters > 0:
+                        c = self.net.recall(text_vec[:48])
+                        if c is not None:
+                            vis_proxy = c.centroid[VIS_START:VIS_END].copy()
+                    sensory[VIS_START:VIS_END] = vis_proxy
+                    self._current_visual_result = {
+                        'F_accuracy': 0.05, 'PE_total': 0.0,
+                        'diagnostics': {
+                            'V1_mean_norm': float(np.mean(np.abs(vis_proxy[:64]))),
+                            'V2_mean_norm': float(np.mean(np.abs(vis_proxy[64:128]))),
+                            'V4_mean_norm': float(np.mean(np.abs(vis_proxy[128:192]))),
+                            'IT_mean_norm': float(np.mean(np.abs(vis_proxy[240:]))),
+                            'mode': 'autonomous_semantic_proxy',
+                        },
+                    }
+            except Exception:
+                pass
+
+        # 听觉语义代理
+        if hasattr(self, 'auditory_hierarchy'):
+            try:
+                text_vec = sensory[0:64].copy()
+                aud_result = self.auditory_hierarchy.process(
+                    semantic_vec=text_vec,
+                    arousal=0.5,
+                    fpn=self.fpn,
+                    visual_spatial=None,
+                    learn=False,  # 自主模式听觉不做新学习
+                )
+                sensory[AUD_START:AUD_END] = aud_result['sensory'][:AUD_END-AUD_START]
+                self._current_auditory_result = aud_result
+            except Exception:
+                pass
+
+        # ---- Phase 0d: 下丘脑稳态 ----
+        if hasattr(self, 'hypothalamus'):
+            try:
+                latest_arousal = self.arousal_history[-1] if self.arousal_history else 0.5
+                stress_level = float(self.body.b[2]) if self.body is not None else 0.0
+                hypo_result = self.hypothalamus.process(
+                    body_vector=self.body,
+                    time_of_day=self.scn.get_time_of_day(),
+                    stress_level=stress_level,
+                    arousal=latest_arousal,
+                )
+                self._hypo_result = hypo_result
+            except Exception:
+                pass
+
+        # ---- Phase 0e: VTA RPE ----
+        if hasattr(self, 'vta'):
+            try:
+                v = self.valence_history[-1] if self.valence_history else 0.0
+                f_body = self.F_body_history[-1] if self.F_body_history else 0.0
+                vta_result = self.vta.process(
+                    valence=v, delta_valence=0.0,
+                    F_body=f_body, delta_F_body=0.0,
+                    social_reward=0.0, novelty=0.0,
+                    arousal=0.5,
+                    base_learn_rate=self.theta.learn_rate_l0,
+                )
+                self.net.learn_rate_modifier = vta_result['learn_rate_multiplier']
+                self._vta_result = vta_result
+            except Exception:
+                self.net.learn_rate_modifier = 1.0
+
+        # ---- Phase 0f: LC NE ----
+        if hasattr(self, 'locus_coeruleus'):
+            try:
+                latest_arousal_lc = self.arousal_history[-1] if self.arousal_history else 0.5
+                lc_result = self.locus_coeruleus.process(
+                    arousal=latest_arousal_lc,
+                    novelty=0.0,
+                    stress=0.0,
+                    F_body=0.0,
+                    task_engagement=0.2,
+                )
+                if self.vlpo.is_asleep:
+                    vlpo_ne = self.vlpo.get_ne_level()
+                    lc_result['tonic_ne'] = vlpo_ne
+                    lc_result['total_ne'] = vlpo_ne
+                self._lc_result = lc_result
+            except Exception:
+                pass
+
+        # ---- L0: 学习 + 衰减 ----
+        self.net.learn(sensory)
+        self.net.learn_rate_modifier = 1.0
+        self.net.decay()
+
+        # 语义记忆 (每 5 步)
+        if hasattr(self, 'semantic_memory') and step_count % 5 == 0:
+            try:
+                gist_vec = np.zeros(D, dtype=np.float32)
+                gist_vec[:64] = sensory[:64]
+                if self.body is not None and len(self.body.b) >= 8:
+                    gist_vec[64:72] = self.body.b[:8].astype(np.float32)
+                v = self.valence_history[-1] if self.valence_history else 0.0
+                a = self.arousal_history[-1] if self.arousal_history else 0.0
+                gist_vec[72] = v
+                gist_vec[73] = a
+                self.semantic_memory.learn_fact(gist_vec, weight=0.2)  # 低权重
+            except Exception:
+                pass
+
+        # ---- 睡眠触发 (与 step() 相同逻辑) ----
+        if self.vlpo.is_asleep and self._asleep_steps == 1:
+            self._last_sleep_stats = {}
+        elif not self.vlpo.is_asleep and self._asleep_steps == 0 and self._wake_steps == 1:
+            if self._last_sleep_stats:
+                self.sleep_history.append(self._last_sleep_stats)
+                self.consolidation_history.append(self._last_sleep_stats)
+
+        if (self.vlpo.is_asleep and
+            self._sleep_state.state == 'nrem_n3' and
+            self._sleep_state.time_in_state == 1):
+            cb_result = self.maybe_consolidate(broca=None)
+            sleep_duration = 25
+            dual_stats = dual_phase_sleep(
+                net=self.net, theta=self.theta,
+                semantic_memory=self.semantic_memory if hasattr(self, 'semantic_memory') else None,
+                amygdala=None,
+                striatum=self.striatum if hasattr(self, 'striatum') else None,
+                nrem_duration_ratio=self.theta.nrem_duration_ratio,
+                sleep_duration_steps=sleep_duration,
+            )
+            self._last_sleep_stats = dual_stats.get('combined', {})
+            self.consolidation_counter = 0
+        else:
+            self.consolidation_counter += 1
+
+        # ---- L1: 自由能计算 ----
+        belief = self._belief_vector()
+        F = compute_free_energy(belief, sensory, self.net, self.theta,
+                                self.hab, self.beliefs, self.body, None)
+        self.hab.update(F.total)
+        self.F_history.append(F.total)
+        self.F_body_history.append(F.body)
+        self.F_social_history.append(F.social)
+        self.F_cognitive_history.append(F.cognitive)
+        self.F_accuracy_history.append(F.accuracy)
+        self.valence_history.append(F.valence)
+        self.arousal_history.append(F.arousal)
+        self.attention_history.append(F.attention_precision)
+
+        # ---- TPN/DMN 跷跷板 (轻量) ----
+        conflict = float(np.tanh(abs(F.total - self.hab.running_F) * 2.0))
+        self.tpn.receive_salience(conflict_signal=conflict, novelty_signal=0.0, urgency=0.0)
+        task_demand = conflict
+        mind_wandering = max(0.05, 1.0 - F.arousal)
+        tpn_act, dmn_act = self.tpn.update_seesaw(
+            task_demand=float(np.clip(task_demand, 0.0, 1.0)),
+            mind_wandering_baseline=mind_wandering,
+            salience=self.tpn.salience_signal,
+        )
+        self.self_model.tpn_suppression = max(0.0, 1.0 - dmn_act)
+
+        # ---- Body ODE ----
+        self.body.step(4)  # REST action
+
+        # ---- DMN 耦合 ----
+        arousal_now = self.arousal_history[-1] if self.arousal_history else 0.0
+        valence_now = self.valence_history[-1] if self.valence_history else 0.0
+        if len(self.F_accuracy_history) >= 2:
+            F_acc_spike = max(0.0, self.F_accuracy_history[-1]
+                             - self.F_accuracy_history[-2])
+            coupling_prob = min(1.0, (F_acc_spike * 3.0 + arousal_now * 0.5))
+        else:
+            coupling_prob = 0.5 * arousal_now
+        if coupling_prob > 0.5:
+            self._auto_update_self_model(sensory, F, arousal_now, valence_now)
+
+        # ---- Meta learning ----
+        self.meta.update(F.total, self._last_belief if hasattr(self, '_last_belief') else belief,
+                        sensory, self.net, self.hab, self.beliefs)
+
+        # ---- 纹状体学习 (轻量) ----
+        if hasattr(self, 'striatum') and hasattr(self, '_vta_result'):
+            try:
+                da_signal = float(self._vta_result.get('rpe', 0.0))
+                reward = float(self._vta_result.get('total_da', 0.3))
+                self.striatum.learn(
+                    state_vec=sensory,
+                    action_idx=4,  # REST
+                    da_signal=da_signal,
+                    reward=reward,
+                    learn_rate=0.005,  # 低学习率
+                )
+            except Exception:
+                pass
+
+        # 更新追踪
+        self._last_activity = activity
+
+        # 返回活动摘要
+        return {
+            'activity': activity,
+            'F_total': float(F.total),
+            'F_body': float(F.body),
+            'valence': float(F.valence),
+            'arousal': float(F.arousal),
+            'is_asleep': self.vlpo.is_asleep,
+            'sleep_state': self._sleep_state.state,
+            'tpn_act': float(tpn_act),
+            'dmn_act': float(dmn_act),
+            'n_clusters': self.net.n_clusters,
+            'step_count': step_count,
+        }
+
+    def internal_thought(self, thought_type: str = 'wander',
+                         broca=None) -> dict:
+        """触发一次内部思维活动 (v6.4).
+
+        委托给 InternalLife 实例执行。如果 InternalLife 未初始化，
+        使用简化回退路径。
+
+        Args:
+            thought_type: 'wander' | 'monologue' | 'rumination'
+            broca: Broca 实例 (仅 monologue 需要)
+
+        Returns:
+            dict with thought summary
+        """
+        if self.internal_life is not None:
+            return self.internal_life.trigger(self, thought_type, broca=broca)
+        else:
+            # 简化回退 (Phase 3 替换为完整 InternalLife)
+            return _fallback_internal_thought(self, thought_type, broca=broca)
+
+
+def _fallback_internal_thought(agent: Agent, thought_type: str,
+                                broca=None) -> dict:
+    """InternalLife 未初始化时的简化回退路径。"""
+    result = {'thought_type': thought_type, 'activity': 'thought',
+              'n_recalled': 0, 'words_generated': 0}
+
+    if thought_type == 'wander':
+        # 简化走神: 随机 recall 一个高激活集群
+        if agent.net.n_clusters > 0:
+            top_clusters = sorted(agent.net.clusters,
+                                 key=lambda c: c.activation, reverse=True)[:10]
+            if top_clusters:
+                import random
+                c = random.choice(top_clusters)
+                agent.net.recall(c.centroid[:64])  # 重新激活
+                result['n_recalled'] = 1
+
+    elif thought_type == 'monologue':
+        # 简化内部独白: 从自锚生成查询 → speak (亚发声)
+        if broca is not None and agent.net.n_clusters > 5:
+            try:
+                self_anchor = agent.self_model.get_self_anchor()
+                top = max(agent.net.clusters, key=lambda c: c.activation)
+                words, _, diag = agent.speak(
+                    broca=broca,
+                    query_vec=self_anchor,
+                    belief_vec=top.centroid,
+                    valence=agent.valence_history[-1] if agent.valence_history else 0.0,
+                    arousal=agent.arousal_history[-1] if agent.arousal_history else 0.5,
+                    max_words=8,
+                    temperature=0.9,
+                    use_phrase_structure=False,
+                )
+                result['words_generated'] = len(words)
+                if words:
+                    agent._last_thought = "".join(words)
+                    # 自听 → 语音回路
+                    try:
+                        from environments.text_interface import TextEnvironment
+                        te = TextEnvironment()
+                        thought_vec = te.encode_text("".join(words)).astype(np.float32)
+                        agent.phonological_loop.hear(thought_vec[:64])
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+    elif thought_type == 'rumination':
+        # 简化反刍: 只在高负效价时 recall 情感记忆
+        v = agent.valence_history[-1] if agent.valence_history else 0.0
+        a = agent.arousal_history[-1] if agent.arousal_history else 0.0
+        if v < -0.1 and a > 0.4 and agent.net.n_clusters > 0:
+            # 找最接近当前身体情感状态的集群
+            target = np.zeros(72, dtype=np.float32)
+            target[:64] = agent._last_comprehension[:64]
+            target[64] = v
+            target[65] = a
+            c = agent.net.recall(target)
+            if c is not None:
+                result['n_recalled'] = 1
+
+    return result
