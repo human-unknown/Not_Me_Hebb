@@ -198,6 +198,16 @@ class Theta:
     protection_decay: float = 0.995      # 保护信号每步衰减率
     candidate_max: int = 64              # 候选集群最大数量
 
+    # L6 (8): v6.2 记忆巩固优化 — 突触标签 + 激活持续性 + 巩固锁定
+    tag_window: int = 30                  # 标签寿命 (步)
+    tag_decay_rate: float = 0.05          # 标签衰减率/步
+    tag_capture_strength: float = 0.3     # 标签捕获额外学习率
+    persistence_decay_rate: float = 0.1   # 持续性衰减率/步
+    persistence_threshold_boost: float = 0.2  # 持续性带来的阈值降低比例
+    persistence_lr_boost: float = 0.5     # 持续性带来的学习率提升比例
+    consolidation_lock_factor: float = 0.5 # 每次巩固降低decay的因子
+    consolidation_lock_max: int = 10      # 最大巩固锁等级
+
     def to_dict(self) -> dict:
         """转为字典，便于参数扫描"""
         return {
@@ -231,6 +241,15 @@ class Theta:
             'developmental_stage': self.developmental_stage,
             'protection_decay': self.protection_decay,
             'candidate_max': self.candidate_max,
+            # v6.2: 记忆巩固优化
+            'tag_window': self.tag_window,
+            'tag_decay_rate': self.tag_decay_rate,
+            'tag_capture_strength': self.tag_capture_strength,
+            'persistence_decay_rate': self.persistence_decay_rate,
+            'persistence_threshold_boost': self.persistence_threshold_boost,
+            'persistence_lr_boost': self.persistence_lr_boost,
+            'consolidation_lock_factor': self.consolidation_lock_factor,
+            'consolidation_lock_max': self.consolidation_lock_max,
         }
 
     @classmethod
@@ -289,6 +308,11 @@ class Cluster:
     protection_score: float = 0.0   # CD47 保护信号 — 被使用的累积量
     pnn_level: float = 0.0          # PNN 包裹程度 [0,1] — 高 = 结构锁定
     stdp_links: dict = None         # STDP 出边 {target_cluster_id: weight}
+    # v6.2: 记忆巩固优化 — 突触标签 + 持续性 + 锁定
+    tag: float = 0.0                # 突触标签强度 [0,1] — 弱激活→后续强学习可捕获
+    tag_age: int = 0                # 标签自设置以来的步数
+    activation_persistence: float = 0.0  # CaMKII 样激活持续性 [0,1]
+    consolidation_count: int = 0     # 存活的睡眠巩固次数 (PKMζ 锁定等级)
 
     def __post_init__(self):
         if self.centroid.shape != (D,):
@@ -518,10 +542,10 @@ class BodyVector:
 # ============================================================
 
 def validate_theta(theta: Theta) -> bool:
-    """验证 Theta 参数数量 = 40 (v6.1)"""
+    """验证 Theta 参数数量 = 48 (v6.2)"""
     n = len(theta.to_dict())
-    if n != 40:
-        raise ValueError(f"Theta 必须有 40 个参数，当前有 {n}")
+    if n != 48:
+        raise ValueError(f"Theta 必须有 48 个参数，当前有 {n}")
     return True
 
 

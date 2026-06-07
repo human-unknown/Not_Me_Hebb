@@ -682,6 +682,16 @@ class Agent:
             except Exception:
                 pass
 
+        # ---- v6.2: 突触标签捕获 (STC 假说) ----
+        # 高唤醒/高F_body偏差 = 细胞检测到"重要事件" → 触发PRP合成
+        # → 带标签的簇获得额外巩固
+        F_body_delta = (self.F_body_history[-1] - self.F_body_history[-2]
+                        if len(self.F_body_history) >= 2 else 0.0)
+        try:
+            self.net.capture_tags(arousal=F.arousal, F_body_delta=F_body_delta)
+        except Exception:
+            pass
+
         # ---- 社会信念更新 (M3) ----
         if my_pos is not None and self.n_agents > 1:
             update_social_beliefs(sensory, self.beliefs, my_pos, self.theta)

@@ -3,7 +3,7 @@ params.py —— 默认参数常量
 自由能原理智能体 — M1 单智能体生存
 """
 
-# 默认 Theta 参数字典（40 个 — v6.1: 32 + 8 发育优化）
+# 默认 Theta 参数字典（48 个 — v6.2: 40 + 8 记忆巩固优化）
 DEFAULT_THETA_DICT = {
     # L0 (6): 生成模型
     'sigma_z': 0.1,
@@ -49,6 +49,15 @@ DEFAULT_THETA_DICT = {
     'developmental_stage': 1,
     'protection_decay': 0.995,
     'candidate_max': 64,
+    # L6 (8): v6.2 记忆巩固优化 (突触标签 + 持续性 + 巩固锁定)
+    'tag_window': 30,
+    'tag_decay_rate': 0.05,
+    'tag_capture_strength': 0.3,
+    'persistence_decay_rate': 0.1,
+    'persistence_threshold_boost': 0.2,
+    'persistence_lr_boost': 0.5,
+    'consolidation_lock_factor': 0.5,
+    'consolidation_lock_max': 10,
 }
 
 # 参数边界 [min, max] —— 为 M4 参数扫描预留
@@ -93,4 +102,13 @@ PARAM_BOUNDS = {
     'developmental_stage': (1, 4),
     'protection_decay': (0.9, 0.999),
     'candidate_max': (16, 128),
+    # v6.2: 记忆巩固优化参数边界
+    'tag_window': (5, 200),
+    'tag_decay_rate': (0.005, 0.5),
+    'tag_capture_strength': (0.01, 1.0),
+    'persistence_decay_rate': (0.01, 0.5),
+    'persistence_threshold_boost': (0.0, 0.5),
+    'persistence_lr_boost': (0.0, 2.0),
+    'consolidation_lock_factor': (0.1, 5.0),
+    'consolidation_lock_max': (2, 50),
 }

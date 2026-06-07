@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v6.1 — 长期常驻学习 & 发育优化 (STDP + GluN2B轨迹 + PNN锁定 + 保护信号 + 沉默突触)
-> **日期**: 2026-06-06
-> **基于**: 《脑连接的形成》神经发育综述 + 自由能原理 + Hebb 可塑性
+> **版本**: v6.2 — 长期常驻学习 & 记忆巩固优化 (突触标签捕获 + CaMKII持续性 + PKMζ巩固锁定)
+> **日期**: 2026-06-07
+> **基于**: 《学习和记忆的分子机制》分子神经科学综述 + 自由能原理 + Hebb 可塑性
 
 ---
 
@@ -25,6 +25,7 @@
 | **v5.7** | **2026-06-06** | **发育年龄系统 + 会话持久化 + 多模态同步输入 + 实时传感器流 + Rich TUI + 纯净模式** |
 | **v6.0** | **2026-06-06** | **记忆系统完整实现 — 语义记忆/程序性记忆/干扰遗忘/跨会话系统巩固/零预训练纯净启动** |
 | **v6.1** | **2026-06-06** | **发育优化 — STDP时序学习 + GluN2B→GluN2A轨迹 + PNN结构锁定 + 保护信号(CD47) + 沉默突触 + 4阶段发育年龄** |
+| **v6.2** | **2026-06-07** | **记忆巩固优化 — 突触标签捕获(STC) + CaMKII激活持续性 + PKMζ巩固锁定** |
 
 ---
 
@@ -75,7 +76,7 @@
 | V4 (BA19) | `occipital_lobe/v4.py` | ★ v5.0 (M/P/K汇合) |
 | 视觉层级管线 | `occipital_lobe/visual_hierarchy.py` | ★ v5.0 (10模块编排) |
 | **边缘系统** | | |
-| 海马 | `limbic_system/hippocampus.py` | **★ UPGRADED v6.1** (+STDP时序学习 + 保护信号 + 沉默突触候选集群 + PNN结构锁定) |
+| 海马 | `limbic_system/hippocampus.py` | **★ UPGRADED v6.2** (+STDP +保护信号 +沉默突触 +PNN锁定 +**突触标签捕获 +CaMKII持续性 +PKMζ巩固锁定**) |
 | 杏仁核 | `limbic_system/amygdala.py` | **★ UPGRADED v6.0** (+恐惧条件作用) |
 | 扣带回/ACC | `limbic_system/cingulate.py` | ★ 已实现 (自由能计算) |
 | 岛叶 (BA13-16) | `limbic_system/insula.py` | ★ v5.4 (内感受+突显网络) |
@@ -123,7 +124,7 @@
 | 运动协调 | `cerebellum/motor_coordination.py` | ○ 占位 |
 | 时序预测 | `cerebellum/predictive_timing.py` | ○ 占位 |
 | **神经调节** | | |
-| 元学习 | `neuromodulatory/meta_learning.py` | **★ UPGRADED v6.1** (GluN2B→GluN2A轨迹 + 4阶段发育年龄 + get_developmental_factors) |
+| 元学习 | `neuromodulatory/meta_learning.py` | **★ UPGRADED v6.2** (GluN2B→GluN2A轨迹 + 4阶段发育年龄 + get_developmental_factors + **48参数初始化**) |
 | 可塑性调节 | `neuromodulatory/plasticity.py` | **★ NEW v6.1** (PlasticityRegulator: 发育+事件驱动+稳态+神经调质LTP/LTD门控) |
 
 #### 身体 + 脊髓 + 工具 + CNS
@@ -309,10 +310,10 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 | **2. 双向加工** | 前馈+反馈+语言双流+AF自我监控 | ✅ v5.6 | `fpn.py`, `arcuate_fasciculus.py` |
 | **3. 并行分布式** | M/P/K三流+听觉6核团+**6记忆系统并行** | ✅ **增强 v6.0** | 情景/语义/程序性/情感/自我/WM 六系统独立运行 |
 | **4. 注意力瓶颈** | FPN探照灯+TPN↔DMN跷跷板+**WM容量限制+中央执行器协调** | ✅ **增强 v6.0** | `fpn.py` 中央执行器, `working_memory.py`, `phonological_loop.py` |
-| **5. 赫布可塑性** | LTP/LTD+睡眠巩固+干扰遗忘+STDP时序学习+GluN2B轨迹+PNN锁定+保护信号+沉默突触+纹状体D1/D2+恐惧条件 | ✅ **增强 v6.1** | `hippocampus.py`, `striatum.py`, `amygdala.py`, `plasticity.py`, `meta_learning.py` |
+| **5. 赫布可塑性** | LTP/LTD+睡眠巩固+干扰遗忘+STDP时序+GluN2B轨迹+PNN锁定+保护信号+沉默突触+纹状体D1/D2+恐惧条件+**STC标签捕获+CaMKII持续性+PKMζ锁定** | ✅ **增强 v6.2** | `hippocampus.py`, `striatum.py`, `amygdala.py`, `plasticity.py`, `meta_learning.py` |
 | **6. 预测编码** | 自由能最小化+N400/P600+**语义熟悉度调制理解确信度** | ✅ **增强 v6.0** | `semantic_memory.py` knows_about()→理解boost, `cingulate.py` |
 
-### 规则实现度: 6/6 有代码支撑 (v6.1 规则5进一步增强 — STDP+GluN2B+PNN+保护信号+沉默突触)
+### 规则实现度: 6/6 有代码支撑 (v6.2 规则5进一步增强 — STC标签捕获+CaMKII持续性+PKMζ巩固锁定)
 
 ---
 
@@ -324,7 +325,7 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 | 隐状态 H | 16 |
 | 最大簇数 K | 256 (情景) / 1024 (语义) |
 | 行动数 A | 5 (grid) / 3 (dialogue) |
-| Theta 参数 | **40** (v6.1: +stdp_lr, stdp_window, stdp_weight, glun2b_ratio, pnn_formation_rate, developmental_stage, protection_decay, candidate_max) |
+| Theta 参数 | **48** (v6.2: +tag_window, tag_decay_rate, tag_capture_strength, persistence_decay_rate, persistence_threshold_boost, persistence_lr_boost, consolidation_lock_factor, consolidation_lock_max) |
 | 身体维度 M | 5 (grid) / 9 (text) |
 | 记忆系统 | **6** (情景+语义+程序性+情感+自我+工作记忆) |
 | 独立 ClusterNetwork 实例 | **8** (agent.net, self_model.net, AF.ventral, AF.dorsal, AG.grapheme_to_phoneme, TPJ.speaker_net, TPJ.intent_net, semantic_memory.net) |
@@ -347,6 +348,102 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 8. **v6.0 模块未经长期运行验证**: 语义记忆/纹状体/干扰遗忘的长时间交互效果需观察
 9. **v6.1 发育轨迹需长运行验证**: GluN2B半衰期5000步, PNN累积, 4阶段过渡需要在真实长对话中观察
 10. **STDP 效果依赖序列输入**: 当前对话模式下时序信息有限, STDP主要受益在词序链生成(Broca diffuse)
+
+---
+
+## v6.2 核心变更 — 记忆巩固优化 & 长期常驻学习
+
+### 设计哲学: 记忆不仅是"存储"，更是"选择性巩固"
+
+v6.1 让 Agent 的学习过程遵循神经发育规律（GluN2B 轨迹 + PNN 锁定 + 沉默突触）。
+v6.2 基于《学习和记忆的分子机制》综述，将三个经过实验验证的核心记忆巩固机制映射到计算抽象层。
+
+### 三个核心机制
+
+| 机制 | 神经科学基础 | v6.2 实现 | 关键效果 |
+|------|------------|----------|---------|
+| **突触标签与捕获 (STC)** | §2.2.4 — 弱激活设置标签 → PRPs 被带标签突触捕获 | Cluster.tag + tag_age + capture_tags() | 弱经历被后续强经历巩固 |
+| **激活持续性 (CaMKII 窗口)** | §2.1.1 — Thr286 自磷酸化使 CaMKII 在 Ca²⁺ 解离后持续激活 | Cluster.activation_persistence + _persistence_factor() | 近期激活的簇获得短暂的高可学习性窗口 |
+| **巩固锁定 (PKMζ 类比)** | §2.1.2 — PKMζ 结构性缺失调节域 → 自主持续催化 | Cluster.consolidation_count + decay 调制 | 多次巩固的簇获得 decay 保护 |
+
+### 突触标签捕获流程
+
+```
+低唤醒弱事件A     → recall(A) → A.tag = 0.6, A.tag_age = 0
+                                            ↓ (tag 窗口内)
+高唤醒强事件B     → learn(B)  → 高 arousal 触发 capture_tags()
+                                            ↓
+带标签的簇A       → A.activation += capture_lr × tag × 0.2  (额外巩固)
+                  → A.tag *= 0.5  (标签消耗)
+                  → A→B STDP 链接增强 (时序依赖)
+```
+
+### CaMKII 持续性窗口
+
+```
+recall() 匹配     → cluster.activation_persistence = 1.0  (峰值为 Ca²⁺ 脉冲)
+                                            ↓
+每步 decay()     → persistence *= (1 - persistence_decay_rate)  (~10步半衰)
+                                            ↓
+效果:             → 阈值调制: eff_threshold *= (1 - 0.2 × persistence)
+                  → 学习率调制: lr *= (1 + 0.5 × persistence)
+```
+
+### PKMζ 巩固锁定
+
+```
+睡眠巩固         → 存活簇 consolidation_count += 1 (上限 10)
+                                            ↓
+decay()          → effective_decay = base_decay / (1 + count × 0.5)
+                                            ↓
+效果:             → count=0: decay = 0.05
+                  → count=5: decay = 0.05/3.5 = 0.014
+                  → count=10: decay = 0.05/6 = 0.008
+```
+
+### Theta 参数扩展到 48 个 (L6 新增)
+
+| 新增参数 | 默认值 | 功能 |
+|---------|-------|------|
+| `tag_window` | 30 | 标签寿命 (步) |
+| `tag_decay_rate` | 0.05 | 标签衰减率/步 |
+| `tag_capture_strength` | 0.3 | 标签捕获额外学习率 |
+| `persistence_decay_rate` | 0.1 | 持续性衰减率/步 |
+| `persistence_threshold_boost` | 0.2 | 持续性带来的阈值降低比例 |
+| `persistence_lr_boost` | 0.5 | 持续性带来的学习率提升比例 |
+| `consolidation_lock_factor` | 0.5 | 每次巩固降低 decay 的因子 |
+| `consolidation_lock_max` | 10 | 最大巩固锁等级 |
+
+### Cluster 新增字段
+
+| 字段 | 类型 | 功能 |
+|------|------|------|
+| `tag` | float [0,1] | 突触标签强度 — 弱激活 → 后续强学习可捕获 |
+| `tag_age` | int | 标签自设置以来的步数 |
+| `activation_persistence` | float [0,1] | CaMKII 样激活持续性 |
+| `consolidation_count` | int [0,10] | 存活的睡眠巩固次数 |
+
+### 脑区对应
+
+| 分子机制 | 脑区 | v6.2 实现 |
+|---------|------|----------|
+| 突触标签 | 海马 CA3-CA1 突触后致密区 | Cluster.tag + tag_age |
+| 标签捕获 (PRP 合成) | 胞体 → 树突运输 → 标签突触 | capture_tags(arousal, F_body_delta) |
+| CaMKII 自磷酸化持续性 | 突触后致密区 (PSD) | Cluster.activation_persistence |
+| PKMζ 自主催化活性 | 新皮层 + KIBRA 锚定 | Cluster.consolidation_count + decay 调制 |
+
+### 文件变更
+
+| 变更类型 | 文件 | 行数变化 |
+|---------|------|---------|
+| **数据层** | `data_types.py` | +12 字段/参数 |
+| **参数** | `params.py` | +16 默认值/边界 |
+| **核心实现** | `hippocampus.py` | +60 行 (capture_tags + _persistence_factor + decay 调制 + sleep_replay 锁) |
+| **参数初始化** | `meta_learning.py` | +8 参数默认值 |
+| **持久化** | `persistence.py` | +8 行 (字段序列化) |
+| **集成** | `agent.py` | +8 行 (标签捕获 + F_body_delta 追踪) |
+| **测试** | `test_v6_2_memory.py` | +300 行 (6 单元测试) |
+| **修复** | `hippocampus.py` sleep_replay() | 修复 numpy array `not in` 比较 bug |
 
 ---
 

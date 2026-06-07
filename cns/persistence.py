@@ -30,7 +30,7 @@ from typing import Optional
 # 版本管理
 # ================================================================
 
-SAVE_VERSION = "5.7"
+SAVE_VERSION = "5.7"  # v6.2: schema updated with tag/persistence/consolidation fields
 SAVE_DIR = ".notme/sessions"
 
 
@@ -85,6 +85,11 @@ def _save_cluster_network(net) -> dict:
             'pnn_level': float(getattr(c, 'pnn_level', 0.0)),
             'stdp_links': {str(k): float(v) for k, v
                           in getattr(c, 'stdp_links', {}).items()},
+            # v6.2: 记忆巩固优化字段
+            'tag': float(getattr(c, 'tag', 0.0)),
+            'tag_age': int(getattr(c, 'tag_age', 0)),
+            'activation_persistence': float(getattr(c, 'activation_persistence', 0.0)),
+            'consolidation_count': int(getattr(c, 'consolidation_count', 0)),
         })
     # v6.1: 候选集群
     candidates_data = []
@@ -133,6 +138,11 @@ def _restore_cluster_network(net, data: dict):
         c.pnn_level = float(cd.get('pnn_level', 0.0))
         c.stdp_links = {int(k): float(v) for k, v
                        in cd.get('stdp_links', {}).items()}
+        # v6.2: 恢复记忆巩固优化字段
+        c.tag = float(cd.get('tag', 0.0))
+        c.tag_age = int(cd.get('tag_age', 0))
+        c.activation_persistence = float(cd.get('activation_persistence', 0.0))
+        c.consolidation_count = int(cd.get('consolidation_count', 0))
         net.clusters.append(c)
     net._n_clusters = len(net.clusters)
     # v6.1: 从恢复的簇重建桶 (旧桶引用指向序列化的旧对象)

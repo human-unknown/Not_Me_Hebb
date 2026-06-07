@@ -219,6 +219,12 @@ class ClusterNetwork:
         base_threshold = self.theta.cluster_threshold * (0.4 + 0.6 * active_ratio)
         eff_threshold = base_threshold * self._glun2b_threshold_factor()
 
+        # ---- v6.2: 亚阈值标签 ----
+        # 接近匹配但未达阈值的簇也可能在后续被巩固 (STC 假说)
+        if best_c is not None and best_sim >= eff_threshold * 0.7:
+            best_c.tag = max(best_c.tag, best_sim * 0.3)
+            best_c.tag_age = 0
+
         if best_c is not None and best_sim >= eff_threshold:
             # ---- v6.1: STDP 时序学习 ----
             prev_cluster = None
@@ -234,6 +240,11 @@ class ClusterNetwork:
 
             # ---- v6.1: 保护信号 ----
             best_c.protection_score += 0.02 * best_c.activation
+
+            # ---- v6.2: 突触标签 + 激活持续性 ----
+            best_c.tag = max(best_c.tag, best_c.activation * 0.5)
+            best_c.tag_age = 0
+            best_c.activation_persistence = 1.0  # CaMKII 样峰值
 
             best_c.activation = min(1.0, best_c.activation + 0.1)
             best_c.age += 1
@@ -390,6 +401,45 @@ class ClusterNetwork:
             self.buckets.setdefault(hash_key, []).append(oldest)
             return oldest
 
+    # ----- v6.2: 突触标签捕获 (STC 假说) -----
+    def capture_tags(self, arousal: float = 0.0, F_body_delta: float = 0.0):
+        """高唤醒 → 带标签的簇获得额外学习率 (STC §2.2.4).
+
+        模拟: 全细胞合成 PRPs → 只有带标签的突触能捕获。
+        高唤醒/高 F_body 偏差 = 细胞检测到"重要事件" → 触发 PRP 合成。
+
+        Args:
+            arousal: 当前唤醒度 [0, 1]
+            F_body_delta: F_body 变化幅度 (正=变差)
+        """
+        event_strength = max(0.0, arousal + 0.5 * abs(F_body_delta))
+        if event_strength < 0.3:
+            return  # 事件不够强，不触发捕获
+
+        capture_lr = self.theta.tag_capture_strength * event_strength
+        n_captured = 0
+        for c in self.clusters:
+            if c.tag > 0.01 and c.tag_age < self.theta.tag_window:
+                # 标签捕获: 向当前质心方向微调 (self-reinforcement)
+                # 不依赖具体输入 — 标签是"这个簇重要"的信号
+                c.activation = min(1.0, c.activation + capture_lr * c.tag * 0.2)
+                c.tag *= 0.5  # 标签消耗 (捕获后减弱)
+                n_captured += 1
+
+    # ----- v6.2: 激活持续性调制 -----
+    def _persistence_factor(self, cluster: Cluster) -> tuple[float, float]:
+        """CaMKII 样持续性 → 阈值降低 + 学习率提升因子.
+
+        Returns:
+            (threshold_factor [0.7, 1.0], lr_factor [1.0, 1.5])
+        """
+        p = cluster.activation_persistence
+        if p < 0.01:
+            return (1.0, 1.0)
+        threshold_mod = 1.0 - self.theta.persistence_threshold_boost * p
+        lr_mod = 1.0 + self.theta.persistence_lr_boost * p
+        return (float(threshold_mod), float(lr_mod))
+
     # ----- 学习 (learn) -----
     def learn(self, s: np.ndarray) -> Cluster:
         """学习新感知模式：匹配到则更新，否则创建新簇
@@ -401,6 +451,7 @@ class ClusterNetwork:
         4. 若未匹配且簇数 >= K → 替换最旧/最弱簇
 
         v6.1: +STDP +保护信号 +GluN2B调制 +PNN锁定 +沉默突触
+        v6.2: +突触标签捕获 +激活持续性调制
 
         Returns:
             被创建或更新的 Cluster
@@ -417,6 +468,10 @@ class ClusterNetwork:
                   * self._glun2b_factor())
             # 激活调制: 更强的匹配 → 更强的学习 (Hebb 机制)
             activation_factor = 0.3 + 0.7 * existing.activation  # [0.3, 1.0]
+
+            # ---- v6.2: 激活持续性调制 (CaMKII 窗口) ----
+            _, persistence_lr_factor = self._persistence_factor(existing)
+            activation_factor *= persistence_lr_factor
 
             # ---- v6.1: PNN 结构锁定 ----
             pnn_resistance = existing.pnn_level * 0.8  # PNN 减少最多 80% 学习率
@@ -588,14 +643,29 @@ class ClusterNetwork:
     def decay(self):
         """衰减所有簇的激活值 + v6.1: 保护信号衰减 + 候选集群老化.
 
+        v6.2: 突触标签衰减 + 激活持续性衰减.
         未激活的簇随时间 activation → 0（自然遗忘）。
         保护信号缓慢衰减——长期不用的簇逐渐失去保护。
         """
         for c in self.clusters:
-            c.activation *= (1 - self.theta.decay_rate)
+            # ---- v6.2: 巩固锁调制 decay ----
+            lock_divisor = 1.0 + c.consolidation_count * self.theta.consolidation_lock_factor
+            effective_decay = self.theta.decay_rate / min(lock_divisor,
+                                                          self.theta.consolidation_lock_max)
+            c.activation *= (1 - effective_decay)
             c.age += 1
             # v6.1: 保护信号缓慢衰减
             c.protection_score *= self.theta.protection_decay
+            # ---- v6.2: 突触标签衰减 ----
+            if c.tag > 0.001:
+                c.tag *= (1.0 - self.theta.tag_decay_rate)
+                c.tag_age += 1
+                if c.tag_age > self.theta.tag_window:
+                    c.tag = 0.0  # 过期标签清除
+            # ---- v6.2: 激活持续性衰减 ----
+            c.activation_persistence *= (1.0 - self.theta.persistence_decay_rate)
+            if c.activation_persistence < 0.001:
+                c.activation_persistence = 0.0  # 归零防止浮点积累
 
         # v6.1: 候选集群老化
         for cc in self._candidate_clusters:
@@ -886,13 +956,23 @@ def sleep_replay(net: ClusterNetwork, theta: Theta,
         protected_threshold = 0.01 / (1.0 + c.protection_score * 5.0)
         if c.activation <= protected_threshold:
             removed.append(c)
-    net.clusters = [c for c in net.clusters if c not in removed]
+    removed_ids = {id(c) for c in removed}
+    net.clusters = [c for c in net.clusters if id(c) not in removed_ids]
     # 同步桶
     for c in removed:
         key = net._hash_to_bucket(c.centroid)
         if key in net.buckets:
             net.buckets[key] = [x for x in net.buckets[key] if x is not c]
     n_removed = n_before - net.n_clusters
+
+    # ---- v6.2: 巩固锁定 (PKMζ 类比) ----
+    # 存活的簇 ← 递增 consolidation_count (模拟多轮睡眠巩固)
+    for c in net.clusters:
+        if c.consolidation_count < theta.consolidation_lock_max:
+            c.consolidation_count += 1
+    n_locked = sum(1 for c in net.clusters if c.consolidation_count > 0)
+    mean_lock = (sum(c.consolidation_count for c in net.clusters)
+                 / max(net.n_clusters, 1))
 
     # v6.1: 候选集群统计
     n_candidates_alive = len(net._candidate_clusters)
@@ -912,4 +992,7 @@ def sleep_replay(net: ClusterNetwork, theta: Theta,
                          / max(net.n_clusters, 1)),
         'mean_protection': float(sum(c.protection_score for c in net.clusters)
                                 / max(net.n_clusters, 1)),
+        # v6.2: 巩固锁统计
+        'n_locked_clusters': n_locked,
+        'mean_consolidation_lock': float(mean_lock),
     }
