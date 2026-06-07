@@ -719,6 +719,8 @@ v6.4 (4×2 grid, 聊天在底部)             v6.5 (聊天左列 + 数据3×3 gr
 | **布局** | 4×2 grid | **左侧对话 + 右侧3×3 compact grid** | 10面板 → 9面板+对话 |
 | **发育年龄** | 未显示 | **Header 中显示 Stage 1-4 + 阶段名称 (INFANT/CHILD/ADOLESCENT/ADULT)** | 从 meta.get_developmental_factors() 读取 |
 | **睡眠节奏** | NREM_REM_CYCLE_STEPS=30 (~30s) | **→300 (~5min)** + 所有相关常数 10× 缩放 | 适合演示观察 |
+| **睡眠时对话** | 直接处理, 无唤醒逻辑 | **强制唤醒** — VLPO抑制 + NE飙升 + 回应前缀 `[被唤醒]` | 社会刺激=紧急唤醒信号 |
+| **自听闭环(Web)** | Web聊天缺失 set_self_audio() | **完整闭环** — 自说话语义→情感传染→身体状态调制 | 与控制台模式一致 |
 
 ### 无现象学违规修复
 
@@ -743,6 +745,45 @@ v6.4 (4×2 grid, 聊天在底部)             v6.5 (聊天左列 + 数据3×3 gr
 | `REM_OFF_GROWTH_IN_REM` | 0.12 | **0.012** |
 | `FLIP_FLOP_MIN_STABLE` | 15 | **150** |
 
+### 睡眠时对话 — 社会唤醒机制
+
+Agent 睡眠时收到人类消息 → 强制唤醒 (生物合理性: 社会信号是强唤醒刺激):
+
+```
+人类输入 → interrupt_with_human_input()
+  → 检测 agent.vlpo.is_asleep
+  → VLPO 抑制 (vlpo_activation→0, _is_asleep→False)
+  → NE 觉醒中枢激活 (arousal_center_activity→0.6)
+  → 睡眠状态清零 (state→'awake', phase→'none')
+  → body.b[4] 专注度 +0.2 (模拟"被叫醒"的高唤醒)
+  → 正常处理对话 (带睡眠惯性)
+  → 回应前缀 "[被唤醒]"
+```
+
+| 状态 | 行为 |
+|------|------|
+| awake | 正常对话 |
+| NREM N1/N2/N3 | **强制唤醒** + 回应带 `[被唤醒]` 前缀 |
+| REM | **强制唤醒** + 回应带 `[被唤醒]` 前缀 |
+
+### 自听闭环修复 (Web 模式)
+
+v5.6 设计了完整的自听闭环，但 `autonomous.py` 的 `interrupt_with_human_input()` 中缺失了 `set_self_audio()` 调用，
+导致 Web 聊天的情感传染断链。v6.5 修复使 Web 与控制台模式一致:
+
+```
+Agent.speak() → response
+  → encode_text(response) → resp_vec
+  → self_sentiment = [valence, arousal, 0,0,0,0, v_raw]
+  → agent.set_self_audio(resp_vec, self_sentiment)
+  → 下一步 agent.step():
+      - self_valence_ema 更新 (α=0.15+attn*0.30)
+      - self_arousal_ema 更新
+      - body.b[0] 社交维度调制 (+0.025 * self_valence)
+      - 自我一致性检测 (认知失调: |current_v - self_valence_ema|)
+      - 失调→唤醒升高 (dissonance = (1-coherence)*0.2)
+```
+
 ### SSE API — 新增字段
 
 `_build_status()` 新增:
@@ -756,9 +797,10 @@ v6.4 (4×2 grid, 聊天在底部)             v6.5 (聊天左列 + 数据3×3 gr
 
 | 文件 | 变更 |
 |------|------|
-| `web/static/index.html` | **REWRITTEN** — 完整重写: 赛博生物CSS + 左对话右3×3布局 + 无现象学修复 + 发育年龄显示 + 新自由能面板 |
+| `web/static/index.html` | **REWRITTEN** — 赛博生物CSS + 左对话右3×3布局 + 无现象学修复 + 发育年龄显示 + 新自由能面板 |
 | `web/server.py` | +development 字段 + sleep.cycle_position + v6.4→v6.5 版本号 + emoji 清理 |
 | `brainstem_cerebellum/pons/vlpo.py` | 所有睡眠时间常数 10× 缩放 (30→300 周期步数) |
+| `entry/autonomous.py` | +睡眠唤醒检查 + `[被唤醒]` 通知 + **自听闭环修复** (set_self_audio) |
 | `entry/ui_components.py` | valence_emoji→valence_sign + 年龄 emoji→几何符号 |
 | `entry/interactive.py` | valence_emoji→valence_sign |
 | `PROJECT_STATUS.md` | 更新到 v6.5 新内容 |

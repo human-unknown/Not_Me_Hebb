@@ -589,6 +589,16 @@ class AutonomousLoop:
                     resp_vec = text_env.encode_text(response).astype(np.float32)
                 except Exception:
                     resp_vec = np.zeros(64, dtype=np.float32)
+
+                # ★ 自听闭环: Agent 听到自己说的话 → 情感传染 → 下一步身体状态
+                self_sent = np.array([
+                    float(agent.valence_history[-1] if agent.valence_history else 0),
+                    float(agent.arousal_history[-1] if agent.arousal_history else 0.5),
+                    0.0, 0.0, 0.0, 0.0,
+                    float(v),  # raw valence
+                ], dtype=np.float32)
+                agent.set_self_audio(resp_vec, self_sent)
+
                 agent.dialogue_ctx.add_turn(
                     human_text=human_text,
                     human_vec=human_vec,
