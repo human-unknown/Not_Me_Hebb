@@ -177,10 +177,10 @@ def test_vlpo_flip_flop():
     assert state.state == 'awake', f"Low propensity should stay awake: {state.state}"
     assert not vlpo.is_asleep
 
-    # 高 propensity → 睡眠
-    for _ in range(10):
+    # 高 propensity → 睡眠 (需连续满足 min_stable=15 步)
+    for _ in range(20):
         state = vlpo.update(sleep_propensity=0.75, sleep_pressure=0.7, threshold=0.65)
-    assert vlpo.is_asleep, f"High propensity should trigger sleep"
+    assert vlpo.is_asleep, f"High propensity should trigger sleep after 20 steps"
     # 初始睡眠阶段可能是 NREM 或 REM (取决于振荡器状态)
     # 验证 sleep_phase 是有效值
     assert state.phase in ('nrem', 'rem'), f"Invalid sleep phase: {state.phase}"

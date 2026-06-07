@@ -151,7 +151,7 @@ function setupCanvases() {
     {id: 'vizCanvas',     cssW: null, cssH: 128,  drawFn: 'camera'},
     {id: 'valenceCanvas', cssW: null, cssH: 60,   drawFn: 'valence'},
     {id: 'circaCanvas',   cssW: null, cssH: 50,   drawFn: 'circa'},
-    {id: 'trendCanvas',   cssW: null, cssH: 50,   drawFn: 'trend'},
+    {id: 'trendCanvas',   cssW: null, cssH: 80,   drawFn: 'trend'},
     {id: 'waveCanvas',    cssW: 256,  cssH: 60,   drawFn: 'wave'},
     {id: 'melCanvas',     cssW: 256,  cssH: 40,   drawFn: 'mel'},
     {id: 'azimuthCanvas', cssW: 80,   cssH: 40,   drawFn: 'azimuth'},
@@ -210,6 +210,8 @@ visSource.onmessage = (e) => {
   const vis = JSON.parse(e.data);
   if (vis.has_frame && vis.frame_b64) {
     drawCameraFrame(vis.frame_b64);
+  } else {
+    drawVisualPlaceholder();
   }
   updateVizBars(vis);
 };
@@ -371,6 +373,10 @@ function drawMemoryTrend(F) {
   const W = c.width, H = c.height;
   ctx.clearRect(0,0,W,H);
 
+  // Scale text sizes to canvas height
+  const labelFontSize = Math.max(10, H / 5);
+  const valFontSize = Math.max(9, H / 6);
+
   // Draw latest F components as horizontal bars
   const comps = [
     {label:'body', val: F.body||0, color:'#da3633'},
@@ -378,15 +384,25 @@ function drawMemoryTrend(F) {
     {label:'cognitive', val: F.cognitive||0, color:'#f0883e'},
     {label:'accuracy', val: F.accuracy||0, color:'#3fb950'},
   ];
+  const barH = Math.max(12, H / 4.5);
+  const gap = 2;
   comps.forEach((comp, i) => {
-    const y = 8 + i * 11;
-    ctx.fillStyle = '#8b949e'; ctx.font = '9px sans-serif';
-    ctx.fillText(comp.label, 2, y+8);
+    const y = gap + i * (barH + gap);
+    ctx.fillStyle = '#8b949e';
+    ctx.font = `${labelFontSize}px sans-serif`;
+    ctx.fillText(comp.label, 2, y + barH * 0.7);
+
     ctx.fillStyle = comp.color;
-    const w = Math.min(Math.abs(comp.val) * W * 0.6, W * 0.7);
-    ctx.fillRect(50, y, w, 9);
-    ctx.fillStyle = '#c9d1d9'; ctx.font = '8px sans-serif';
-    ctx.fillText(comp.val.toFixed(2), 54 + w, y+8);
+    const maxBarW = W - 70;
+    const w = Math.min(
+      Math.max(4, Math.abs(comp.val) * maxBarW * 0.6),
+      maxBarW
+    );
+    ctx.fillRect(55, y + 2, w, barH - 4);
+
+    ctx.fillStyle = '#c9d1d9';
+    ctx.font = `${valFontSize}px sans-serif`;
+    ctx.fillText(comp.val.toFixed(2), 59 + w, y + barH * 0.7);
   });
 }
 
@@ -397,8 +413,17 @@ function updateAudio() {
   status.style.color = aud.has_audio ? '#3fb950' : '#8b949e';
   document.getElementById('rmsVal').textContent = `Az: ${(aud.azimuth||0).toFixed(0)}°`;
 
-  if (aud.waveform && aud.waveform.length > 0) drawWaveform(aud.waveform);
-  if (aud.mel_spectrum && aud.mel_spectrum.length > 0) drawMelSpectrum(aud.mel_spectrum);
+  // Always draw — use silent baseline when no audio
+  if (aud.waveform && aud.waveform.length > 0) {
+    drawWaveform(aud.waveform);
+  } else {
+    drawSilentWaveform();
+  }
+  if (aud.mel_spectrum && aud.mel_spectrum.length > 0) {
+    drawMelSpectrum(aud.mel_spectrum);
+  } else {
+    drawSilentMelSpectrum();
+  }
   drawAzimuth(aud.azimuth || 0, aud.has_audio);
 }
 
@@ -431,6 +456,44 @@ function drawMelSpectrum(spec) {
     ctx.fillStyle = `hsl(${hue},70%,${30 + v*50}%)`;
     ctx.fillRect(i * barW, H - h, barW - 1, h);
   });
+}
+
+function drawSilentWaveform() {
+  const c = document.getElementById('waveCanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  // Flat center line
+  ctx.strokeStyle = '#30363d';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 8]);
+  ctx.beginPath();
+  ctx.moveTo(0, H/2);
+  ctx.lineTo(W, H/2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#484f58';
+  const fs = Math.max(8, H/5);
+  ctx.font = `${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('静默', W/2, H/2 - 4);
+  ctx.textAlign = 'start';
+}
+
+function drawSilentMelSpectrum() {
+  const c = document.getElementById('melCanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  // Draw empty bars (all same low height)
+  const nBins = 32;
+  const barW = W / nBins;
+  for (let i = 0; i < nBins; i++) {
+    ctx.fillStyle = '#21262d';
+    ctx.fillRect(i * barW, H - 2, barW - 1, 2);
+  }
 }
 
 function drawAzimuth(az, hasAudio) {
@@ -466,6 +529,30 @@ function drawCameraFrame(b64) {
     ctx.drawImage(img, 0, 0, c.width, c.height);
   };
   img.src = 'data:image/jpeg;base64,' + b64;
+}
+
+function drawVisualPlaceholder() {
+  const c = document.getElementById('vizCanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  // Draw "no camera" icon
+  ctx.fillStyle = '#161b22';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#30363d';
+  const cx = W/2, cy = H/2 - 6, r = Math.min(W, H) * 0.2;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+  // Camera body
+  ctx.fillStyle = '#484f58';
+  ctx.fillRect(cx - r*0.8, cy - r*0.4, r*1.6, r*1.2);
+  ctx.fillRect(cx - r*0.3, cy - r*0.8, r*0.6, r*0.4);
+  ctx.fillStyle = '#8b949e';
+  const fs = Math.max(10, H/8);
+  ctx.font = `${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('无摄像头', cx, cy + r*1.8);
+  ctx.textAlign = 'start';
 }
 
 function updateVizBars(vis) {

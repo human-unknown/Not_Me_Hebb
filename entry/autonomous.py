@@ -39,7 +39,7 @@ from typing import Optional
 # 常量
 # ============================================================
 
-DEFAULT_STEPS_PER_SECOND = 10    # 默认加速模式
+DEFAULT_STEPS_PER_SECOND = 1     # 正常自主模式: 1 step/s (≈30s biological per step)
 REALTIME_STEPS_PER_SECOND = 1.0 / 30.0  # 实时模式: 1 step ≈ 30s
 
 # 模式切换阈值

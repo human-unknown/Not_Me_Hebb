@@ -463,7 +463,7 @@ def init_agent(fresh: bool = False):
 
     # Autonomous loop
     from entry.autonomous import AutonomousLoop
-    _loop = AutonomousLoop(_agent, broca=_broca, steps_per_second=10)
+    _loop = AutonomousLoop(_agent, broca=_broca, steps_per_second=1)
     _loop.reader = _agent.reader
     _loop.telemetry = _agent.telemetry
     _loop.internal_life = _agent.internal_life

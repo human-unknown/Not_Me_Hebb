@@ -34,7 +34,8 @@ from cns.data_types import SleepState
 # ============================================================
 
 # 触发器开关参数
-FLIP_FLOP_HYSTERESIS = 0.15    # 迟滞 — 防止频繁切换 (睡眠需要更强信号)
+FLIP_FLOP_HYSTERESIS = 0.20    # 迟滞 — 防止频繁切换 (睡眠需要更强信号)
+FLIP_FLOP_MIN_STABLE = 15      # ★ 最短稳态步数 — 必须连续满足条件才能翻转
 VLPO_ACTIVATION_RATE = 0.3     # VLPO 激活速度
 AROUSAL_CENTER_DECAY = 0.85    # 觉醒中枢在睡眠中的衰减因子
 
@@ -78,6 +79,7 @@ class FlipFlopSwitch:
         self.arousal_center_activity: float = 0.6  # 觉醒中枢活动 [0, 1]
         self._is_asleep: bool = False
         self._stable_counter: int = 20          # 初始稳定在清醒
+        self._transition_pending: int = 0       # 待翻转计数器 (连续满足条件)
 
     def update(self, sleep_propensity: float,
                threshold: float = 0.65) -> tuple[bool, float, float]:
@@ -91,12 +93,18 @@ class FlipFlopSwitch:
             (is_asleep, vlpo_activation, arousal_center_activity)
         """
         hysteresis = FLIP_FLOP_HYSTERESIS
+        min_stable = FLIP_FLOP_MIN_STABLE
 
         if not self._is_asleep:
-            # 清醒 → 睡眠: 需要超过阈值
+            # 清醒 → 睡眠: 需要连续超过阈值 min_stable 步
             if sleep_propensity > threshold:
-                self._is_asleep = True
-                self._stable_counter = 0
+                self._transition_pending += 1
+                if self._transition_pending >= min_stable:
+                    self._is_asleep = True
+                    self._stable_counter = 0
+                    self._transition_pending = 0
+            else:
+                self._transition_pending = max(0, self._transition_pending - 1)
 
             # VLPO 受睡眠倾向驱动
             self.vlpo_activation = float(np.clip(
@@ -110,10 +118,15 @@ class FlipFlopSwitch:
                 0.05 * (1.0 - sleep_propensity) * 1.5,
                 0.1, 1.0))
         else:
-            # 睡眠 → 清醒: 需要低于 (threshold - hysteresis)
+            # 睡眠 → 清醒: 需要连续低于 (threshold - hysteresis) min_stable 步
             if sleep_propensity < (threshold - hysteresis):
-                self._is_asleep = False
-                self._stable_counter = 0
+                self._transition_pending += 1
+                if self._transition_pending >= min_stable:
+                    self._is_asleep = False
+                    self._stable_counter = 0
+                    self._transition_pending = 0
+            else:
+                self._transition_pending = max(0, self._transition_pending - 1)
 
             # VLPO 在睡眠中保持高
             self.vlpo_activation = float(np.clip(
