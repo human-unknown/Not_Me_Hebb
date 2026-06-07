@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v6.2 — 长期常驻学习 & 记忆巩固优化 (突触标签捕获 + CaMKII持续性 + PKMζ巩固锁定)
+> **版本**: v6.3 — 长期常驻学习 & 睡眠优化与时间维度 (SCN昼夜节律 + NREM/REM双相睡眠 + α注意门控 + 类淋巴清除)
 > **日期**: 2026-06-07
-> **基于**: 《学习和记忆的分子机制》分子神经科学综述 + 自由能原理 + Hebb 可塑性
+> **基于**: 《脑节律与睡眠》综合文档 + 自由能原理 + Hebb 可塑性 + 双过程睡眠模型 (Borbély) + Saper触发器开关
 
 ---
 
@@ -26,6 +26,7 @@
 | **v6.0** | **2026-06-06** | **记忆系统完整实现 — 语义记忆/程序性记忆/干扰遗忘/跨会话系统巩固/零预训练纯净启动** |
 | **v6.1** | **2026-06-06** | **发育优化 — STDP时序学习 + GluN2B→GluN2A轨迹 + PNN结构锁定 + 保护信号(CD47) + 沉默突触 + 4阶段发育年龄** |
 | **v6.2** | **2026-06-07** | **记忆巩固优化 — 突触标签捕获(STC) + CaMKII激活持续性 + PKMζ巩固锁定** |
+| **v6.3** | **2026-06-07** | **睡眠优化与时间维度 — SCN昼夜节律钟 + VLPO触发器开关 + NREM/REM双相睡眠 + α注意门控 + 类淋巴清除** |
 
 ---
 
@@ -35,10 +36,10 @@
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ★ 已实现 (含 v6.1 新增) | **60** | 70% |
+| ★ 已实现 (含 v6.3 新增) | **62** | 70% |
 | ○ 占位 (接口设计完成, 待实现代码) | 12 | 14% |
 | — 配置/工具/入口 (无类定义但功能完备) | 14 | 16% |
-| **合计** | **86** | **100%** |
+| **合计** | **88** | **100%** |
 
 ### 按脑区
 
@@ -76,10 +77,11 @@
 | V4 (BA19) | `occipital_lobe/v4.py` | ★ v5.0 (M/P/K汇合) |
 | 视觉层级管线 | `occipital_lobe/visual_hierarchy.py` | ★ v5.0 (10模块编排) |
 | **边缘系统** | | |
-| 海马 | `limbic_system/hippocampus.py` | **★ UPGRADED v6.2** (+STDP +保护信号 +沉默突触 +PNN锁定 +**突触标签捕获 +CaMKII持续性 +PKMζ巩固锁定**) |
+| 海马 | `limbic_system/hippocampus.py` | **★ UPGRADED v6.3** (+STDP +保护 +沉默突触 +PNN +标签捕获 +CaMKII持续性 +PKMζ锁定 +**双相睡眠NREM/REM**) |
 | 杏仁核 | `limbic_system/amygdala.py` | **★ UPGRADED v6.0** (+恐惧条件作用) |
 | 扣带回/ACC | `limbic_system/cingulate.py` | ★ 已实现 (自由能计算) |
 | 岛叶 (BA13-16) | `limbic_system/insula.py` | ★ v5.4 (内感受+突显网络) |
+| **SCN (视交叉上核, BA—)** | `limbic_system/scn.py` | **★ NEW v6.3** (TTFL分子钟+Process S+光同步) |
 | 下丘脑 | `limbic_system/hypothalamus.py` | ★ v5.5 (Setpoint+Drive+HPA) |
 | 嗅皮层 | `limbic_system/olfactory.py` | ○ 占位 |
 | **基底神经节** | | |
@@ -94,7 +96,7 @@
 | MGB (内侧膝状体) | `thalamus/mgb.py` | ★ v5.2 (3亚区) |
 | **联合皮层 + 三大网络** | | |
 | DMN | `association/dmn.py` | ★ 已实现 (自我模型) |
-| FPN | `association/fpn.py` | **★ UPGRADED v6.0** (+中央执行器: 注意力分配+干扰抑制+子系统协调) |
+| FPN | `association/fpn.py` | **★ UPGRADED v6.3** (+中央执行器: 注意力分配+干扰抑制+子系统协调 +**α节律注意门控**) |
 | TPN | `association/tpn.py` | ★ v4.3/v4.4 (跷跷板动态) |
 | 跨模态联合 | `association/crossmodal.py` | ★ 已实现 (COCO Visual↔Text) |
 | 视觉绑定 | `association/visual_binding.py` | ★ v5.0 (FPN驱动的M/P/K绑定) |
@@ -111,7 +113,8 @@
 | 下丘 (IC) | `midbrain/inferior_colliculus.py` | ★ v5.2 (频率×空间×时间) |
 | PAG | `midbrain/pag.py` | ★ v5.4 (下行痛觉调节) |
 | **脑桥** | | |
-| 蓝斑核 (NE) | `pons/locus_coeruleus.py` | ★ v5.5 (phasic/tonic+SNR) |
+| 蓝斑核 (NE) | `pons/locus_coeruleus.py` | ★ v5.5 (phasic/tonic+SNR) ★ v6.3 (+睡眠NE归零) |
+| **VLPO (视前区)** | `pons/vlpo.py` | **★ NEW v6.3** (Saper触发器开关+NREM/REM振荡器) |
 | 网状结构 | `pons/reticular_formation.py` | ○ 占位 |
 | 耳蜗核 | `pons/cochlear_nucleus.py` | ★ v5.2 (频谱分解) |
 | 上橄榄复合体 (SOC) | `pons/superior_olivary.py` | ★ v5.2 (ITD/ILD双耳定位) |
@@ -310,10 +313,10 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 | **2. 双向加工** | 前馈+反馈+语言双流+AF自我监控 | ✅ v5.6 | `fpn.py`, `arcuate_fasciculus.py` |
 | **3. 并行分布式** | M/P/K三流+听觉6核团+**6记忆系统并行** | ✅ **增强 v6.0** | 情景/语义/程序性/情感/自我/WM 六系统独立运行 |
 | **4. 注意力瓶颈** | FPN探照灯+TPN↔DMN跷跷板+**WM容量限制+中央执行器协调** | ✅ **增强 v6.0** | `fpn.py` 中央执行器, `working_memory.py`, `phonological_loop.py` |
-| **5. 赫布可塑性** | LTP/LTD+睡眠巩固+干扰遗忘+STDP时序+GluN2B轨迹+PNN锁定+保护信号+沉默突触+纹状体D1/D2+恐惧条件+**STC标签捕获+CaMKII持续性+PKMζ锁定** | ✅ **增强 v6.2** | `hippocampus.py`, `striatum.py`, `amygdala.py`, `plasticity.py`, `meta_learning.py` |
-| **6. 预测编码** | 自由能最小化+N400/P600+**语义熟悉度调制理解确信度** | ✅ **增强 v6.0** | `semantic_memory.py` knows_about()→理解boost, `cingulate.py` |
+| **5. 赫布可塑性** | LTP/LTD+睡眠巩固+干扰遗忘+STDP+GluN2B+PNN+保护信号+沉默突触+D1/D2+恐惧条件+STC标签+CaMKII持续性+PKMζ锁定+**双相NREM/REM睡眠+突触尺度缩小+类淋巴清除** | ✅ **增强 v6.3** | `hippocampus.py`, `striatum.py`, `amygdala.py`, `plasticity.py`, `scn.py`, `vlpo.py` |
+| **6. 预测编码** | 自由能最小化+N400/P600+语义熟悉度+**α节律注意门控** | ✅ **增强 v6.3** | `fpn.py`, `cingulate.py` |
 
-### 规则实现度: 6/6 有代码支撑 (v6.2 规则5进一步增强 — STC标签捕获+CaMKII持续性+PKMζ巩固锁定)
+### 规则实现度: 6/6 有代码支撑 (v6.3 规则4/5/6进一步增强 — α注意门控+双相睡眠+SCN时间维度)
 
 ---
 
@@ -325,12 +328,12 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 | 隐状态 H | 16 |
 | 最大簇数 K | 256 (情景) / 1024 (语义) |
 | 行动数 A | 5 (grid) / 3 (dialogue) |
-| Theta 参数 | **48** (v6.2: +tag_window, tag_decay_rate, tag_capture_strength, persistence_decay_rate, persistence_threshold_boost, persistence_lr_boost, consolidation_lock_factor, consolidation_lock_max) |
+| Theta 参数 | **56** (v6.3: +circa_tau, circa_light_sensitivity, sleep_pressure_threshold, nrem_duration_ratio, synaptic_downscale_rate, alpha_gating_strength, glymphatic_clear_rate, rem_emotional_processing) |
 | 身体维度 M | 5 (grid) / 9 (text) |
 | 记忆系统 | **6** (情景+语义+程序性+情感+自我+工作记忆) |
 | 独立 ClusterNetwork 实例 | **8** (agent.net, self_model.net, AF.ventral, AF.dorsal, AG.grapheme_to_phoneme, TPJ.speaker_net, TPJ.intent_net, semantic_memory.net) |
-| 模块总数 | **86** |
-| 已实现核心模块 | **60 (70%)** — v6.1: plasticity.py从占位→实现 + meta_learning/hippocampus重大升级 |
+| 模块总数 | **88** |
+| 已实现核心模块 | **62 (70%)** — v6.3: +scn.py +vlpo.py 新增; hippocampus/fpn/LC/agent重大升级 |
 | 语料规模 | 0 (纯净模式, 零预训练) |
 | v6.1 新增/修改代码 | ~600 行 (1 new + 2 major upgrades + 5 modified) |
 
@@ -348,6 +351,8 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 8. **v6.0 模块未经长期运行验证**: 语义记忆/纹状体/干扰遗忘的长时间交互效果需观察
 9. **v6.1 发育轨迹需长运行验证**: GluN2B半衰期5000步, PNN累积, 4阶段过渡需要在真实长对话中观察
 10. **STDP 效果依赖序列输入**: 当前对话模式下时序信息有限, STDP主要受益在词序链生成(Broca diffuse)
+11. **v6.3 睡眠需长运行验证**: SCN ~24h周期、VLPO触发器开关、NREM/REM双相分布在超长运行中的稳定性需观察
+12. **VLPO 参数敏感**: sleep_pressure_threshold 过低→频繁入睡, 过高→长期不睡; 需在长期运行中调优
 
 ---
 
@@ -447,6 +452,104 @@ decay()          → effective_decay = base_decay / (1 + count × 0.5)
 
 ---
 
+## v6.3 核心变更 — 睡眠优化与时间维度
+
+### 设计哲学: 脑不是按固定步长运行的离散机器
+
+v6.2 让记忆巩固有了分子级的精细机制。但整个系统缺乏**时间维度**：
+- 睡眠是固定100步的机械循环，不区分NREM/REM
+- 没有昼夜节律 — Agent 无"时间感"
+- 注意力门控没有 α 节律的神经科学基础
+- 突触稳态是"删除弱簇"而非"等比缩小"
+
+v6.3 基于《脑节律与睡眠》综合文档，将脑的节律和睡眠机制映射到计算抽象层。
+
+### 六个核心机制
+
+| 机制 | 神经科学基础 | v6.3 实现 | 关键效果 |
+|------|------------|----------|---------|
+| **SCN昼夜节律钟** | 2017诺贝尔奖 — TTFL分子振荡器 (CLOCK/BMAL1→PER/CRY) | `scn.py` — 4变量ODE + Process S + 光同步 | Agent有~24h时间感 |
+| **VLPO触发器开关** | Saper (2005, 2010) — VLPO⇄觉醒系统相互抑制 | `vlpo.py` — FlipFlop + NREM/REM振荡器 | 生物驱动的睡眠，非机械触发 |
+| **NREM慢波巩固** | Diekelmann & Born (2010) — 三波耦合+突触稳态 | `sleep_consolidation_nrem()` — 回放+等比缩小+类淋巴清除 | 保留相对权重，不误删强簇 |
+| **REM情绪去刺痛** | Walker & van der Helm (2009) — NE→0低应激环境 | `sleep_consolidation_rem()` — 情感衰减+跨域联想 | 情绪记忆保留内容，消解刺痛 |
+| **α节律注意门控** | α 阻断 (8-13Hz 功能抑制) | `fpn.py` alpha_gate_attention() | 非注意通道被主动抑制 |
+| **类淋巴清除** | Xie et al. (2013) — N3深睡中脑间质空间增大60% | NREM中清除 activation<阈值+无保护簇 | 清除"代谢废物"连接 |
+
+### SCN TTFL 分子钟
+
+```
+CLOCK:BMAL1 → Per/Cry mRNA → PER/CRY蛋白 → 入核 → 抑制CLOCK:BMAL1 → 降解 → 重新激活
+                                                     ↑
+                                         光照 → ipRGC → Per诱导 ↑ (相位重置)
+
+Process S: 觉醒 → S += 0.012×(1+异稳态负荷), NREM睡眠 → S×=0.94, REM睡眠 → S×=0.975
+
+输出: circadian_phase [0,2π], melatonin [0,1] (夜间高), cortisol [0,1] (晨峰),
+      sleep_pressure [0,1], sleep_propensity [0,1]
+```
+
+### NREM vs REM 双相睡眠
+
+```
+NREM (前半夜 ~65%):
+  → 三波耦合回放 (慢振荡调度+纺锤波窗口+SWR重放)
+  → 突触尺度缩小: 所有簇 activation *= (1 - d)  保留相对强度
+    d = base_downscale × protection_mod × lock_mod
+  → 海马→皮层转移 (top 30情景簇 → 语义记忆)
+  → 类淋巴清除: 移除 activation<阈值 & 无保护 & 低PNN 簇
+
+REM (后半夜 ~35%):
+  → NE→0 环境 (去甲肾上腺素能静默)
+  → 情绪去刺痛: 高情感簇的 centroid[64:72] 被温和衰减
+  → 跨域创造性联想: 随机选择远距离(cos<0.4)簇对 → 温和拉近
+  → 程序性记忆巩固 (纹状体习惯强度)
+```
+
+### 生物睡眠触发 (替换固定100步)
+
+```
+觉醒: Process S 累积 → sleep_propensity = 0.6×Process_S + 0.4×(1−cortisol)
+  ↓
+sleep_propensity > sleep_pressure_threshold (0.65)
+  ↓
+VLPO 激活 → 抑制觉醒系统 (LC/TMN/DR) → 进入 NREM
+  ↓
+NREM (慢波睡眠) → REM (振荡器切换) → NREM → ... (每 ~30steps 一周期)
+  ↓
+Process S 清除到 < threshold−hysteresis → VLPO 失活 → 觉醒
+```
+
+### Theta 参数扩展到 56 个
+
+| 新增参数 (L7) | 默认值 | 功能 |
+|-------------|-------|------|
+| `circa_tau` | 24.0 | 内源性昼夜周期 (小时等价) |
+| `circa_light_sensitivity` | 0.3 | 光同步敏感度 |
+| `sleep_pressure_threshold` | 0.65 | Process S 触发睡眠阈值 |
+| `nrem_duration_ratio` | 0.65 | NREM 占睡眠比例 |
+| `synaptic_downscale_rate` | 0.03 | NREM 突触尺度缩小率 |
+| `alpha_gating_strength` | 0.4 | α 节律抑制强度 |
+| `glymphatic_clear_rate` | 0.005 | 类淋巴清除阈值 |
+| `rem_emotional_processing` | 0.3 | REM 情绪去刺痛强度 |
+
+### 文件变更
+
+| 变更类型 | 文件 | 行数变化 |
+|---------|------|---------|
+| **新增** | `cerebrum/limbic_system/scn.py` | +280 行 (TTFL+Process S+SCN) |
+| **新增** | `brainstem_cerebellum/pons/vlpo.py` | +330 行 (FlipFlop+NREM_REM_Oscillator+VLPO) |
+| **数据层** | `data_types.py` | +16 参数/字段, +CircadianState+SleepState |
+| **参数** | `params.py` | +16 默认值/边界 |
+| **核心升级** | `hippocampus.py` | +270 行 (3 new functions) |
+| **FPN升级** | `fpn.py` | +80 行 (α注意门控) |
+| **LC升级** | `locus_coeruleus.py` | +12 行 (睡眠NE调制) |
+| **Agent集成** | `agent.py` | +70 行 (SCN/VLPO/双相睡眠/α门控) |
+| **元学习** | `meta_learning.py` | +8 参数初始化 |
+| **持久化** | `persistence.py` | +80 行 (SCN/VLPO/睡眠序列化) |
+| **测试** | `test_v6_3_sleep.py` | +430 行 (9 单元测试) |
+
+---
+
 ## 下一优先级
 
 ### P0 — 已完成
@@ -457,9 +560,10 @@ decay()          → effective_decay = base_decay / (1 + count × 0.5)
 5. ✅ 发育年龄 + 持久化 + 多模态 (v5.7)
 6. ✅ **完整记忆系统 (v6.0)**
 7. ✅ **发育优化 & 长期常驻学习 (v6.1)**
+8. ✅ **睡眠优化与时间维度 (v6.3)**
 
 ### P1 — 功能扩展
-7. ✅ 真实音频 (v5.3)
+8. ✅ 真实音频 (v5.3)
 8. ✅ 实时传感器流 (v5.7)
 9. ⬜ 黑质 (SNc/SNr) 运动调节 — 配合运动皮层发音规划实现基底节→丘脑→皮层运动环路
 

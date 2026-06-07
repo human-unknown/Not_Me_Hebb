@@ -30,7 +30,7 @@ from typing import Optional
 # 版本管理
 # ================================================================
 
-SAVE_VERSION = "5.7"  # v6.2: schema updated with tag/persistence/consolidation fields
+SAVE_VERSION = "6.3"  # v6.3: +SCN/VLPO/circadian/sleep state
 SAVE_DIR = ".notme/sessions"
 
 
@@ -422,6 +422,59 @@ def save_agent(agent, path: str = None, name: str = None,
         'dialogue_since': agent.dialogue_since_consolidation,
     }
 
+    # ---- v6.3: SCN + VLPO + Sleep State ----
+    if hasattr(agent, 'scn') and agent.scn is not None:
+        scn = agent.scn
+        data['scn'] = {
+            'per_mrna': float(scn.ttfl.per_mrna),
+            'per_protein': float(scn.ttfl.per_protein),
+            'cry_mrna': float(scn.ttfl.cry_mrna),
+            'cry_protein': float(scn.ttfl.cry_protein),
+            'phase_estimate': float(scn.ttfl._phase_estimate),
+            'process_s_pressure': float(scn.process_s.pressure),
+            'process_s_wake_since': int(scn.process_s._wake_since),
+        }
+
+    if hasattr(agent, 'vlpo') and agent.vlpo is not None:
+        vlpo = agent.vlpo
+        data['vlpo'] = {
+            'vlpo_activation': float(vlpo.flip_flop.vlpo_activation),
+            'arousal_center': float(vlpo.flip_flop.arousal_center_activity),
+            'is_asleep': bool(vlpo.flip_flop._is_asleep),
+            'stable_counter': int(vlpo.flip_flop._stable_counter),
+            'rem_on': float(vlpo.oscillator.rem_on),
+            'rem_off': float(vlpo.oscillator.rem_off),
+            'in_rem': bool(vlpo.oscillator.in_rem),
+            'osc_phase': str(vlpo.oscillator.phase),
+            'total_cycles': int(vlpo.oscillator._total_cycles),
+        }
+
+    if hasattr(agent, '_sleep_state') and agent._sleep_state is not None:
+        data['sleep_state'] = {
+            'state': agent._sleep_state.state,
+            'total_sleep_steps': int(agent._sleep_state.total_sleep_steps),
+            'total_nrem_steps': int(agent._sleep_state.total_nrem_steps),
+            'total_rem_steps': int(agent._sleep_state.total_rem_steps),
+            'n_sleep_episodes': int(agent._sleep_state.n_sleep_episodes),
+        }
+
+    if hasattr(agent, '_circadian_state') and agent._circadian_state is not None:
+        cs = agent._circadian_state
+        data['circadian_state'] = {
+            'circadian_phase': float(cs.circadian_phase),
+            'melatonin': float(cs.melatonin),
+            'cortisol': float(cs.cortisol),
+            'sleep_pressure': float(cs.sleep_pressure),
+            'sleep_propensity': float(cs.sleep_propensity),
+        }
+
+    # v6.3: Sleep tracking
+    data['sleep_tracking'] = {
+        'asleep_steps': int(agent._asleep_steps),
+        'wake_steps': int(agent._wake_steps),
+        'sleep_history_len': len(agent.sleep_history),
+    }
+
     # ---- v6.0: Semantic Memory ----
     if hasattr(agent, 'semantic_memory') and agent.semantic_memory is not None:
         sm = agent.semantic_memory
@@ -677,6 +730,53 @@ def restore_agent(agent, data: dict, verbose: bool = True):
             if verbose:
                 print(f"  Striatum: {st.get_state()['n_states_known']} states, "
                       f"habit={st.global_habit_strength:.3f}")
+
+    # ---- v6.3: SCN + VLPO + Sleep ----
+    if 'scn' in data and hasattr(agent, 'scn'):
+        scn_data = data['scn']
+        agent.scn.ttfl.per_mrna = float(scn_data.get('per_mrna', 0.3))
+        agent.scn.ttfl.per_protein = float(scn_data.get('per_protein', 0.2))
+        agent.scn.ttfl.cry_mrna = float(scn_data.get('cry_mrna', 0.3))
+        agent.scn.ttfl.cry_protein = float(scn_data.get('cry_protein', 0.2))
+        agent.scn.ttfl._phase_estimate = float(scn_data.get('phase_estimate', 0.0))
+        agent.scn.process_s.pressure = float(scn_data.get('process_s_pressure', 0.0))
+        agent.scn.process_s._wake_since = int(scn_data.get('process_s_wake_since', 0))
+        if verbose:
+            print(f"  SCN: pressure={agent.scn.process_s.pressure:.2f} restored")
+
+    if 'vlpo' in data and hasattr(agent, 'vlpo'):
+        vlpo_data = data['vlpo']
+        agent.vlpo.flip_flop.vlpo_activation = float(
+            vlpo_data.get('vlpo_activation', 0.0))
+        agent.vlpo.flip_flop.arousal_center_activity = float(
+            vlpo_data.get('arousal_center', 0.6))
+        agent.vlpo.flip_flop._is_asleep = bool(vlpo_data.get('is_asleep', False))
+        agent.vlpo.flip_flop._stable_counter = int(vlpo_data.get('stable_counter', 20))
+        agent.vlpo.oscillator.rem_on = float(vlpo_data.get('rem_on', 0.0))
+        agent.vlpo.oscillator.rem_off = float(vlpo_data.get('rem_off', 0.6))
+        agent.vlpo.oscillator.in_rem = bool(vlpo_data.get('in_rem', False))
+        agent.vlpo.oscillator.phase = str(vlpo_data.get('osc_phase', 'nrem'))
+        agent.vlpo.oscillator._total_cycles = int(vlpo_data.get('total_cycles', 0))
+
+    if 'sleep_state' in data and hasattr(agent, '_sleep_state'):
+        ss_data = data['sleep_state']
+        agent._sleep_state.state = ss_data.get('state', 'awake')
+        agent._sleep_state.total_sleep_steps = int(ss_data.get('total_sleep_steps', 0))
+        agent._sleep_state.total_nrem_steps = int(ss_data.get('total_nrem_steps', 0))
+        agent._sleep_state.total_rem_steps = int(ss_data.get('total_rem_steps', 0))
+        agent._sleep_state.n_sleep_episodes = int(ss_data.get('n_sleep_episodes', 0))
+
+    if 'circadian_state' in data and hasattr(agent, '_circadian_state'):
+        cs_data = data['circadian_state']
+        agent._circadian_state.circadian_phase = float(cs_data.get('circadian_phase', 0.0))
+        agent._circadian_state.melatonin = float(cs_data.get('melatonin', 0.0))
+        agent._circadian_state.cortisol = float(cs_data.get('cortisol', 0.0))
+        agent._circadian_state.sleep_pressure = float(cs_data.get('sleep_pressure', 0.0))
+        agent._circadian_state.sleep_propensity = float(cs_data.get('sleep_propensity', 0.0))
+
+    if 'sleep_tracking' in data:
+        agent._asleep_steps = int(data['sleep_tracking'].get('asleep_steps', 0))
+        agent._wake_steps = int(data['sleep_tracking'].get('wake_steps', 0))
 
     # Consolidation
     if 'consolidation' in data:

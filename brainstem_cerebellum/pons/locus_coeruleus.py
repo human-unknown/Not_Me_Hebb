@@ -372,6 +372,20 @@ class LocusCoeruleus:
 
         return result
 
+    def set_sleep_ne(self, ne_level: float = 0.05, is_rem: bool = False):
+        """v6.3: VLPO驱动的睡眠期NE调制.
+
+        NREM: NE降至极低 (~0.05)
+        REM:  NE归零 (~0.001) — 去甲肾上腺素能静默
+
+        Args:
+            ne_level: VLPO计算的NE水平
+            is_rem: 是否在REM睡眠
+        """
+        self.ne_dynamics._tonic_ne = ne_level
+        self.ne_dynamics._phasic_ne = 0.0
+        self._explore_exploit_ema = -0.5 if is_rem else self._explore_exploit_ema
+
     def reset(self):
         self.ne_dynamics.reset()
         self.snr_enhancer.reset()

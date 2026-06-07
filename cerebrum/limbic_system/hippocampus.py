@@ -996,3 +996,408 @@ def sleep_replay(net: ClusterNetwork, theta: Theta,
         'n_locked_clusters': n_locked,
         'mean_consolidation_lock': float(mean_lock),
     }
+
+
+# ============================================================
+# v6.3: NREM/REM 双相睡眠巩固
+# ============================================================
+
+def sleep_consolidation_nrem(net: ClusterNetwork, theta: Theta,
+                              semantic_memory=None,
+                              n_replay_cycles: int = 2,
+                              downscale_rate: float = 0.03) -> dict:
+    """NREM 慢波睡眠巩固 — 三波耦合回放 + 突触尺度缩小 + 类淋巴清除.
+
+    神经科学基础 (Diekelmann & Born 2010; Tononi & Cirelli 2014):
+      → 皮层慢振荡 (~0.75 Hz): 调度全局 UP/DOWN 状态
+      → 丘脑纺锤波 (12-15 Hz): 嵌套在慢振荡, 为可塑性创造时间窗
+      → 海马尖波涟漪 (SWR, ~100-200 Hz): 记忆痕迹压缩重放
+      → 突触尺度缩小: 等比降低所有突触权重, 保留相对强度
+      → 类淋巴清除: 深度睡眠中清除代谢废物 (低质量连接)
+
+    NREM 的独特功能:
+      - 陈述性记忆巩固 (海马 → 皮层转移)
+      - 突触稳态恢复 (释放新一轮学习容量)
+      - 代谢废物清除 (β-淀粉样蛋白/tau清除)
+
+    Args:
+        net: ClusterNetwork
+        theta: 参数配置
+        semantic_memory: 语义记忆 (可选, 用于海马→皮层转移)
+        n_replay_cycles: 回放轮数 (NREM 应 > 普通 sleep_replay)
+        downscale_rate: 突触尺度缩小率 [0.01, 0.10]
+
+    Returns:
+        stats dict with nrem-specific metrics
+    """
+    if net.n_clusters == 0:
+        return {'n_replayed': 0, 'n_downscaled': 0, 'n_cleared': 0,
+                'n_transferred': 0, 'mean_downscale': 0.0,
+                'n_clusters_after': 0, 'nrem_phase': 'NREM'}
+
+    # ---- Step 1: 选择重放候选 (高激活 + 近期活跃) ----
+    mean_act = sum(c.activation for c in net.clusters) / net.n_clusters
+    replay_threshold = max(0.02, mean_act * 0.3)
+    candidates = [c for c in net.clusters if c.activation > replay_threshold]
+
+    if not candidates:
+        sorted_clusters = sorted(net.clusters, key=lambda c: c.activation,
+                                 reverse=True)
+        n_top = max(5, net.n_clusters // 5)
+        candidates = sorted_clusters[:n_top]
+
+    # ---- Step 2: 三波耦合重放 ----
+    # 模拟: 慢振荡调度 → 纺锤波窗口 → SWR 压缩重放
+    n_replayed = 0
+
+    for cycle in range(n_replay_cycles):
+        cycle_decay = 0.85 ** cycle  # 逐轮衰减强度
+
+        for c in candidates:
+            salience = 0.3 + 0.7 * c.activation
+            # NREM 回放: 更结构化, 使用跨模态部分提示
+            n_replays = int(1 + salience * 1.5)  # 1-2 次/簇/轮
+
+            centroid = c.centroid
+            for ri in range(n_replays):
+                partial = np.zeros_like(centroid)
+                mode_idx = (n_replayed + ri) % 4
+                if mode_idx == 0:
+                    # Text→Visual: 只保留文本 [0:64]
+                    partial[0:64] = centroid[0:64]
+                elif mode_idx == 1:
+                    # Visual→Text: 只保留视觉 [64:372]
+                    partial[64:372] = centroid[64:372]
+                elif mode_idx == 2:
+                    # Audio: 只保留听觉 [372:468]
+                    partial[372:468] = centroid[372:468]
+                else:
+                    # 随机 50% 维度
+                    keep = np.random.random(len(centroid)) > 0.5
+                    partial[keep] = centroid[keep]
+
+                net.recall(partial)
+                n_replayed += 1
+
+            # 温和激活增强 (远小于清醒时的 0.1)
+            boost = 0.003 * salience * cycle_decay
+            c.activation = min(1.0, c.activation + boost)
+
+    # ---- Step 3: 突触尺度缩小 (Synaptic Downscaling) ----
+    # 等比降低所有簇的 activation, 保留相对强度
+    # v6.2 保护信号 + 巩固锁 → 调制缩小率
+    n_downscaled = 0
+    total_downscale = 0.0
+    for c in net.clusters:
+        # 保护信号降低缩小率: 高保护 → 小缩小
+        protection_mod = 1.0 / (1.0 + c.protection_score * 3.0)
+        # 巩固锁降低缩小率: 高锁 → 小缩小
+        lock_mod = 1.0 / (1.0 + c.consolidation_count *
+                         theta.consolidation_lock_factor * 0.5)
+        # 综合缩小率
+        effective_downscale = downscale_rate * protection_mod * lock_mod
+
+        old_act = c.activation
+        c.activation *= (1.0 - effective_downscale)
+        # 也温和缩小 tag (不超过 activation 下降)
+        c.tag *= (1.0 - effective_downscale * 0.5)
+        # 持续性衰减 (NREM 中持续性的衰减加速)
+        c.activation_persistence *= (1.0 - effective_downscale * 2.0)
+        if c.activation_persistence < 0.001:
+            c.activation_persistence = 0.0
+
+        if old_act - c.activation > 0.0001:
+            n_downscaled += 1
+            total_downscale += (old_act - c.activation)
+
+    mean_downscale = total_downscale / max(n_downscaled, 1)
+
+    # ---- Step 4: 海马→皮层转移 ----
+    n_transferred = 0
+    if semantic_memory is not None and hasattr(semantic_memory, 'consolidate_from_episodic'):
+        try:
+            transfer_stats = semantic_memory.consolidate_from_episodic(
+                episodic_net=net,
+                n_top=min(30, net.n_clusters // 3),
+                min_activation=0.05,
+            )
+            n_transferred = transfer_stats.get('n_processed', 0)
+        except Exception:
+            pass
+
+    # ---- Step 5: 类淋巴清除 (glymphatic clearance) ----
+    # 深度 NREM (N3) 中脑间质空间增大 ~60% → CSF 流入增加
+    # 清除 activation 极低且无保护的"代谢废物"
+    glymphatic_threshold = theta.glymphatic_clear_rate
+    n_cleared = 0
+    n_before_clear = net.n_clusters
+    to_remove = []
+    for c in net.clusters:
+        # 清除条件: activation < 阈值 AND 保护低
+        if (c.activation < glymphatic_threshold and
+            c.protection_score < 0.1 and
+            c.pnn_level < 0.2):
+            to_remove.append(c)
+
+    if to_remove:
+        removed_ids = {id(c) for c in to_remove}
+        net.clusters = [c for c in net.clusters if id(c) not in removed_ids]
+        # 清理桶
+        for c in to_remove:
+            key = net._hash_to_bucket(c.centroid)
+            if key in net.buckets:
+                net.buckets[key] = [x for x in net.buckets[key] if x is not c]
+        n_cleared = n_before_clear - net.n_clusters
+
+    # ---- Step 6: NREM 巩固锁递增 ----
+    for c in net.clusters:
+        if c.consolidation_count < theta.consolidation_lock_max:
+            c.consolidation_count += 1
+
+    return {
+        'n_replayed': n_replayed,
+        'n_downscaled': n_downscaled,
+        'n_cleared': n_cleared,
+        'n_transferred': n_transferred,
+        'mean_downscale': float(mean_downscale),
+        'n_clusters_after': net.n_clusters,
+        'n_locked': sum(1 for c in net.clusters if c.consolidation_count > 0),
+        'mean_consolidation_lock': float(
+            sum(c.consolidation_count for c in net.clusters)
+            / max(net.n_clusters, 1)),
+        'nrem_phase': 'NREM',
+    }
+
+
+def sleep_consolidation_rem(net: ClusterNetwork, theta: Theta,
+                             amygdala=None, striatum=None,
+                             emotional_processing_strength: float = 0.3) -> dict:
+    """REM 睡眠巩固 — 情绪去刺痛 + 跨域联想 + 程序性记忆整合.
+
+    神经科学基础 (Walker & van der Helm 2009; Hobson 2009):
+      → 去甲肾上腺素 ≈ 0: 独特的低应激神经化学环境
+      → 乙酰胆碱 ↑↑: 促进皮层可塑性和联想
+      → 杏仁核环路重新激活: 保留记忆内容, 消解情绪"刺痛"
+      → 前额叶执行控制放松: 允许远程记忆的自由组合
+      → 程序性记忆巩固: 运动技能、习惯的 REM 依赖强化
+
+    REM 的独特功能:
+      - 情绪记忆去刺痛 (PTSD 相关)
+      - 跨域创造性联想 (远距离记忆的自由组合)
+      - 程序性记忆巩固 (运动/技能)
+      - 抽象规律提取 (洞察)
+
+    Args:
+        net: ClusterNetwork
+        theta: 参数配置
+        amygdala: 杏仁核 (可选, 用于情绪簇识别与去刺痛)
+        striatum: 纹状体 (可选, 用于程序性记忆巩固)
+        emotional_processing_strength: 情绪去刺痛强度 [0, 1]
+
+    Returns:
+        stats dict with rem-specific metrics
+    """
+    if net.n_clusters == 0:
+        return {'n_emotional_processed': 0, 'n_cross_linked': 0,
+                'n_habit_boosted': 0, 'emotional_shift_mean': 0.0,
+                'n_clusters_after': 0, 'rem_phase': 'REM'}
+
+    # ---- Step 1: 低 NE 环境 (模拟 REM 独特神经化学) ----
+    # 临时降低学习率 (NE→0 → 可塑性模式切换)
+    original_lr_mod = net.learn_rate_modifier
+    net.learn_rate_modifier = 0.3  # 低 NE → 降低新学习, 促进内部分析
+
+    # ---- Step 2: 情绪去刺痛 (Emotional Depotentiation) ----
+    # 找到高情感标记的簇 (通过 centroid 的情感通道推断)
+    # centroid[64:72] 包含身体+情感快照 (v6.0 情境向量)
+    # 或通过 amygdala 的词→情感映射识别
+    n_emotional_processed = 0
+    total_emotional_shift = 0.0
+
+    for c in net.clusters:
+        if c.activation < 0.02:
+            continue
+
+        # 检测情感强度: centroid 的情感段能量
+        centroid = c.centroid
+        if len(centroid) > 72:
+            emotional_segment = centroid[64:72]
+            emotional_intensity = float(np.linalg.norm(emotional_segment))
+        else:
+            emotional_intensity = 0.0
+
+        # 高情感强度的簇 → 温和衰减(去刺痛)
+        if emotional_intensity > 0.3:
+            # 保留记忆内容 (centroid 方向不变)
+            # 但降低情感关联强度
+            decay_factor = 1.0 - (emotional_processing_strength
+                                 * 0.05 * emotional_intensity)
+            if len(centroid) > 72:
+                old_emotion = centroid[64:72].copy()
+                c.centroid[64:72] *= decay_factor
+                shift = float(np.linalg.norm(old_emotion - c.centroid[64:72]))
+            else:
+                shift = 0.0
+
+            # 降低情感簇的 activation (让它们不那么"灼热")
+            c.activation *= (1.0 - emotional_processing_strength * 0.03)
+
+            if shift > 0.0001:
+                n_emotional_processed += 1
+                total_emotional_shift += shift
+
+    # ---- Step 3: 跨域创造性联想 (Random Cross-Linking) ----
+    # REM 中前额叶执行控制暂时放松 → 远距离记忆自由组合
+    # 从不同桶中随机选择簇对 → 温和拉近 (促进创造性的新颖关联)
+    n_cross_linked = 0
+    if net.n_clusters >= 4:
+        # 选择中等活跃的簇 (不是最高也不是最低)
+        sorted_by_act = sorted(net.clusters, key=lambda c: c.activation,
+                              reverse=True)
+        mid_start = max(2, net.n_clusters // 5)
+        mid_end = max(mid_start + 1, 4 * net.n_clusters // 5)
+        mid_clusters = sorted_by_act[mid_start:mid_end]
+
+        if len(mid_clusters) >= 2:
+            n_pairs = min(8, len(mid_clusters) // 2)
+            for _ in range(n_pairs):
+                i, j = np.random.choice(len(mid_clusters), size=2, replace=False)
+                c_a, c_b = mid_clusters[i], mid_clusters[j]
+                sim = _masked_cosine(c_a.centroid, c_b.centroid,
+                                    np.ones(len(c_a.centroid), dtype=bool))
+
+                # 只对远距离簇对 (低相似度) 做温和拉近
+                if 0.1 < sim < 0.4:
+                    # 温和的质心拉近 (创造关联但不合并)
+                    link_strength = 0.002 * (0.4 - sim)
+                    old_a = c_a.centroid.copy()
+                    old_b = c_b.centroid.copy()
+
+                    c_a.centroid = ((1.0 - link_strength) * c_a.centroid
+                                   + link_strength * c_b.centroid)
+                    c_b.centroid = ((1.0 - link_strength) * c_b.centroid
+                                   + link_strength * c_a.centroid)
+
+                    net._migrate_bucket(c_a, old_a)
+                    net._migrate_bucket(c_b, old_b)
+                    n_cross_linked += 1
+
+    # ---- Step 4: 程序性记忆巩固 ----
+    n_habit_boosted = 0
+    if striatum is not None and hasattr(striatum, 'boost_habits'):
+        try:
+            n_habit_boosted = striatum.boost_habits(boost=0.01)
+        except Exception:
+            pass
+
+    # ---- Step 5: 恢复学习率 ----
+    net.learn_rate_modifier = original_lr_mod
+
+    emotional_shift_mean = (total_emotional_shift /
+                           max(n_emotional_processed, 1))
+
+    return {
+        'n_emotional_processed': n_emotional_processed,
+        'n_cross_linked': n_cross_linked,
+        'n_habit_boosted': n_habit_boosted,
+        'emotional_shift_mean': float(emotional_shift_mean),
+        'n_clusters_after': net.n_clusters,
+        'rem_phase': 'REM',
+    }
+
+
+def dual_phase_sleep(net: ClusterNetwork, theta: Theta,
+                     semantic_memory=None, amygdala=None, striatum=None,
+                     nrem_duration_ratio: float = 0.65,
+                     sleep_duration_steps: int = 30,
+                     force: bool = False) -> dict:
+    """v6.3: NREM/REM 双相睡眠完整周期.
+
+    编排 NREM (慢波睡眠) 和 REM (快速眼动睡眠) 两个阶段,
+    模拟真实睡眠结构: 前半夜 NREM 主导, 后半夜 REM 主导.
+
+    NREM 阶段:
+      - 三波耦合记忆重放 (海马 SWR + 丘脑纺锤波 + 皮层慢振荡)
+      - 突触尺度缩小 (等比降低, 保留相对强度)
+      - 海马→皮层记忆转移
+      - 类淋巴废物清除
+
+    REM 阶段:
+      - 低 NE 环境 (去甲肾上腺素 ≈ 0)
+      - 情绪记忆去刺痛
+      - 跨域创造性联想
+      - 程序性记忆巩固
+
+    Args:
+        net: ClusterNetwork
+        theta: 参数配置
+        semantic_memory: 语义记忆 (可选)
+        amygdala: 杏仁核 (可选)
+        striatum: 纹状体 (可选)
+        nrem_duration_ratio: NREM 占睡眠比例 [0, 1]
+        sleep_duration_steps: 总睡眠步数
+        force: 即使网络弱小也强制执行
+
+    Returns:
+        combined_stats dict with all metrics
+    """
+    if net.n_clusters == 0:
+        return {'nrem': {}, 'rem': {}, 'combined': {
+            'total_replayed': 0, 'total_downscaled': 0,
+            'total_cleared': 0, 'total_emotional': 0,
+            'total_cross_linked': 0, 'clusters_before': 0,
+            'clusters_after': 0, 'dual_phase_complete': False,
+        }}
+
+    clusters_before = net.n_clusters
+
+    # ---- Phase 1: NREM 慢波睡眠 (前半夜主导) ----
+    nrem_steps = max(5, int(sleep_duration_steps * nrem_duration_ratio))
+    nrem_cycles = max(1, nrem_steps // 15)  # 每 ~15 步一个回放子周期
+
+    nrem_stats = {'n_replayed': 0, 'n_downscaled': 0, 'n_cleared': 0,
+                  'n_transferred': 0}
+    for _ in range(nrem_cycles):
+        stats = sleep_consolidation_nrem(
+            net, theta, semantic_memory=semantic_memory,
+            n_replay_cycles=1,
+            downscale_rate=theta.synaptic_downscale_rate,
+        )
+        for k in nrem_stats:
+            nrem_stats[k] += stats.get(k, 0)
+
+    # ---- Phase 2: REM 睡眠 (后半夜主导) ----
+    rem_steps = max(3, sleep_duration_steps - nrem_steps)
+    rem_cycles = max(1, rem_steps // 10)  # 每 ~10 步一个 REM 子周期
+
+    rem_stats = {'n_emotional_processed': 0, 'n_cross_linked': 0,
+                 'n_habit_boosted': 0}
+    for _ in range(rem_cycles):
+        stats = sleep_consolidation_rem(
+            net, theta, amygdala=amygdala, striatum=striatum,
+            emotional_processing_strength=theta.rem_emotional_processing,
+        )
+        for k in rem_stats:
+            rem_stats[k] += stats.get(k, 0)
+
+    # ---- 综合统计 ----
+    combined = {
+        'total_replayed': nrem_stats['n_replayed'],
+        'total_downscaled': nrem_stats['n_downscaled'],
+        'total_cleared': nrem_stats['n_cleared'],
+        'total_transferred': nrem_stats['n_transferred'],
+        'total_emotional': rem_stats['n_emotional_processed'],
+        'total_cross_linked': rem_stats['n_cross_linked'],
+        'total_habit_boosted': rem_stats['n_habit_boosted'],
+        'clusters_before': clusters_before,
+        'clusters_after': net.n_clusters,
+        'dual_phase_complete': True,
+        'nrem_steps': nrem_steps,
+        'rem_steps': rem_steps,
+    }
+
+    return {
+        'nrem': nrem_stats,
+        'rem': rem_stats,
+        'combined': combined,
+    }

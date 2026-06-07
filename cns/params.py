@@ -3,7 +3,7 @@ params.py —— 默认参数常量
 自由能原理智能体 — M1 单智能体生存
 """
 
-# 默认 Theta 参数字典（48 个 — v6.2: 40 + 8 记忆巩固优化）
+# 默认 Theta 参数字典（56 个 — v6.3: 48 + 8 睡眠/节律/注意）
 DEFAULT_THETA_DICT = {
     # L0 (6): 生成模型
     'sigma_z': 0.1,
@@ -58,6 +58,15 @@ DEFAULT_THETA_DICT = {
     'persistence_lr_boost': 0.5,
     'consolidation_lock_factor': 0.5,
     'consolidation_lock_max': 10,
+    # L7 (8): v6.3 睡眠与时间维度 (SCN节律 + 双相睡眠 + α注意 + 类淋巴)
+    'circa_tau': 24.0,
+    'circa_light_sensitivity': 0.3,
+    'sleep_pressure_threshold': 0.65,
+    'nrem_duration_ratio': 0.65,
+    'synaptic_downscale_rate': 0.03,
+    'alpha_gating_strength': 0.4,
+    'glymphatic_clear_rate': 0.005,
+    'rem_emotional_processing': 0.3,
 }
 
 # 参数边界 [min, max] —— 为 M4 参数扫描预留
@@ -111,4 +120,13 @@ PARAM_BOUNDS = {
     'persistence_lr_boost': (0.0, 2.0),
     'consolidation_lock_factor': (0.1, 5.0),
     'consolidation_lock_max': (2, 50),
+    # v6.3: 睡眠与时间维度参数边界
+    'circa_tau': (20.0, 28.0),
+    'circa_light_sensitivity': (0.05, 1.0),
+    'sleep_pressure_threshold': (0.3, 0.9),
+    'nrem_duration_ratio': (0.4, 0.85),
+    'synaptic_downscale_rate': (0.005, 0.15),
+    'alpha_gating_strength': (0.1, 0.9),
+    'glymphatic_clear_rate': (0.001, 0.05),
+    'rem_emotional_processing': (0.05, 0.8),
 }

@@ -137,13 +137,15 @@ S_CORE = D - 10                                        # 感觉核心
 
 @dataclass
 class Theta:
-    """32+8 个可学习参数 —— 唯一参数集 (v6.1: +8 发育优化参数)
+    """48+8 个可学习参数 —— 唯一参数集 (v6.3: +8 睡眠/节律/注意参数)
     L0 (6): 生成模型
     L1 (11): 自由能权重 + 情感偏差 + 精度系数 + 语言PE权重
     L2 (5): 策略推理
     L3 (4): 元学习
     L4 (6): v6.0 记忆系统
     L5 (8): v6.1 发育优化 — STDP/GluN2B/PNN/保护信号/候选集群
+    L6 (8): v6.2 记忆巩固优化 — 标签捕获/持续性/巩固锁
+    L7 (8): v6.3 睡眠与时间维度 — SCN节律/双相睡眠/α注意/类淋巴清除
     """
     # L0 (6): 生成模型
     sigma_z: float = 0.1             # 状态噪声
@@ -208,6 +210,16 @@ class Theta:
     consolidation_lock_factor: float = 0.5 # 每次巩固降低decay的因子
     consolidation_lock_max: int = 10      # 最大巩固锁等级
 
+    # L7 (8): v6.3 睡眠与时间维度 — SCN节律 + 双相睡眠 + α注意 + 类淋巴
+    circa_tau: float = 24.0               # 内源性昼夜周期 (小时, TTFL)
+    circa_light_sensitivity: float = 0.3  # 光同步敏感度 [0, 1]
+    sleep_pressure_threshold: float = 0.65 # Process S 触发睡眠的阈值
+    nrem_duration_ratio: float = 0.65     # NREM 占睡眠时间比例 (vs REM)
+    synaptic_downscale_rate: float = 0.03 # NREM 突触尺度缩小率
+    alpha_gating_strength: float = 0.4    # α 节律对非注意通道的抑制强度
+    glymphatic_clear_rate: float = 0.005  # 类淋巴清除最低 activation 阈值
+    rem_emotional_processing: float = 0.3 # REM 情绪去刺痛强度
+
     def to_dict(self) -> dict:
         """转为字典，便于参数扫描"""
         return {
@@ -250,6 +262,15 @@ class Theta:
             'persistence_lr_boost': self.persistence_lr_boost,
             'consolidation_lock_factor': self.consolidation_lock_factor,
             'consolidation_lock_max': self.consolidation_lock_max,
+            # v6.3: 睡眠与时间维度
+            'circa_tau': self.circa_tau,
+            'circa_light_sensitivity': self.circa_light_sensitivity,
+            'sleep_pressure_threshold': self.sleep_pressure_threshold,
+            'nrem_duration_ratio': self.nrem_duration_ratio,
+            'synaptic_downscale_rate': self.synaptic_downscale_rate,
+            'alpha_gating_strength': self.alpha_gating_strength,
+            'glymphatic_clear_rate': self.glymphatic_clear_rate,
+            'rem_emotional_processing': self.rem_emotional_processing,
         }
 
     @classmethod
@@ -538,14 +559,58 @@ class BodyVector:
 
 
 # ============================================================
+# v6.3: 昼夜节律 + 睡眠状态 dataclasses
+# ============================================================
+
+@dataclass
+class CircadianState:
+    """SCN 昼夜节律状态 — TTFL 分子振荡器输出."""
+    circadian_phase: float = 0.0        # [0, 2π] — 核心相位
+    per_mrna: float = 0.5               # Per mRNA 水平 [0, 1]
+    per_protein: float = 0.5            # PER 蛋白水平 [0, 1]
+    cry_mrna: float = 0.5               # Cry mRNA 水平 [0, 1]
+    cry_protein: float = 0.5            # CRY 蛋白水平 [0, 1]
+    bmal1_activity: float = 0.8         # CLOCK:BMAL1 活性 [0, 1]
+    melatonin: float = 0.0              # 褪黑素输出 [0, 1] — 夜间高
+    cortisol: float = 0.0               # 皮质醇输出 [0, 1] — 晨峰
+    sleep_pressure: float = 0.0         # Process S — 腺苷累积 [0, 1]
+    light_level: float = 0.0            # 当前光照水平 [0, 1]
+    sleep_propensity: float = 0.0       # 综合睡眠倾向 [0, 1]
+
+
+@dataclass
+class SleepState:
+    """VLPO 驱动的睡眠-觉醒状态."""
+    # 睡眠阶段
+    state: str = 'awake'                 # 'awake' | 'nrem_n1' | 'nrem_n2' | 'nrem_n3' | 'rem'
+    phase: str = 'none'                  # 'none' | 'nrem' | 'rem'
+    sleep_cycle_count: int = 0           # 累计睡眠周期数
+    time_in_state: int = 0              # 在当前状态的步数
+    time_in_phase: int = 0              # 在当前阶段(NREM/REM)的步数
+    cycle_position: float = 0.0          # 当前周期内的位置 [0, 1]
+    # 调控
+    vlpo_activation: float = 0.0         # VLPO 激活度 [0, 1]
+    arousal_center_activity: float = 0.5 # 觉醒中枢活动 [0, 1]
+    flip_flop_stable: bool = True        # 触发器是否在稳定状态
+    # REM控制
+    rem_on_activity: float = 0.0         # REM-on (SLD Glu) 活动
+    rem_off_activity: float = 0.5        # REM-off (vlPAG) 活动
+    # 统计
+    total_sleep_steps: int = 0           # 累计睡眠步数
+    total_nrem_steps: int = 0            # 累计 NREM 步数
+    total_rem_steps: int = 0             # 累计 REM 步数
+    n_sleep_episodes: int = 0            # 睡眠片段数
+
+
+# ============================================================
 # 参数验证
 # ============================================================
 
 def validate_theta(theta: Theta) -> bool:
-    """验证 Theta 参数数量 = 48 (v6.2)"""
+    """验证 Theta 参数数量 = 56 (v6.3)"""
     n = len(theta.to_dict())
-    if n != 48:
-        raise ValueError(f"Theta 必须有 48 个参数，当前有 {n}")
+    if n != 56:
+        raise ValueError(f"Theta 必须有 56 个参数，当前有 {n}")
     return True
 
 

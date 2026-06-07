@@ -20,7 +20,8 @@ v5.6 语言全管线 (comprehend → speak):
 import numpy as np
 from cns.data_types import Theta, Action, FreeEnergy, AgentBelief, BodyVector
 from cerebrum.limbic_system.hippocampus import (
-    predict_sensations, ClusterNetwork, sleep_cycle,
+    predict_sensations, ClusterNetwork, sleep_cycle, sleep_replay,
+    sleep_consolidation_nrem, sleep_consolidation_rem, dual_phase_sleep,
 )
 from cerebrum.limbic_system.cingulate import (
     compute_free_energy, HabituationTracker,
@@ -53,6 +54,11 @@ from cerebrum.frontal_lobe.phrase_structure import PhraseStructureNetwork
 from cerebrum.parietal_lobe.angular_gyrus import AngularGyrus
 from cerebrum.frontal_lobe.motor_cortex import MotorCortex
 from cerebrum.parietal_lobe.tpj import TPJ
+
+# v6.3: 睡眠与时间维度 — SCN 昼夜节律 + VLPO 睡眠调控
+from cerebrum.limbic_system.scn import SCN
+from brainstem_cerebellum.pons.vlpo import VLPO
+from cns.data_types import CircadianState, SleepState
 
 
 def _estimate_azimuth_from_stereo(left_spectrum, right_spectrum) -> float:
@@ -184,6 +190,16 @@ class Agent:
         self.locus_coeruleus: LocusCoeruleus = LocusCoeruleus()
         self._lc_result: dict = {}                # 存本次 step 的 LC 结果
 
+        # v6.3: SCN 昼夜节律时钟 (TTFL + Process S + 光同步)
+        self.scn: SCN = SCN()
+        self._circadian_state: CircadianState = CircadianState()
+        # v6.3: VLPO 睡眠-觉醒调控 (触发器开关 + NREM/REM 振荡)
+        self.vlpo: VLPO = VLPO()
+        self._sleep_state: SleepState = SleepState()
+        self._light_level: float = 0.5  # 默认光照水平 (白天)
+        # v6.3: 步数→昼夜时间映射
+        self._step_to_circadian: int = 2880  # 1 step ≈ 30s → 2880 steps = 24h
+
         # v6.1: 可塑性调节器 (整合 GluN2B + 事件 + 稳态 + 神经调质)
         self.plasticity_regulator: PlasticityRegulator = PlasticityRegulator()
         self._plasticity_result: dict = {}         # 存本次 step 的可塑性结果
@@ -227,11 +243,16 @@ class Agent:
         self._audio_semantic: np.ndarray = np.zeros(64, dtype=np.float32)
         self._self_sentiment: np.ndarray = np.zeros(8, dtype=np.float32)
 
-        # 睡眠巩固追踪
+        # 睡眠巩固追踪 (v6.3: 升级为生物驱动的双相睡眠)
         self.consolidation_counter: int = 0      # 距离上次完整巩固的步数
-        self.consolidation_interval: int = 100   # 完整巩固间隔 (步)
+        self.consolidation_interval: int = 100   # 完整巩固间隔 (步) — legacy fallback
         self.dialogue_since_consolidation: int = 0  # 距离上次巩固的对话轮数
         self.consolidation_history: list[dict] = []  # 巩固历史记录
+        # v6.3: 睡眠状态追踪
+        self.sleep_history: list[dict] = []       # 睡眠片段历史
+        self._asleep_steps: int = 0              # 当前睡眠片段已持续步数
+        self._wake_steps: int = 0                # 当前觉醒已持续步数
+        self._last_sleep_stats: dict = {}        # 上次睡眠的统计
 
         # 追踪（核心）
         self.F_history: list[float] = []
@@ -266,6 +287,59 @@ class Agent:
         Returns:
             选定的 Action
         """
+        # ---- v6.3 Phase -1: SCN 昼夜节律更新 (TTFL + Process S + 光同步) ----
+        # 光输入: 从摄像头亮度或环境光照推导
+        # 清醒期用 _light_level, 睡眠期光照=0 (模拟黑暗环境)
+        effective_light = self._light_level if not self.vlpo.is_asleep else 0.0
+
+        # 异稳态负荷 (allostatic load) = 累积压力 + 身体偏离
+        allostatic_load = 0.0
+        if self.body is not None:
+            allostatic_load = float(np.clip(
+                self.body.b[2] * 0.5 + self.body.compute_deviation() * 0.3,
+                0.0, 1.0))
+
+        sleep_phase_for_scn = 'none'
+        if self.vlpo.is_asleep:
+            sleep_phase_for_scn = 'rem' if self.vlpo.is_in_rem else 'nrem'
+
+        self._circadian_state = self.scn.step(
+            light_level=effective_light,
+            is_asleep=self.vlpo.is_asleep,
+            allostatic_load=allostatic_load,
+            sleep_phase=sleep_phase_for_scn,
+            circa_tau=self.theta.circa_tau,
+            circa_light_sensitivity=self.theta.circa_light_sensitivity,
+        )
+
+        # ---- v6.3 Phase -0.5: VLPO 睡眠-觉醒评估 ----
+        # 前半夜/后半夜判定: time_of_night = 0→1 (入睡→将醒)
+        # 调节 NREM/REM 比例: 前半夜 NREM 主导, 后半夜 REM 主导
+        time_in_sleep_ratio = 0.0
+        if self.vlpo.is_asleep and self._asleep_steps > 0:
+            # 估计睡眠阶段位置 (基于 Process S 清除速度)
+            time_in_sleep_ratio = min(1.0,
+                (1.0 - self._circadian_state.sleep_pressure) / 0.65)
+        nrem_ratio = self.theta.nrem_duration_ratio
+        # 后半夜 NREM 比例下降 (REM 主导)
+        if time_in_sleep_ratio > 0.5:
+            nrem_ratio = max(0.35, nrem_ratio - 0.3 * (time_in_sleep_ratio - 0.5))
+
+        self._sleep_state = self.vlpo.update(
+            sleep_propensity=self._circadian_state.sleep_propensity,
+            sleep_pressure=self._circadian_state.sleep_pressure,
+            threshold=self.theta.sleep_pressure_threshold,
+            nrem_ratio=nrem_ratio,
+        )
+
+        # 追踪睡眠/觉醒步数
+        if self.vlpo.is_asleep:
+            self._asleep_steps += 1
+            self._wake_steps = 0
+        else:
+            self._asleep_steps = 0
+            self._wake_steps += 1
+
         # ---- v5.1 Phase 0: 视觉层级处理 (全管线前馈+反馈+PE+绑定) ----
         from cns.data_types import (M_V1_START, BINDING_END, D_VISUAL_V5)
         VIS_START, VIS_END = M_V1_START, BINDING_END  # s[64:372]
@@ -503,7 +577,7 @@ class Agent:
                 stress_level = float(self.body.b[2]) if self.body is not None else 0.0
                 hypo_result = self.hypothalamus.process(
                     body_vector=self.body,
-                    time_of_day=(step_count % 1440) / 1440.0,
+                    time_of_day=self.scn.get_time_of_day(),
                     stress_level=stress_level,
                     arousal=latest_arousal,
                 )
@@ -575,8 +649,14 @@ class Agent:
                     stress=stress_lc,
                     F_body=f_body_now_lc,
                     task_engagement=task_eng,
-                    # sensory SNR will be applied after FPN attention gate
                 )
+                # v6.3: VLPO 睡眠期 NE 调制 — REM 期 NE→0
+                if self.vlpo.is_asleep:
+                    vlpo_ne = self.vlpo.get_ne_level()
+                    lc_result['tonic_ne'] = vlpo_ne
+                    lc_result['total_ne'] = vlpo_ne
+                    lc_result['phasic_ne'] = 0.0
+                    lc_result['ne_mode'] = 'sleep_rem' if self.vlpo.is_in_rem else 'sleep_nrem'
                 # Wire LC → RVM (v5.4 reserved NE interface)
                 if hasattr(self, 'nociception_hierarchy'):
                     self.nociception_hierarchy.rvm._norepinephrine_tone = float(
@@ -628,17 +708,43 @@ class Agent:
             gist_vec[73] = a
             self.semantic_memory.learn_fact(gist_vec, weight=0.3)
 
-        if step_count > 0 and step_count % 100 == 0:
-            # Phase 1: 对话记忆巩固 (海马 → 皮层, 在衰减前)
-            # 把最近的对话经验从工作记忆转移到长期记忆
+        # ---- v6.3: VLPO 驱动的双相睡眠 (替换固定100步周期) ----
+        # 基础衰减每步执行 (轻量)
+        self.net.decay()
+
+        # 检测睡眠进入/退出
+        if self.vlpo.is_asleep and self._asleep_steps == 1:
+            # 刚进入睡眠
+            self._last_sleep_stats = {}
+        elif not self.vlpo.is_asleep and self._asleep_steps == 0 and self._wake_steps == 1:
+            # 刚醒来 → 记录睡眠统计
+            if self._last_sleep_stats:
+                self.sleep_history.append(self._last_sleep_stats)
+                self.consolidation_history.append(self._last_sleep_stats)
+
+        # NREM N3 深睡期 → 触发双相睡眠巩固
+        if (self.vlpo.is_asleep and
+            self._sleep_state.state == 'nrem_n3' and
+            self._sleep_state.time_in_state == 1):
+            # N3 深睡入口 → 执行完整双相睡眠巩固
+            # 对话记忆巩固 (海马 → 皮层)
             cb_result = self.maybe_consolidate(broca=None)
 
-            # Phase 2: L0 集群衰减 + 弱簇清理
-            n_removed = sleep_cycle(self.net, self.theta)
+            # 双相睡眠: NREM + REM
+            sleep_duration = 25  # N3 深睡的步数
+            dual_stats = dual_phase_sleep(
+                net=self.net,
+                theta=self.theta,
+                semantic_memory=self.semantic_memory if hasattr(self, 'semantic_memory') else None,
+                amygdala=None,
+                striatum=self.striatum if hasattr(self, 'striatum') else None,
+                nrem_duration_ratio=self.theta.nrem_duration_ratio,
+                sleep_duration_steps=sleep_duration,
+            )
+            self._last_sleep_stats = dual_stats.get('combined', {})
+            self.consolidation_counter = 0
 
-            # Phase 3: 睡眠后自我模型修剪 (v3: F_cognitive 驱动)
-            # 自我模型过大 → F_cognitive ↑ → 需要修剪
-            # 保留比例 ∝ 1/F_cognitive: F_cognitive 越高 → 剪掉越多
+            # 睡眠后自我模型修剪
             max_self = max(20, int(150 / max(1.0, self.F_cognitive_history[-1]
                                              if self.F_cognitive_history else 1.0)))
             if self.self_model.net.n_clusters > max_self:
@@ -647,10 +753,16 @@ class Agent:
                                    key=lambda c: c.activation, reverse=True)
                 if len(sorted_sc) > max_self:
                     self.self_model.net.clusters = sorted_sc[:max_self]
-
-            self.consolidation_counter += 100
         else:
             self.consolidation_counter += 1
+
+        # Legacy fallback: 如果 VLPO 长期未触发睡眠 (>>100步),
+        # 但经典的100步触发仍保留为安全网
+        if step_count > 0 and step_count % 100 == 0 and not self.vlpo.is_asleep:
+            if self._wake_steps > 100:
+                # VLPO 未触发但已清醒很久 → 轻量级巩固 (传统模式)
+                n_removed = sleep_cycle(self.net, self.theta)
+                self.consolidation_counter += 100
 
         # ---- L1: 自由能计算 + 注意力 ----
         belief = self._belief_vector()
@@ -747,7 +859,12 @@ class Agent:
             self.fpn.attention_template = np.ones_like(self.fpn.attention_template)
 
         # 应用探照灯: 增益调制感觉输入 (自下而上信号的增益调制)
-        attended_sensory = self.fpn.gate_attention(sensory)
+        # v6.3: +α 节律功能抑制
+        attended_sensory = self.fpn.gate_attention(
+            sensory,
+            alpha_strength=self.theta.alpha_gating_strength,
+            step_count=step_count,
+        )
 
         # v5.5: LC NE → SNR增强 (Yerkes-Dodson倒U曲线调制)
         if hasattr(self, '_lc_result') and self._lc_result:
@@ -970,6 +1087,20 @@ class Agent:
             'mean_protection': self.net.mean_protection,
             'plasticity_factor': self._plasticity_result.get('plasticity_factor', 1.0)
                 if self._plasticity_result else 1.0,
+            # v6.3: 昼夜节律 + 睡眠状态
+            'circadian_hour': self.scn.get_hour(),
+            'circadian_phase': self._circadian_state.circadian_phase,
+            'melatonin': self._circadian_state.melatonin,
+            'cortisol': self._circadian_state.cortisol,
+            'sleep_pressure': self._circadian_state.sleep_pressure,
+            'sleep_propensity': self._circadian_state.sleep_propensity,
+            'sleep_state': self._sleep_state.state,
+            'sleep_phase': self._sleep_state.phase,
+            'is_asleep': self.vlpo.is_asleep,
+            'total_sleep_steps': self._sleep_state.total_sleep_steps,
+            'n_sleep_episodes': self._sleep_state.n_sleep_episodes,
+            'nrem_steps': self._sleep_state.total_nrem_steps,
+            'rem_steps': self._sleep_state.total_rem_steps,
         }
 
     # ================================================================

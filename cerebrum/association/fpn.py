@@ -95,16 +95,24 @@ class FrontoparietalNetwork:
         self.tpn_activation: float = 0.5
 
     def gate_attention(
-        self, sensory: np.ndarray, goal_mask: Optional[np.ndarray] = None
+        self, sensory: np.ndarray, goal_mask: Optional[np.ndarray] = None,
+        alpha_strength: float = 0.4, step_count: int = 0,
     ) -> np.ndarray:
-        """注意力门控 — FPN 探照灯增强目标特征。
+        """注意力门控 — FPN 探照灯增强目标特征 + α 节律功能抑制。
 
         图3 规则4: 选择性注意作为"探照灯"。
         增强 goal_mask 对应的特征维度，抑制其余。
 
+        v6.3: α 节律 (8-13 Hz) 功能抑制:
+          - 注意通道: α抑制低 (高γ, 低α) → 信号增强
+          - 非注意通道: α抑制高 (低γ, 高α) → 功能抑制
+          - α 在功能上是"主动抑制"——不是缺乏处理，而是主动阻挡
+
         Args:
             sensory: 感知输入 s ∈ R^D
             goal_mask: 任务目标特征权重 (可选, 默认用当前模板)
+            alpha_strength: α 节律对非注意通道的抑制强度 [0, 1]
+            step_count: 全局步数 (用于 α 振荡相位)
 
         Returns:
             attended: 注意力调制后的感知输入
@@ -119,7 +127,74 @@ class FrontoparietalNetwork:
         # 侧抑制: 非目标区域被压制
         attended = attended * (1.0 - 0.3 * (1.0 - goal_mask / (goal_mask.max() + 1e-8)))
 
+        # ---- v6.3: α 节律功能抑制 ----
+        # α 振荡相位 (10 Hz 等价, sin 函数)
+        alpha_phase = 0.5 + 0.5 * np.sin(2.0 * np.pi * 10.0 * step_count * 0.03)
+        # 注意通道: α 抑制弱 (高γ, 低α)
+        alpha_attention = 1.0 - alpha_strength * 0.15 * alpha_phase * (2.0 - goal_mask)
+        # 非注意通道: α 抑制强 (低γ, 高α)
+        alpha_suppress = 1.0 - alpha_strength * alpha_phase * (1.0 - goal_mask /
+                                                                (goal_mask.max() + 1e-8))
+        # 综合 α 调制
+        alpha_mod = np.where(goal_mask > 0.5, alpha_attention, alpha_suppress)
+        attended = attended * np.clip(alpha_mod, 0.1, 1.5)
+
         return attended.astype(np.float32)
+
+    def alpha_gate_attention(self, sensory: np.ndarray,
+                             attention_mask: Optional[np.ndarray] = None,
+                             alpha_strength: float = 0.4,
+                             step_count: int = 0) -> dict:
+        """v6.3: α 节律注意门控 — 独立调用接口.
+
+        对应神经机制:
+          - α 节律 (8-13 Hz, 枕区主导) = 功能性抑制
+          - 闭眼/放松 → α 增强 (广泛抑制)
+          - 注意集中 → α 在非注意区增强, 在注意区减弱
+          - 这就是"α 阻断" (alpha blocking) —— 被注意的通道 α 下降
+
+        Args:
+            sensory: 感知输入
+            attention_mask: 注意力掩码 (1=注意, 0=忽略)
+            alpha_strength: α 抑制强度
+            step_count: 全局步数
+
+        Returns:
+            dict with gated_sensory, alpha_level, suppression_map
+        """
+        if attention_mask is None:
+            attention_mask = self.attention_template
+
+        # α 水平: 基于当前任务参与度
+        base_alpha = alpha_strength * (1.5 - self.tpn_activation)
+        # α 振荡相位
+        alpha_phase = 0.5 + 0.5 * np.sin(2.0 * np.pi * 10.0 * step_count * 0.03)
+
+        # 通道级 α 抑制
+        # 注意通道: γ 主导, α 低
+        attended_channels = attention_mask > 0.5
+        unattended_channels = ~attended_channels
+
+        suppression = np.ones_like(sensory)
+        # 非注意通道: α 高 → 功能抑制
+        suppression[unattended_channels] = (
+            1.0 - base_alpha * alpha_phase)
+        # 注意通道: α 低 → 信号畅通 (但仍有微弱调制)
+        suppression[attended_channels] = (
+            1.0 - base_alpha * 0.1 * alpha_phase)
+
+        suppression = np.clip(suppression, 0.15, 1.5)
+        gated = sensory * suppression
+
+        return {
+            'gated_sensory': gated.astype(np.float32),
+            'alpha_level': float(base_alpha),
+            'alpha_phase': float(alpha_phase),
+            'suppression_map': suppression,
+            'mean_suppression': float(np.mean(suppression)),
+            'attended_suppression': float(np.mean(suppression[attended_channels]))
+                if np.any(attended_channels) else 1.0,
+        }
 
     def update_template(self, task_goal_features: np.ndarray, lr: float = 0.1):
         """更新注意力模板 — EMA 朝向当前任务目标特征。

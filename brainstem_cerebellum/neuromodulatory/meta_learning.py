@@ -23,7 +23,7 @@ from cns.data_types import Theta, FreeEnergy, DevelopmentalStage
 # ============================================================
 
 def create_default_theta() -> Theta:
-    """返回 48 个参数的默认配置 (v6.2)"""
+    """返回 56 个参数的默认配置 (v6.3)"""
     return Theta(
         sigma_z=0.1, sigma_x=1.0, decay_rate=0.01,
         cluster_threshold=0.85, learn_rate_l0=0.05,
@@ -47,6 +47,14 @@ def create_default_theta() -> Theta:
         persistence_lr_boost=0.5,
         consolidation_lock_factor=0.5,
         consolidation_lock_max=10,
+        # v6.3: 睡眠与时间维度
+        circa_tau=24.0, circa_light_sensitivity=0.3,
+        sleep_pressure_threshold=0.65,
+        nrem_duration_ratio=0.65,
+        synaptic_downscale_rate=0.03,
+        alpha_gating_strength=0.4,
+        glymphatic_clear_rate=0.005,
+        rem_emotional_processing=0.3,
     )
 
 
