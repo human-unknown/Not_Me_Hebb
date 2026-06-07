@@ -77,7 +77,12 @@ class CameraInput:
 
         try:
             import cv2
-            self._cap = cv2.VideoCapture(self.camera_id)
+            import platform
+            # Windows: 使用 DSHOW 后端大幅加速打开 (CAP_MSMF 慢 3-5s)
+            if platform.system() == 'Windows':
+                self._cap = cv2.VideoCapture(self.camera_id, cv2.CAP_DSHOW)
+            else:
+                self._cap = cv2.VideoCapture(self.camera_id)
             if not self._cap.isOpened():
                 self._cap = None
                 return False
@@ -85,6 +90,7 @@ class CameraInput:
             self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
             self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
             self._cap.set(cv2.CAP_PROP_FPS, self.fps)
+            self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # 最低延迟
             self._is_open = True
             self._last_frame_time = time.time()
             return True

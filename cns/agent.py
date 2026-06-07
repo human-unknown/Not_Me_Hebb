@@ -277,6 +277,7 @@ class Agent:
         self._autonomous_mode: bool = False           # 是否处于自主运行模式
         self._last_activity: str = 'idle'             # 最近活动类型
         self._last_thought: str = ""                  # 最近内部思维文本 (用于显示)
+        self._activity_log: list[dict] = []           # 最近活动日志 [{time, type, text}, ...]
         self.internal_life = None                     # InternalLife (Phase 3 填充)
         self.telemetry = None                         # Telemetry (Phase 4 填充)
         self.reader = None                            # Reader (Phase 4 填充)
@@ -1694,6 +1695,16 @@ class Agent:
     # v6.4: 自主模式 — light_step + internal_thought
     # ================================================================
 
+    def _log_activity(self, activity_type: str, text: str = ""):
+        """记录一条活动日志，维护最近 20 条."""
+        self._activity_log.append({
+            'time': int(getattr(self, '_step_counter', 0)),
+            'type': activity_type,
+            'text': str(text)[:120],
+        })
+        if len(self._activity_log) > 20:
+            self._activity_log = self._activity_log[-20:]
+
     def light_step(self, step_count: int,
                    activity: str = 'idle',
                    text_input: str = None) -> dict:
@@ -1984,6 +1995,7 @@ class Agent:
 
         # 更新追踪
         self._last_activity = activity
+        self._log_activity(activity, self._last_thought or activity)
 
         # 返回活动摘要
         return {

@@ -3,202 +3,654 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NotMe v6.4 — 自由能原理情感智能体</title>
+<title>NotMe v6.5 — 自由能原理情感智能体</title>
 <style>
+/* ============================================================
+   Design System — CSS Variables
+   ============================================================ */
+:root {
+  --bg-primary:   #0a0e14;
+  --bg-secondary: #12171f;
+  --bg-tertiary:  #181e28;
+  --bg-card:      #161c26;
+  --border:       #252b36;
+  --border-hover: #30363d;
+  --text-primary: #e0e6ed;
+  --text-secondary: #8b949e;
+  --text-muted:   #565e6b;
+  --accent-blue:  #58a6ff;
+  --accent-green: #3fb950;
+  --accent-orange:#f0883e;
+  --accent-red:   #da3633;
+  --accent-purple:#bc8cff;
+  --accent-cyan:  #39d2c0;
+  --accent-pink:  #f778ba;
+  --accent-yellow:#d29922;
+  --awake:        #3fb950;
+  --nrem:         #58a6ff;
+  --rem:          #bc8cff;
+  --sleep-gray:   #484f58;
+  --shadow:       0 1px 3px rgba(0,0,0,0.4);
+  --shadow-lg:    0 4px 12px rgba(0,0,0,0.5);
+  --radius:       8px;
+  --radius-sm:    4px;
+  --transition:   0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
-.header{background:#161b22;padding:8px 16px;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:16px}
-.header h1{font-size:16px;color:#58a6ff;white-space:nowrap}
-.header .status-dot{width:10px;height:10px;border-radius:50%;background:#3fb950;display:inline-block}
-.header .status-dot.asleep{background:#8b949e}
-.header .status-dot.rem{background:#d2a8ff}
-.header .info{font-size:12px;color:#8b949e}
-.grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;padding:8px;flex:1;min-height:0}
-.panel{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:10px;display:flex;flex-direction:column;overflow:hidden}
-.panel h3{font-size:12px;color:#8b949e;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
-.chat-bar{background:#161b22;border-top:1px solid #30363d;padding:8px 16px;display:flex;gap:8px;max-height:120px;overflow-y:auto;flex-direction:column}
-.chat-messages{font-size:12px;max-height:60px;overflow-y:auto}
-.chat-msg{margin:2px 0;line-height:1.4}
-.chat-msg .human{color:#58a6ff}
-.chat-msg .agent{color:#3fb950}
-.chat-input{display:flex;gap:8px}
-.chat-input input{flex:1;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:6px 10px;border-radius:4px;font-size:13px}
-.chat-input button{background:#238636;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:12px}
-.chat-input button:hover{background:#2ea043}
-.valence-gauge{text-align:center;font-size:32px;margin:4px 0}
-.body-bars{display:flex;flex-direction:column;gap:3px;flex:1}
-.body-row{display:flex;align-items:center;gap:6px;font-size:11px}
-.body-row .label{width:24px;color:#8b949e;text-align:right}
-.body-row .bar{flex:1;height:10px;background:#21262d;border-radius:3px;overflow:hidden}
-.body-row .bar-fill{height:100%;border-radius:3px;transition:width .3s}
-.body-row .val{width:32px;font-size:10px;color:#8b949e;text-align:right}
-.viz-panel canvas{width:100%;border-radius:4px;background:#0d1117}
-.viz-bars{display:flex;gap:12px;margin-top:4px;font-size:10px}
-.viz-bar{flex:1;text-align:center}
-.viz-bar .fill{height:8px;background:#21262d;border-radius:2px;overflow:hidden;margin-bottom:2px}
-.viz-bar .fill-inner{height:100%;border-radius:2px;transition:width .3s}
-.audio-panel{display:flex;flex-direction:column;gap:6px}
-.audio-panel canvas{width:100%;border-radius:4px;background:#0d1117}
-.azimuth-compass{position:relative;width:80px;height:40px;margin:0 auto}
-.sleep-indicator{padding:4px 8px;border-radius:4px;font-size:12px;text-align:center}
-.sleep-indicator.awake{background:#1a3a1a;color:#3fb950}
-.sleep-indicator.nrem{background:#1a1a3a;color:#58a6ff}
-.sleep-indicator.rem{background:#2a1a3a;color:#d2a8ff}
-.circa-row{display:flex;justify-content:space-between;font-size:11px;margin:2px 0}
-.circa-row .label{color:#8b949e}
-.trend-canvas{width:100%;border-radius:4px;background:#0d1117;flex:1}
-.mem-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px}
-.mem-stat{text-align:center;padding:4px}
-.mem-stat .num{font-size:18px;font-weight:bold}
-.mem-stat .lbl{color:#8b949e;font-size:10px}
-.reading-info{font-size:10px;color:#8b949e;margin-top:4px}
+html,body{height:100%;overflow:hidden}
+body{
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;
+  font-size:13px;
+  line-height:1.5;
+  display:flex;
+  flex-direction:column;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ============================================================
+   Header
+   ============================================================ */
+.header{
+  background:var(--bg-secondary);
+  border-bottom:1px solid var(--border);
+  padding:6px 16px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-shrink:0;
+  z-index:10;
+}
+.header-brand{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-weight:700;
+  font-size:14px;
+  color:var(--accent-blue);
+  letter-spacing:-0.3px;
+}
+.header-dot{
+  width:10px;height:10px;
+  border-radius:50%;
+  background:var(--awake);
+  transition:background var(--transition), box-shadow var(--transition);
+  flex-shrink:0;
+}
+.header-dot.asleep{background:var(--sleep-gray)}
+.header-dot.rem{
+  background:var(--rem);
+  box-shadow:0 0 8px var(--rem);
+  animation:pulse-rem 2s ease-in-out infinite;
+}
+.header-dot.awake-pulse{
+  box-shadow:0 0 6px var(--awake);
+  animation:pulse-awake 3s ease-in-out infinite;
+}
+@keyframes pulse-rem {
+  0%,100%{box-shadow:0 0 4px var(--rem)}
+  50%{box-shadow:0 0 14px var(--rem)}
+}
+@keyframes pulse-awake {
+  0%,100%{box-shadow:0 0 4px var(--awake)}
+  50%{box-shadow:0 0 10px var(--awake)}
+}
+.header-info{
+  display:flex;
+  gap:16px;
+  font-size:11px;
+  color:var(--text-secondary);
+  margin-left:auto;
+  align-items:center;
+}
+.header-tag{
+  padding:2px 8px;
+  border-radius:10px;
+  font-size:10px;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+.header-tag.awake{background:#1a3a1a;color:var(--awake)}
+.header-tag.nrem{background:#1a1a3a;color:var(--nrem)}
+.header-tag.rem{background:#2a1a3a;color:var(--rem)}
+.header-tag.idle{background:#1a1a2a;color:var(--text-muted)}
+
+/* ============================================================
+   Main Grid — 4 columns × 2 rows
+   ============================================================ */
+.main-grid{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  grid-template-rows:1fr 1fr;
+  gap:8px;
+  padding:8px;
+  flex:1;
+  min-height:0;
+}
+.panel{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:10px 12px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  transition:border-color var(--transition), box-shadow var(--transition);
+  position:relative;
+}
+.panel:hover{
+  border-color:var(--border-hover);
+  box-shadow:var(--shadow-lg);
+}
+.panel-header{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-bottom:6px;
+  flex-shrink:0;
+}
+.panel-header .icon{font-size:14px;line-height:1}
+.panel-header h3{
+  font-size:11px;
+  font-weight:600;
+  color:var(--text-secondary);
+  text-transform:uppercase;
+  letter-spacing:0.6px;
+}
+.panel-header .badge{
+  margin-left:auto;
+  font-size:10px;
+  padding:1px 6px;
+  border-radius:8px;
+  background:var(--bg-tertiary);
+  color:var(--text-muted);
+}
+.panel-body{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* ============================================================
+   Emotion Panel
+   ============================================================ */
+.emo-core{display:flex;align-items:center;gap:10px;flex:1}
+.emo-face{
+  font-size:36px;
+  text-align:center;
+  width:48px;
+  flex-shrink:0;
+  transition:transform var(--transition);
+}
+.emo-vals{font-size:11px;text-align:center;flex-shrink:0}
+.emo-vals .v{font-weight:700;font-size:15px}
+.emo-vals .a{font-weight:600;font-size:13px;color:var(--accent-orange)}
+.emo-canvas-wrap{flex:1;min-width:0}
+.emo-canvas-wrap canvas{width:100%;border-radius:var(--radius-sm);background:var(--bg-primary)}
+
+/* ============================================================
+   Body Panel
+   ============================================================ */
+.body-list{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto}
+.body-row{display:flex;align-items:center;gap:6px;font-size:10px}
+.body-row .icon{width:18px;text-align:center;flex-shrink:0;font-size:12px}
+.body-row .label{width:28px;color:var(--text-secondary);text-align:left;flex-shrink:0;font-size:10px}
+.body-row .bar-wrap{flex:1;height:12px;background:var(--bg-primary);border-radius:6px;overflow:hidden;position:relative}
+.body-row .bar-fill{height:100%;border-radius:6px;transition:width 0.5s ease}
+.body-row .bar-sp{
+  position:absolute;top:0;width:2px;height:100%;
+  background:var(--text-primary);opacity:0.6;z-index:2;
+  transition:left 0.5s ease;
+}
+.body-row .val{width:30px;font-size:9px;color:var(--text-muted);text-align:right;flex-shrink:0}
+
+/* ============================================================
+   Brain Networks Panel
+   ============================================================ */
+.network-bars{display:flex;flex-direction:column;gap:8px;flex:1}
+.network-row{display:flex;align-items:center;gap:8px}
+.network-row .nlabel{width:36px;font-size:10px;color:var(--text-secondary);text-align:right;flex-shrink:0}
+.network-row .nbar-wrap{flex:1;height:16px;background:var(--bg-primary);border-radius:8px;overflow:hidden}
+.network-row .nbar-fill{height:100%;border-radius:8px;transition:width 0.5s ease}
+.network-row .nval{width:32px;font-size:10px;text-align:right;flex-shrink:0}
+.seesaw-viz{flex:1;position:relative;min-height:40px}
+.seesaw-viz canvas{width:100%;height:100%;border-radius:var(--radius-sm);background:var(--bg-primary)}
+
+/* ============================================================
+   Neurochemical Panel
+   ============================================================ */
+.neuro-gauges{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1}
+.neuro-gauge{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.neuro-gauge canvas{width:100%;max-width:80px;height:60px}
+.neuro-gauge .ng-label{font-size:10px;color:var(--text-secondary);margin-top:2px}
+.neuro-gauge .ng-val{font-size:13px;font-weight:700}
+
+/* ============================================================
+   Visual Panel
+   ============================================================ */
+.visual-main{display:flex;gap:8px;flex:1;min-height:0}
+.visual-frame-wrap{flex-shrink:0;position:relative}
+.visual-frame-wrap canvas{border-radius:var(--radius-sm);border:1px solid var(--border)}
+.visual-channels{flex:1;display:flex;flex-direction:column;gap:4px;justify-content:center}
+.vis-ch-row{display:flex;align-items:center;gap:6px;font-size:10px}
+.vis-ch-row .ch-label{width:20px;color:var(--text-muted)}
+.vis-ch-row .ch-bar-wrap{flex:1;height:8px;background:var(--bg-primary);border-radius:4px;overflow:hidden}
+.vis-ch-row .ch-bar-fill{height:100%;border-radius:4px;transition:width 0.4s ease}
+.vis-ch-row .ch-val{width:28px;font-size:9px;color:var(--text-muted);text-align:right}
+
+/* ============================================================
+   Audio Panel
+   ============================================================ */
+.audio-section{display:flex;flex-direction:column;gap:4px;flex:1}
+.audio-section canvas{border-radius:var(--radius-sm);background:var(--bg-primary)}
+.audio-section .wave-canvas{width:100%;height:45px}
+.audio-section .mel-canvas{width:100%;height:32px}
+.audio-bottom{display:flex;align-items:center;gap:8px;justify-content:center}
+.audio-bottom canvas{width:70px;height:35px}
+.audio-bottom .az-label{font-size:9px;color:var(--text-muted)}
+
+/* ============================================================
+   Circadian & Sleep Panel
+   ============================================================ */
+.circa-layout{display:flex;gap:8px;flex:1;min-height:0}
+.circa-clock-wrap{flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.circa-clock-wrap canvas{width:90px;height:90px}
+.circa-details{flex:1;display:flex;flex-direction:column;gap:3px;justify-content:center}
+.circa-row{display:flex;justify-content:space-between;font-size:10px}
+.circa-row .clabel{color:var(--text-muted)}
+.circa-row .cval{font-weight:600}
+.sleep-depth-wrap{flex:1;min-height:24px}
+.sleep-depth-wrap canvas{width:100%;height:100%;border-radius:var(--radius-sm);background:var(--bg-primary)}
+
+/* ============================================================
+   Memory & System Panel
+   ============================================================ */
+.mem-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:4px}
+.mem-stat{text-align:center;padding:4px 2px;background:var(--bg-tertiary);border-radius:var(--radius-sm)}
+.mem-stat .mnum{font-size:16px;font-weight:700}
+.mem-stat .mlbl{font-size:9px;color:var(--text-muted)}
+.sys-canvas-wrap{flex:1;min-height:0}
+.sys-canvas-wrap canvas{width:100%;height:100%;border-radius:var(--radius-sm);background:var(--bg-primary)}
+.sys-summary{display:flex;gap:8px;font-size:9px;color:var(--text-muted);margin-top:2px;justify-content:space-between}
+
+/* ============================================================
+   Activity Stream
+   ============================================================ */
+.activity-stream{
+  background:var(--bg-secondary);
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  padding:4px 12px;
+  display:flex;
+  gap:12px;
+  overflow-x:auto;
+  flex-shrink:0;
+  min-height:28px;
+  align-items:center;
+  white-space:nowrap;
+}
+.activity-item{
+  font-size:10px;
+  color:var(--text-muted);
+  display:flex;
+  align-items:center;
+  gap:4px;
+  flex-shrink:0;
+  opacity:0.5;
+  transition:opacity var(--transition);
+}
+.activity-item.recent{opacity:1;color:var(--text-primary)}
+.activity-item .act-icon{font-size:12px}
+.activity-dot{
+  width:4px;height:4px;
+  border-radius:50%;
+  background:var(--border);
+  flex-shrink:0;
+}
+
+/* ============================================================
+   Chat Bar
+   ============================================================ */
+.chat-bar{
+  background:var(--bg-secondary);
+  border-top:1px solid var(--border);
+  padding:6px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  flex-shrink:0;
+}
+.chat-messages{
+  font-size:12px;
+  max-height:70px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.chat-msg{
+  padding:3px 8px;
+  border-radius:var(--radius-sm);
+  max-width:80%;
+  line-height:1.4;
+  animation:fadeIn 0.2s ease;
+}
+.chat-msg.human{
+  align-self:flex-end;
+  background:#1a3a4a;
+  color:var(--accent-blue);
+}
+.chat-msg.agent{
+  align-self:flex-start;
+  background:#1a2a1a;
+  color:var(--accent-green);
+}
+.chat-msg .who{font-size:9px;opacity:0.7;margin-bottom:1px;display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.chat-input-row{display:flex;gap:8px;align-items:center}
+.chat-input-row input{
+  flex:1;
+  background:var(--bg-primary);
+  border:1px solid var(--border);
+  color:var(--text-primary);
+  padding:6px 10px;
+  border-radius:var(--radius-sm);
+  font-size:13px;
+  outline:none;
+  transition:border-color var(--transition);
+}
+.chat-input-row input:focus{border-color:var(--accent-blue)}
+.chat-input-row input::placeholder{color:var(--text-muted)}
+.btn{
+  padding:5px 10px;
+  border-radius:var(--radius-sm);
+  border:none;
+  cursor:pointer;
+  font-size:11px;
+  font-weight:600;
+  transition:background var(--transition), opacity var(--transition);
+  flex-shrink:0;
+}
+.btn:hover{opacity:0.85}
+.btn-send{background:var(--accent-green);color:#fff}
+.btn-read{background:var(--accent-blue);color:#fff;font-size:14px;padding:4px 8px}
+.btn-stop{background:var(--accent-red);color:#fff;font-size:14px;padding:4px 8px}
+.reading-progress{
+  height:3px;background:var(--bg-primary);border-radius:2px;overflow:hidden;flex-shrink:0
+}
+.reading-progress .rp-fill{
+  height:100%;background:var(--accent-blue);
+  border-radius:2px;transition:width 0.5s ease
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width:1200px){
+  .main-grid{grid-template-columns:repeat(3, 1fr)}
+}
+@media (max-width:900px){
+  .main-grid{grid-template-columns:repeat(2, 1fr);grid-template-rows:auto}
+}
+@media (max-width:600px){
+  .main-grid{grid-template-columns:1fr}
+  .header-info{gap:8px;font-size:10px}
+}
 </style>
 </head>
 <body>
 
+<!-- ============================================================
+     Header
+     ============================================================ -->
 <div class="header">
-  <span class="status-dot" id="sleepDot"></span>
-  <h1>NotMe v6.4</h1>
-  <span class="info" id="headerInfo">initializing...</span>
+  <div class="header-brand">
+    <span class="header-dot awake-pulse" id="hdrDot"></span>
+    NotMe v6.5
+  </div>
+  <span class="header-tag idle" id="hdrTag">idle</span>
+  <div class="header-info">
+    <span id="hdrTime">🕐 --:--</span>
+    <span id="hdrUptime">⏱ 0</span>
+    <span id="hdrStep">步: 0</span>
+  </div>
 </div>
 
-<div class="grid">
-  <!-- 情感仪表 -->
-  <div class="panel" id="emoPanel">
-    <h3>🎭 情感仪表</h3>
-    <div class="valence-gauge" id="valenceEmoji">😐</div>
-    <div style="font-size:11px;text-align:center">
-      V: <span id="valVal" style="color:#3fb950">0.00</span>
-      A: <span id="aroVal" style="color:#f0883e">0.50</span>
+<!-- ============================================================
+     Main Grid — 8 Panels
+     ============================================================ -->
+<div class="main-grid">
+
+  <!-- 🎭 情感仪表 -->
+  <div class="panel" id="pEmo">
+    <div class="panel-header">
+      <span class="icon">🎭</span><h3>情感仪表</h3>
+      <span class="badge" id="emoBadge">核心情感空间</span>
     </div>
-    <canvas id="valenceCanvas" style="width:100%;height:60px;background:#0d1117;border-radius:4px;margin-top:4px"></canvas>
+    <div class="panel-body">
+      <div class="emo-core">
+        <div>
+          <div class="emo-face" id="emoFace">😐</div>
+          <div class="emo-vals">
+            <div class="v" id="emoV" style="color:var(--awake)">0.00</div>
+            <div class="a" id="emoA">0.50</div>
+          </div>
+        </div>
+        <div class="emo-canvas-wrap"><canvas id="emoSpace"></canvas></div>
+      </div>
+    </div>
   </div>
 
-  <!-- 身体状态 -->
-  <div class="panel">
-    <h3>🏃 身体状态</h3>
-    <div class="body-bars" id="bodyBars"></div>
+  <!-- 🏃 身体状态 -->
+  <div class="panel" id="pBody">
+    <div class="panel-header"><span class="icon">🏃</span><h3>身体稳态</h3><span class="badge">9 维内稳态</span></div>
+    <div class="panel-body"><div class="body-list" id="bodyBars"></div></div>
+  </div>
+
+  <!-- 🧠 脑网络 -->
+  <div class="panel" id="pNet">
+    <div class="panel-header"><span class="icon">🧠</span><h3>脑网络</h3><span class="badge" id="netBadge">跷跷板</span></div>
+    <div class="panel-body">
+      <div class="network-bars">
+        <div class="network-row">
+          <span class="nlabel" style="color:var(--accent-orange)">TPN</span>
+          <div class="nbar-wrap"><div class="nbar-fill" id="tpnBar" style="width:50%;background:linear-gradient(90deg,#f0883e,#f778ba)"></div></div>
+          <span class="nval" id="tpnVal">0.50</span>
+        </div>
+        <div class="network-row">
+          <span class="nlabel" style="color:var(--accent-blue)">DMN</span>
+          <div class="nbar-wrap"><div class="nbar-fill" id="dmnBar" style="width:50%;background:linear-gradient(90deg,#58a6ff,#bc8cff)"></div></div>
+          <span class="nval" id="dmnVal">0.50</span>
+        </div>
+        <div class="network-row">
+          <span class="nlabel" style="color:var(--accent-cyan)">FPN</span>
+          <div class="nbar-wrap"><div class="nbar-fill" id="fpnBar" style="width:50%;background:linear-gradient(90deg,#39d2c0,#58a6ff)"></div></div>
+          <span class="nval" id="fpnVal">0.50</span>
+        </div>
+      </div>
+      <div class="seesaw-viz"><canvas id="seesawCanvas"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 💊 神经化学 -->
+  <div class="panel" id="pNeuro">
+    <div class="panel-header"><span class="icon">💊</span><h3>神经化学</h3><span class="badge">神经调节</span></div>
+    <div class="panel-body">
+      <div class="neuro-gauges" id="neuroGauges">
+        <!-- filled by JS -->
+      </div>
+    </div>
   </div>
 
   <!-- 👁 AI看到的画面 -->
-  <div class="panel viz-panel">
-    <h3>👁 AI看到的画面 <span id="vizMode" style="font-size:10px;color:#8b949e"></span></h3>
-    <canvas id="vizCanvas" width="128" height="128"></canvas>
-    <div class="viz-bars">
-      <div class="viz-bar">V1<div class="fill"><div class="fill-inner" id="v1Bar" style="width:0%;background:#58a6ff"></div></div><span id="v1Val">0</span></div>
-      <div class="viz-bar">V2<div class="fill"><div class="fill-inner" id="v2Bar" style="width:0%;background:#3fb950"></div></div><span id="v2Val">0</span></div>
-      <div class="viz-bar">V4<div class="fill"><div class="fill-inner" id="v4Bar" style="width:0%;background:#f0883e"></div></div><span id="v4Val">0</span></div>
-      <div class="viz-bar">IT<div class="fill"><div class="fill-inner" id="itBar" style="width:0%;background:#d2a8ff"></div></div><span id="itVal">0</span></div>
+  <div class="panel" id="pVis">
+    <div class="panel-header"><span class="icon">👁</span><h3>AI看到的画面</h3><span class="badge" id="visBadge">语义代理</span></div>
+    <div class="panel-body">
+      <div class="visual-main">
+        <div class="visual-frame-wrap"><canvas id="vizCanvas" width="112" height="112"></canvas></div>
+        <div class="visual-channels" id="visChannels">
+          <!-- filled by JS -->
+        </div>
+      </div>
     </div>
-  </div>
-
-  <!-- 昼夜 + 睡眠 -->
-  <div class="panel">
-    <h3>🕐 昼夜节律 & 睡眠</h3>
-    <div class="sleep-indicator awake" id="sleepInd">清醒</div>
-    <div class="circa-row"><span class="label">🌙 褪黑素</span><span id="melVal">0.00</span></div>
-    <div class="circa-row"><span class="label">☀️ 皮质醇</span><span id="corVal">0.00</span></div>
-    <div class="circa-row"><span class="label">😴 睡眠压力</span><span id="spVal">0.00</span></div>
-    <canvas id="circaCanvas" style="width:100%;height:50px;background:#0d1117;border-radius:4px;margin-top:4px"></canvas>
-  </div>
-
-  <!-- 记忆 & 学习 -->
-  <div class="panel">
-    <h3>🧠 记忆 & 学习</h3>
-    <div class="mem-stats">
-      <div class="mem-stat"><div class="num" id="nClusters" style="color:#58a6ff">0</div><div class="lbl">情景记忆</div></div>
-      <div class="mem-stat"><div class="num" id="nSemantic" style="color:#3fb950">0</div><div class="lbl">语义概念</div></div>
-      <div class="mem-stat"><div class="num" id="nSelf" style="color:#f0883e">0</div><div class="lbl">自我体验</div></div>
-      <div class="mem-stat"><div class="num" id="totalAct" style="color:#d2a8ff">0</div><div class="lbl">总激活</div></div>
-    </div>
-    <canvas id="trendCanvas" class="trend-canvas"></canvas>
-    <div class="reading-info" id="readingInfo"></div>
   </div>
 
   <!-- 🔊 AI听到的声音 -->
-  <div class="panel audio-panel">
-    <h3>🔊 AI听到的声音 <span id="audioStatus" style="font-size:10px;color:#8b949e">静默</span></h3>
-    <canvas id="waveCanvas" width="256" height="60"></canvas>
-    <canvas id="melCanvas" width="256" height="40"></canvas>
-    <div style="display:flex;justify-content:center;align-items:center;gap:8px">
-      <canvas id="azimuthCanvas" width="80" height="40"></canvas>
-      <span id="rmsVal" style="font-size:11px;color:#8b949e">RMS: 0.00</span>
+  <div class="panel" id="pAud">
+    <div class="panel-header"><span class="icon">🔊</span><h3>AI听到的声音</h3><span class="badge" id="audBadge">静默</span></div>
+    <div class="panel-body">
+      <div class="audio-section">
+        <canvas id="waveCanvas" class="wave-canvas" width="256" height="45"></canvas>
+        <canvas id="melCanvas" class="mel-canvas" width="256" height="32"></canvas>
+        <div class="audio-bottom">
+          <canvas id="azimuthCanvas" width="70" height="35"></canvas>
+          <span class="az-label" id="rmsLabel">Az: 0°</span>
+        </div>
+      </div>
     </div>
   </div>
+
+  <!-- 🕐 昼夜节律 & 睡眠 -->
+  <div class="panel" id="pCirca">
+    <div class="panel-header"><span class="icon">🕐</span><h3>昼夜节律 & 睡眠</h3><span class="badge" id="sleepBadge">清醒</span></div>
+    <div class="panel-body">
+      <div class="circa-layout">
+        <div class="circa-clock-wrap"><canvas id="circaClock" width="90" height="90"></canvas></div>
+        <div class="circa-details">
+          <div class="circa-row"><span class="clabel">🌙 褪黑素</span><span class="cval" id="melVal" style="color:var(--accent-purple)">0.00</span></div>
+          <div class="circa-row"><span class="clabel">☀️ 皮质醇</span><span class="cval" id="corVal" style="color:var(--accent-orange)">0.00</span></div>
+          <div class="circa-row"><span class="clabel">😴 睡眠压力</span><span class="cval" id="spVal" style="color:var(--accent-blue)">0.00</span></div>
+          <div class="circa-row"><span class="clabel">💤 睡眠倾向</span><span class="cval" id="spropVal" style="color:var(--text-muted)">0.00</span></div>
+        </div>
+      </div>
+      <div class="sleep-depth-wrap"><canvas id="sleepDepth"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 📊 系统状态 -->
+  <div class="panel" id="pSys">
+    <div class="panel-header"><span class="icon">📊</span><h3>记忆 & 系统</h3><span class="badge" id="sysBadge">运行中</span></div>
+    <div class="panel-body">
+      <div class="mem-grid">
+        <div class="mem-stat"><div class="mnum" id="nClusters" style="color:var(--accent-blue)">0</div><div class="mlbl">情景记忆</div></div>
+        <div class="mem-stat"><div class="mnum" id="nSemantic" style="color:var(--accent-green)">0</div><div class="mlbl">语义概念</div></div>
+        <div class="mem-stat"><div class="mnum" id="nSelf" style="color:var(--accent-orange)">0</div><div class="mlbl">自我体验</div></div>
+        <div class="mem-stat"><div class="mnum" id="totalAct" style="color:var(--accent-purple)">0</div><div class="mlbl">总激活</div></div>
+      </div>
+      <div class="sys-canvas-wrap"><canvas id="sysCanvas"></canvas></div>
+      <div class="sys-summary">
+        <span id="sysFmean">F̅: --</span>
+        <span id="sysVmean">V̅: --</span>
+        <span id="sysAmean">A̅: --</span>
+        <span id="sysSteps">步: 0</span>
+      </div>
+    </div>
+  </div>
+
 </div>
 
+<!-- ============================================================
+     Activity Stream
+     ============================================================ -->
+<div class="activity-stream" id="activityStream">
+  <span style="color:var(--text-muted);font-size:10px">📝 等待活动...</span>
+</div>
+
+<!-- ============================================================
+     Chat Bar
+     ============================================================ -->
 <div class="chat-bar">
-  <div class="chat-messages" id="chatMessages"></div>
-  <div class="chat-input">
-    <input id="chatInput" placeholder="输入消息... (Agent 在后台自主运行)" autofocus>
-    <button onclick="sendChat()">发送</button>
-    <button onclick="startReading()" style="background:#1f6feb">📖</button>
-    <button onclick="stopReading()" style="background:#da3633">⏹</button>
+  <div class="reading-progress" id="readingProgress" style="display:none">
+    <div class="rp-fill" id="rpFill" style="width:0%"></div>
+  </div>
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-msg agent"><span class="who">Agent</span>你好，我是 NotMe。一个基于自由能原理的情感智能体。</div>
+  </div>
+  <div class="chat-input-row">
+    <input id="chatInput" placeholder="和 Agent 说话..." autofocus>
+    <button class="btn btn-send" onclick="sendChat()">发送</button>
+    <button class="btn btn-read" onclick="startReading()" title="开始阅读">📖</button>
+    <button class="btn btn-stop" onclick="stopReading()" title="停止阅读">⏹</button>
   </div>
 </div>
 
+<!-- ============================================================
+     JavaScript — All Logic
+     ============================================================ -->
 <script>
 // ============================================================
-// Canvas DPI scaling — fix blur on high-DPI displays
+// DPI-aware Canvas Setup
 // ============================================================
-const _canvases = {};  // {id: {elem, drawFn, cssW, cssH}}
+const _canvases = {};
 
-function setupCanvases() {
+function setupDPI(canvasId, cssW, cssH) {
+  const el = document.getElementById(canvasId);
+  if (!el) return;
   const dpr = window.devicePixelRatio || 1;
-
-  // Register all canvases that need DPI-aware sizing
-  const specs = [
-    {id: 'vizCanvas',     cssW: null, cssH: 128,  drawFn: 'camera'},
-    {id: 'valenceCanvas', cssW: null, cssH: 60,   drawFn: 'valence'},
-    {id: 'circaCanvas',   cssW: null, cssH: 50,   drawFn: 'circa'},
-    {id: 'trendCanvas',   cssW: null, cssH: 80,   drawFn: 'trend'},
-    {id: 'waveCanvas',    cssW: 256,  cssH: 60,   drawFn: 'wave'},
-    {id: 'melCanvas',     cssW: 256,  cssH: 40,   drawFn: 'mel'},
-    {id: 'azimuthCanvas', cssW: 80,   cssH: 40,   drawFn: 'azimuth'},
-  ];
-
-  specs.forEach(s => {
-    const el = document.getElementById(s.id);
-    if (!el) return;
-
-    // Determine CSS display width
-    let cssW = s.cssW;
-    let cssH = s.cssH;
-    if (cssW === null) {
-      // Use parent element width
-      const parent = el.parentElement;
-      if (parent) {
-        const rect = parent.getBoundingClientRect();
-        cssW = rect.width - 22; // padding
-        cssW = Math.max(40, cssW);
-      } else {
-        cssW = el.clientWidth || 200;
-      }
-      el.style.width = cssW + 'px';
-    } else {
-      el.style.width = cssW + 'px';
-    }
-    el.style.height = cssH + 'px';
-
-    // Set canvas resolution to match CSS size × DPR
-    el.width = Math.round(cssW * dpr);
-    el.height = Math.round(cssH * dpr);
-
-    // Store for redraw
-    _canvases[s.id] = {elem: el, drawFn: s.drawFn, cssW, cssH, dpr};
-  });
+  el.style.width = cssW + 'px';
+  el.style.height = cssH + 'px';
+  el.width = Math.round(cssW * dpr);
+  el.height = Math.round(cssH * dpr);
+  _canvases[canvasId] = { elem: el, cssW, cssH, dpr };
 }
 
-// Initialize immediately (script runs after all DOM elements exist)
-setupCanvases();
+function setupAllCanvases() {
+  // Emotion space
+  const emoWrap = document.querySelector('.emo-canvas-wrap');
+  const emoW = emoWrap ? emoWrap.clientWidth - 4 : 160;
+  setupDPI('emoSpace', Math.max(60, emoW), 90);
+
+  // Seesaw
+  const seesawWrap = document.querySelector('.seesaw-viz');
+  const seesawW = seesawWrap ? seesawWrap.clientWidth - 4 : 120;
+  setupDPI('seesawCanvas', Math.max(60, seesawW), Math.max(30, seesawWrap?.clientHeight || 40));
+
+  // Neuro gauges
+  document.querySelectorAll('.neuro-gauge canvas').forEach(c => {
+    const w = c.parentElement?.clientWidth || 80;
+    setupDPI(c.id, Math.min(w - 8, 80), 60);
+  });
+
+  // Viz canvas (fixed size)
+  setupDPI('vizCanvas', 112, 112);
+
+  // Audio canvases
+  const audPanel = document.getElementById('pAud');
+  const audW = audPanel ? audPanel.clientWidth - 28 : 220;
+  setupDPI('waveCanvas', Math.max(120, audW), 45);
+  setupDPI('melCanvas', Math.max(120, audW), 32);
+  setupDPI('azimuthCanvas', 70, 35);
+
+  // Circa clock
+  setupDPI('circaClock', 90, 90);
+
+  // Sleep depth
+  const sdWrap = document.querySelector('.sleep-depth-wrap');
+  const sdW = sdWrap ? sdWrap.clientWidth - 4 : 120;
+  setupDPI('sleepDepth', Math.max(60, sdW), Math.max(20, sdWrap?.clientHeight || 24));
+
+  // System canvas
+  const sysWrap = document.querySelector('.sys-canvas-wrap');
+  const sysW = sysWrap ? sysWrap.clientWidth - 4 : 140;
+  setupDPI('sysCanvas', Math.max(80, sysW), Math.max(30, sysWrap?.clientHeight || 40));
+}
 
 // ============================================================
-// State & SSE
+// Global State
 // ============================================================
 let state = {};
-let trendData = {valence:[],arousal:[],F:[],maxLen:200};
+let trendVals = [];     // [{v, a, f}]
+const MAX_TREND = 200;
 let chatMsgs = [];
+let activityItems = [];
+const PLACEHOLDERS = [
+  '和 Agent 说话...',
+  'Agent 正在后台思考...',
+  '问问 Agent 在想什么...',
+  '分享一段文字给 Agent...',
+];
 
+// ============================================================
+// SSE Connections
+// ============================================================
 const evtSource = new EventSource('/api/stream');
 evtSource.onmessage = (e) => {
   state = JSON.parse(e.data);
@@ -213,100 +665,182 @@ visSource.onmessage = (e) => {
   } else {
     drawVisualPlaceholder();
   }
-  updateVizBars(vis);
+  updateVisChannels(vis);
 };
 
 // ============================================================
-// Update all panels
+// Master Update
 // ============================================================
 function updateAll() {
   updateHeader();
   updateEmotion();
   updateBody();
-  updateSleep();
+  updateBrainNetworks();
+  updateNeurochemical();
+  updateCircadian();
   updateMemory();
   updateAudio();
+  updateActivityStream();
   updateReading();
+  updateChatPlaceholder();
 }
 
+// ============================================================
+// Header
+// ============================================================
 function updateHeader() {
-  const dot = document.getElementById('sleepDot');
-  const info = document.getElementById('headerInfo');
-  dot.className = 'status-dot';
-  if (state.sleep?.is_rem) { dot.classList.add('rem'); info.textContent = 'REM睡眠'; }
-  else if (state.sleep?.is_asleep) { dot.classList.add('asleep'); info.textContent = 'NREM睡眠'; }
-  else { info.textContent = state.activity?.mode || 'idle'; }
-  if (state.activity?.last_thought) {
-    info.textContent += ' — ' + state.activity.last_thought.slice(0,40);
+  const dot = document.getElementById('hdrDot');
+  const tag = document.getElementById('hdrTag');
+  const s = state.sleep || {};
+  const a = state.activity || {};
+
+  dot.className = 'header-dot';
+  if (s.is_rem) {
+    dot.classList.add('rem');
+    tag.textContent = 'REM';
+    tag.className = 'header-tag rem';
+  } else if (s.is_asleep) {
+    dot.classList.add('asleep');
+    tag.textContent = s.state?.replace('nrem_','N') || 'NREM';
+    tag.className = 'header-tag nrem';
+  } else {
+    dot.classList.add('awake-pulse');
+    tag.textContent = a.mode || 'idle';
+    tag.className = 'header-tag awake';
   }
+
+  // SCN time
+  const phase = state.circadian?.phase || 0;
+  const hours = ((phase / (Math.PI*2) * 24 + 6) % 24);
+  const h = Math.floor(hours);
+  const m = Math.floor((hours - h) * 60);
+  document.getElementById('hdrTime').textContent =
+    `🕐 ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+
+  // Uptime
+  const steps = state.session?.total_steps || 0;
+  document.getElementById('hdrUptime').textContent =
+    `⏱ ${steps}`;
+  document.getElementById('hdrStep').textContent =
+    `步: ${steps}`;
 }
 
+// ============================================================
+// Emotion Panel
+// ============================================================
 function updateEmotion() {
   const v = state.valence || 0;
   const a = state.arousal || 0;
+
   // Emoji
   let emo = '😐';
-  if (v > 0.3) emo = '😊';
-  else if (v > 0.05) emo = '🙂';
-  else if (v < -0.3) emo = '😢';
-  else if (v < -0.05) emo = '😟';
-  document.getElementById('valenceEmoji').textContent = emo;
+  if (v > 0.4) emo = a > 0.6 ? '🤩' : '😊';
+  else if (v > 0.1) emo = a > 0.6 ? '😃' : '🙂';
+  else if (v < -0.4) emo = a > 0.6 ? '😭' : '😢';
+  else if (v < -0.1) emo = a > 0.6 ? '😰' : '😟';
+  else if (a > 0.7) emo = '😲';
+  else if (a < 0.2) emo = '😴';
+  document.getElementById('emoFace').textContent = emo;
 
-  const vc = v >= 0 ? '#3fb950' : '#da3633';
-  document.getElementById('valVal').innerHTML = `<span style="color:${vc}">${v.toFixed(2)}</span>`;
-  document.getElementById('aroVal').innerHTML = `<span style="color:#f0883e">${a.toFixed(2)}</span>`;
+  const vc = v >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+  document.getElementById('emoV').style.color = vc;
+  document.getElementById('emoV').textContent = v.toFixed(2);
+  document.getElementById('emoA').textContent = a.toFixed(2);
 
-  // Trend canvas
-  trendData.valence.push(v);
-  trendData.arousal.push(a);
-  trendData.F.push(state.F?.total || 0);
-  if (trendData.valence.length > trendData.maxLen) {
-    trendData.valence = trendData.valence.slice(-trendData.maxLen);
-    trendData.arousal = trendData.arousal.slice(-trendData.maxLen);
-    trendData.F = trendData.F.slice(-trendData.maxLen);
-  }
-  drawTrends();
+  // Trend
+  trendVals.push({v, a, f: state.F?.total || 0});
+  if (trendVals.length > MAX_TREND) trendVals = trendVals.slice(-MAX_TREND);
+
+  drawEmotionSpace();
 }
 
-function drawTrends() {
-  const c = document.getElementById('valenceCanvas');
-  if (!c) return;
+function drawEmotionSpace() {
+  const info = _canvases['emoSpace'];
+  if (!info) return;
+  const { elem: c, dpr } = info;
   const ctx = c.getContext('2d');
   const W = c.width, H = c.height;
-  ctx.clearRect(0,0,W,H);
+  ctx.clearRect(0, 0, W, H);
 
-  const draw = (data, color, scale) => {
-    if (data.length < 2) return;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
+  // Background quadrants
+  const cx = W / 2, cy = H / 2;
+  const colors = [
+    'rgba(63,185,80,0.06)',   // +V +A: excited
+    'rgba(218,54,51,0.06)',   // -V +A: anxious
+    'rgba(63,185,80,0.03)',   // +V -A: calm
+    'rgba(88,166,255,0.04)',  // -V -A: depressed
+  ];
+  [0,1,2,3].forEach(i => {
+    ctx.fillStyle = colors[i];
+    const x = i % 2 === 0 ? cx : 0;
+    const y = i < 2 ? 0 : cy;
+    ctx.fillRect(x, y, cx, cy);
+  });
+
+  // Axes
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+
+  // Labels
+  const fs = Math.max(9, H/12);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.font = `${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('兴奋', cx*1.5, cy*0.2);
+  ctx.fillText('焦虑', cx*0.5, cy*0.2);
+  ctx.fillText('满足', cx*1.5, cy*1.9);
+  ctx.fillText('抑郁', cx*0.5, cy*1.9);
+
+  // Trail
+  if (trendVals.length > 2) {
+    ctx.strokeStyle = 'rgba(88,166,255,0.3)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    const step = W / Math.max(data.length-1, 1);
-    data.forEach((v,i) => {
-      const x = i * step;
-      const y = H/2 - v * scale * H/2;
-      i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    trendVals.forEach((p, i) => {
+      const x = cx + p.v * cx * 0.85;
+      const y = cy - (p.a - 0.5) * H * 0.85;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.stroke();
-  };
-  draw(trendData.valence, '#3fb950', 1.0);
-  draw(trendData.arousal, '#f0883e', 0.8);
+  }
+
+  // Current point
+  const px = cx + (state.valence||0) * cx * 0.85;
+  const py = cy - ((state.arousal||0) - 0.5) * H * 0.85;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = vc = (state.valence||0) >= 0 ? '#3fb950' : '#da3633';
+  ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI*2); ctx.fill();
+  ctx.textAlign = 'start';
 }
+
+// ============================================================
+// Body Panel
+// ============================================================
+const BODY_ICONS = ['👥','⚡','🔥','🆕','🎯','👁','👂','🧠','🛡'];
+const BODY_LABELS = ['社交','能量','压力','新颖','专注','视觉','听觉','认知','组织'];
+const BODY_COLORS = ['#58a6ff','#3fb950','#da3633','#f0883e','#bc8cff',
+                     '#58a6ff','#39d2c0','#f0883e','#3fb950'];
+const BODY_SETPOINTS = [0.65, 0.70, 0.05, 0.20, 0.40, 0.30, 0.30, 0.50, 0.90];
 
 function updateBody() {
   const body = state.body || [0.7,0.7,0,0,0.3,0.3,0.3,0.5,0.9];
-  const labels = ['社交','能量','压力','新颖','专注','视觉','听觉','认知','组织'];
-  const colors = ['#58a6ff','#3fb950','#da3633','#f0883e','#d2a8ff',
-                  '#58a6ff','#58a6ff','#f0883e','#3fb950'];
-  const setpoints = [0.65,0.70,0.05,0.20,0.40,0.30,0.30,0.50,0.90];
-
   let html = '';
-  body.forEach((v,i) => {
-    const pct = (v * 100).toFixed(0);
-    const sp = setpoints[i] || 0.5;
+  body.forEach((v, i) => {
+    const pct = Math.round(v * 100);
+    const sp = BODY_SETPOINTS[i];
+    const spPct = Math.round(sp * 100);
+    const dev = v - sp;
+    let color = BODY_COLORS[i];
+    if (Math.abs(dev) > 0.25) color = dev > 0 ? '#da3633' : '#58a6ff';
     html += `<div class="body-row">
-      <span class="label">${labels[i]}</span>
-      <div class="bar">
-        <div class="bar-fill" style="width:${pct}%;background:${colors[i]}"></div>
+      <span class="icon">${BODY_ICONS[i]}</span>
+      <span class="label">${BODY_LABELS[i]}</span>
+      <div class="bar-wrap">
+        <div class="bar-fill" style="width:${pct}%;background:${color}"></div>
+        <div class="bar-sp" style="left:${spPct}%"></div>
       </div>
       <span class="val">${v.toFixed(2)}</span>
     </div>`;
@@ -314,106 +848,246 @@ function updateBody() {
   document.getElementById('bodyBars').innerHTML = html;
 }
 
-function updateSleep() {
-  const s = state.sleep || {};
-  const c = state.circadian || {};
-  const ind = document.getElementById('sleepInd');
-  if (s.is_rem) { ind.textContent = 'REM 做梦'; ind.className = 'sleep-indicator rem'; }
-  else if (s.is_asleep) { ind.textContent = 'NREM 深睡'; ind.className = 'sleep-indicator nrem'; }
-  else { ind.textContent = '清醒'; ind.className = 'sleep-indicator awake'; }
+// ============================================================
+// Brain Networks Panel
+// ============================================================
+function updateBrainNetworks() {
+  const neuro = state.neuro || {};
+  const tpn = neuro.tpn_act || 0.5;
+  const dmn = neuro.dmn_act || 0.5;
+  const fpn = neuro.fpn_act || 0.5;
 
-  document.getElementById('melVal').textContent = (c.melatonin||0).toFixed(2);
-  document.getElementById('corVal').textContent = (c.cortisol||0).toFixed(2);
-  document.getElementById('spVal').textContent = (c.sleep_pressure||0).toFixed(2);
+  document.getElementById('tpnBar').style.width = (tpn*100).toFixed(0) + '%';
+  document.getElementById('tpnVal').textContent = tpn.toFixed(2);
+  document.getElementById('dmnBar').style.width = (dmn*100).toFixed(0) + '%';
+  document.getElementById('dmnVal').textContent = dmn.toFixed(2);
+  document.getElementById('fpnBar').style.width = (fpn*100).toFixed(0) + '%';
+  document.getElementById('fpnVal').textContent = fpn.toFixed(2);
 
-  drawCircadian(c);
+  // Badge
+  const badge = document.getElementById('netBadge');
+  if (tpn > 0.6) badge.textContent = '任务主导';
+  else if (dmn > 0.6) badge.textContent = '走神主导';
+  else badge.textContent = '平衡';
+
+  drawSeesaw(tpn, dmn, fpn);
 }
 
-function drawCircadian(c) {
-  const canvas = document.getElementById('circaCanvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
-  ctx.clearRect(0,0,W,H);
-
-  // Phase indicator
-  const phase = c.phase || 0;
-  const cx = W/2, cy = H/2, r = 18;
-  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
-  const px = cx + Math.cos(phase - Math.PI/2) * r;
-  const py = cy + Math.sin(phase - Math.PI/2) * r;
-  ctx.fillStyle = '#f0883e'; ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
-
-  // Melatonin / Cortisol bars
-  ctx.fillStyle = '#8b949e'; ctx.font = '9px sans-serif';
-  ctx.fillText('🌙', 10, 14);
-  ctx.fillStyle = '#d2a8ff';
-  ctx.fillRect(28, 8, (c.melatonin||0)*60, 8);
-  ctx.fillText('☀️', 10, 32);
-  ctx.fillStyle = '#f0883e';
-  ctx.fillRect(28, 26, (c.cortisol||0)*60, 8);
-}
-
-function updateMemory() {
-  const m = state.memory || {};
-  document.getElementById('nClusters').textContent = m.n_clusters || 0;
-  document.getElementById('nSemantic').textContent = m.n_semantic || 0;
-  document.getElementById('nSelf').textContent = m.n_self || 0;
-  document.getElementById('totalAct').textContent = (m.total_activation||0).toFixed(1);
-
-  // Trend canvas
-  drawMemoryTrend(state.F || {});
-}
-
-function drawMemoryTrend(F) {
-  const c = document.getElementById('trendCanvas');
-  if (!c) return;
+function drawSeesaw(tpn, dmn, fpn) {
+  const info = _canvases['seesawCanvas'];
+  if (!info) return;
+  const { elem: c } = info;
   const ctx = c.getContext('2d');
   const W = c.width, H = c.height;
-  ctx.clearRect(0,0,W,H);
+  ctx.clearRect(0, 0, W, H);
 
-  // Scale text sizes to canvas height
-  const labelFontSize = Math.max(10, H / 5);
-  const valFontSize = Math.max(9, H / 6);
+  // Seesaw line
+  const cx = W/2, top = 6, bot = H - 6;
+  const leftY = top + (1-tpn) * (bot-top);
+  const rightY = top + dmn * (bot-top);
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(15, leftY); ctx.lineTo(W-15, rightY); ctx.stroke();
 
-  // Draw latest F components as horizontal bars
-  const comps = [
-    {label:'body', val: F.body||0, color:'#da3633'},
-    {label:'social', val: F.social||0, color:'#58a6ff'},
-    {label:'cognitive', val: F.cognitive||0, color:'#f0883e'},
-    {label:'accuracy', val: F.accuracy||0, color:'#3fb950'},
+  // TPN ball
+  ctx.fillStyle = '#f0883e';
+  ctx.beginPath(); ctx.arc(15, leftY, 7, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('T', 15, leftY + 3);
+  ctx.textAlign = 'start';
+
+  // DMN ball
+  ctx.fillStyle = '#58a6ff';
+  ctx.beginPath(); ctx.arc(W-15, rightY, 7, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.fillText('D', W-15, rightY + 3);
+  ctx.textAlign = 'start';
+
+  // FPN indicator (center glow)
+  const glowR = 4 + fpn * 8;
+  ctx.fillStyle = `rgba(57,210,192,${0.2 + fpn*0.5})`;
+  ctx.beginPath(); ctx.arc(cx, H/2, glowR, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#39d2c0';
+  ctx.beginPath(); ctx.arc(cx, H/2, 3, 0, Math.PI*2); ctx.fill();
+}
+
+// ============================================================
+// Neurochemical Panel
+// ============================================================
+function updateNeurochemical() {
+  const neuro = state.neuro || {};
+  const gauges = [
+    { id: 'ne',  label: 'NE 蓝斑核',   val: neuro.tonic_ne || 0.2,  color: '#58a6ff', max: 1.0, unit: '' },
+    { id: 'ach', label: 'ACh 基底前脑', val: neuro.ach_level || 0.4, color: '#3fb950', max: 1.0, unit: '' },
+    { id: 'da',  label: 'DA 腹侧被盖', val: neuro.da_tonic || 0.3,  color: '#f0883e', max: 1.0, unit: '' },
+    { id: 'rpe', label: 'RPE 预测误差', val: neuro.rpe || 0,         color: '#bc8cff', max: 0.5, unit: '', signed: true },
   ];
-  const barH = Math.max(12, H / 4.5);
-  const gap = 2;
-  comps.forEach((comp, i) => {
-    const y = gap + i * (barH + gap);
-    ctx.fillStyle = '#8b949e';
-    ctx.font = `${labelFontSize}px sans-serif`;
-    ctx.fillText(comp.label, 2, y + barH * 0.7);
 
-    ctx.fillStyle = comp.color;
-    const maxBarW = W - 70;
-    const w = Math.min(
-      Math.max(4, Math.abs(comp.val) * maxBarW * 0.6),
-      maxBarW
-    );
-    ctx.fillRect(55, y + 2, w, barH - 4);
+  let html = '';
+  gauges.forEach((g, i) => {
+    const canvasId = 'neuroGauge' + i;
+    html += `<div class="neuro-gauge">
+      <canvas id="${canvasId}"></canvas>
+      <div class="ng-label">${g.label}</div>
+      <div class="ng-val" id="ngVal${i}" style="color:${g.color}">${g.val.toFixed(2)}</div>
+    </div>`;
+  });
+  document.getElementById('neuroGauges').innerHTML = html;
 
-    ctx.fillStyle = '#c9d1d9';
-    ctx.font = `${valFontSize}px sans-serif`;
-    ctx.fillText(comp.val.toFixed(2), 59 + w, y + barH * 0.7);
+  // Draw each gauge after DOM update
+  requestAnimationFrame(() => {
+    gauges.forEach((g, i) => {
+      const canvasId = 'neuroGauge' + i;
+      const w = document.getElementById(canvasId)?.parentElement?.clientWidth || 80;
+      setupDPI(canvasId, Math.min(w - 8, 80), 60);
+      drawNeuroGauge(canvasId, g);
+    });
   });
 }
 
+function drawNeuroGauge(canvasId, gauge) {
+  const info = _canvases[canvasId];
+  if (!info) return;
+  const { elem: c } = info;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = W/2, barW = 14, barH = H - 16;
+  const barX = cx - barW/2, barY = 8;
+
+  // Background
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 7); ctx.fill();
+
+  // Fill
+  let fillH;
+  if (gauge.signed) {
+    fillH = Math.abs(gauge.val) / gauge.max * barH;
+    const fillY = gauge.val >= 0 ? barY + barH/2 - fillH : barY + barH/2;
+    ctx.fillStyle = gauge.val >= 0 ? '#3fb950' : '#da3633';
+    ctx.beginPath(); ctx.roundRect(barX, fillY, barW, fillH, 7); ctx.fill();
+    // Center line
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(barX, barY + barH/2); ctx.lineTo(barX + barW, barY + barH/2); ctx.stroke();
+  } else {
+    fillH = Math.min(gauge.val / gauge.max, 1.0) * barH;
+    ctx.fillStyle = gauge.color;
+    ctx.beginPath(); ctx.roundRect(barX, barY + barH - fillH, barW, fillH, 7); ctx.fill();
+  }
+
+  // Glow at top
+  if (fillH > 4) {
+    const glowY = gauge.signed && gauge.val < 0 ? barY + barH/2 : barY + barH - fillH;
+    const grad = ctx.createRadialGradient(cx, glowY, 0, cx, glowY, 8);
+    grad.addColorStop(0, gauge.color + '99');
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.fillRect(barX - 4, glowY - 8, barW + 8, 16);
+  }
+}
+
+// ============================================================
+// Visual Panel
+// ============================================================
+function updateVisChannels(vis) {
+  document.getElementById('visBadge').textContent = vis.has_frame ? '摄像头' : '语义代理';
+  const channels = [
+    { k: 'v1', label: 'V1', color: '#58a6ff' },
+    { k: 'v2', label: 'V2', color: '#3fb950' },
+    { k: 'v4', label: 'V4', color: '#f0883e' },
+    { k: 'it', label: 'IT', color: '#bc8cff' },
+  ];
+  let html = '';
+  channels.forEach(ch => {
+    const val = vis[ch.k + '_mean'] || 0;
+    const pct = Math.min(100, val * 100);
+    html += `<div class="vis-ch-row">
+      <span class="ch-label">${ch.label}</span>
+      <div class="ch-bar-wrap"><div class="ch-bar-fill" style="width:${pct}%;background:${ch.color}"></div></div>
+      <span class="ch-val">${val.toFixed(2)}</span>
+    </div>`;
+  });
+  document.getElementById('visChannels').innerHTML = html;
+}
+
+function drawCameraFrame(b64) {
+  const img = new Image();
+  img.onload = () => {
+    const info = _canvases['vizCanvas'];
+    if (!info) return;
+    const ctx = info.elem.getContext('2d');
+    // Rounded clip
+    const W = info.elem.width, H = info.elem.height, r = 8;
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.clip();
+    ctx.drawImage(img, 0, 0, W, H);
+    ctx.restore();
+    // Glow border
+    ctx.strokeStyle = 'rgba(88,166,255,0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(1, 1, W-2, H-2, r); ctx.stroke();
+  };
+  img.src = 'data:image/jpeg;base64,' + b64;
+}
+
+function drawVisualPlaceholder() {
+  const info = _canvases['vizCanvas'];
+  if (!info) return;
+  const ctx = info.elem.getContext('2d');
+  const W = info.elem.width, H = info.elem.height, r = 8;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#12171f';
+  ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill();
+
+  // Camera icon
+  const cx = W/2, cy = H/2 - 6, radius = Math.min(W, H) * 0.18;
+  ctx.fillStyle = '#252b36';
+  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI*2); ctx.fill();
+
+  // Lens ring
+  ctx.strokeStyle = '#484f58';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, radius + 4, 0, Math.PI*2); ctx.stroke();
+
+  // Camera body
+  ctx.fillStyle = '#30363d';
+  ctx.fillRect(cx - radius*0.8, cy - radius*0.4, radius*1.6, radius*1.1);
+  ctx.fillRect(cx - radius*0.25, cy - radius*0.75, radius*0.5, radius*0.35);
+
+  // Text
+  const fs = Math.max(10, H/10);
+  ctx.fillStyle = '#565e6b';
+  ctx.font = `${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText('无摄像头', cx, cy + radius*1.8);
+  ctx.textAlign = 'start';
+
+  // Pulsing dot animation
+  const t = Date.now() / 1000;
+  const alpha = 0.15 + Math.sin(t * 1.5) * 0.1;
+  ctx.fillStyle = `rgba(88,166,255,${alpha})`;
+  ctx.beginPath(); ctx.arc(cx, cy, radius*0.3, 0, Math.PI*2); ctx.fill();
+}
+
+// ============================================================
+// Audio Panel
+// ============================================================
 function updateAudio() {
   const aud = state.audio || {};
-  const status = document.getElementById('audioStatus');
-  status.textContent = aud.has_audio ? `RMS: ${(aud.rms_level||0).toFixed(2)}` : '静默';
-  status.style.color = aud.has_audio ? '#3fb950' : '#8b949e';
-  document.getElementById('rmsVal').textContent = `Az: ${(aud.azimuth||0).toFixed(0)}°`;
+  const badge = document.getElementById('audBadge');
+  badge.textContent = aud.has_audio ?
+    `RMS: ${(aud.rms_level||0).toFixed(2)}` : '静默';
+  badge.style.color = aud.has_audio ? 'var(--accent-green)' : 'var(--text-muted)';
 
-  // Always draw — use silent baseline when no audio
+  document.getElementById('rmsLabel').textContent =
+    `Az: ${(aud.azimuth||0).toFixed(0)}°`;
+
   if (aud.waveform && aud.waveform.length > 0) {
     drawWaveform(aud.waveform);
   } else {
@@ -428,180 +1102,464 @@ function updateAudio() {
 }
 
 function drawWaveform(wave) {
-  const c = document.getElementById('waveCanvas');
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.clearRect(0,0,W,H);
+  const info = _canvases['waveCanvas'];
+  if (!info) return;
+  const ctx = info.elem.getContext('2d');
+  const W = info.elem.width, H = info.elem.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Gradient fill under waveform
+  const step = W / wave.length;
+  ctx.beginPath();
+  wave.forEach((v, i) => {
+    const x = i * step;
+    const y = H/2 - v * H/2 * 0.85;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  // Fill below
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(88,166,255,0.2)');
+  grad.addColorStop(1, 'rgba(88,166,255,0.02)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Wave line
+  ctx.beginPath();
+  wave.forEach((v, i) => {
+    const x = i * step;
+    const y = H/2 - v * H/2 * 0.85;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
   ctx.strokeStyle = '#58a6ff';
   ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  const step = W / wave.length;
-  wave.forEach((v,i) => {
-    const x = i * step;
-    const y = H/2 - v * H/2 * 0.8;
-    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-  });
   ctx.stroke();
-}
-
-function drawMelSpectrum(spec) {
-  const c = document.getElementById('melCanvas');
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.clearRect(0,0,W,H);
-  const barW = W / spec.length;
-  spec.forEach((v,i) => {
-    const h = Math.max(1, v * H * 0.8);
-    const hue = 240 - (i / spec.length) * 200; // blue→orange
-    ctx.fillStyle = `hsl(${hue},70%,${30 + v*50}%)`;
-    ctx.fillRect(i * barW, H - h, barW - 1, h);
-  });
 }
 
 function drawSilentWaveform() {
-  const c = document.getElementById('waveCanvas');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.clearRect(0,0,W,H);
-  // Flat center line
-  ctx.strokeStyle = '#30363d';
+  const info = _canvases['waveCanvas'];
+  if (!info) return;
+  const ctx = info.elem.getContext('2d');
+  const W = info.elem.width, H = info.elem.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Breathing line
+  const t = Date.now() / 1000;
+  const alpha = 0.1 + Math.sin(t * 0.8) * 0.05;
+  ctx.strokeStyle = `rgba(72,79,88,${alpha})`;
   ctx.lineWidth = 1;
-  ctx.setLineDash([4, 8]);
-  ctx.beginPath();
-  ctx.moveTo(0, H/2);
-  ctx.lineTo(W, H/2);
-  ctx.stroke();
+  ctx.setLineDash([6, 10]);
+  ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
   ctx.setLineDash([]);
+
+  const fs = Math.max(9, H/5);
   ctx.fillStyle = '#484f58';
-  const fs = Math.max(8, H/5);
   ctx.font = `${fs}px sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText('静默', W/2, H/2 - 4);
+  ctx.fillText('静默', W/2, H/2 - 6);
+  ctx.textAlign = 'start';
+}
+
+function drawMelSpectrum(spec) {
+  const info = _canvases['melCanvas'];
+  if (!info) return;
+  const ctx = info.elem.getContext('2d');
+  const W = info.elem.width, H = info.elem.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const barW = W / spec.length;
+  spec.forEach((v, i) => {
+    const h = Math.max(1, v * H * 0.85);
+    const hue = 250 - (i / spec.length) * 220;
+    ctx.fillStyle = `hsl(${hue}, 70%, ${28 + v * 55}%)`;
+    ctx.fillRect(i * barW, H - h, barW - 1, h);
+  });
+
+  // Frequency labels
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  const fs = Math.max(7, H/7);
+  ctx.font = `${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  [0, spec.length/4, spec.length/2, spec.length*3/4, spec.length-1].forEach(idx => {
+    const hz = Math.round(idx / spec.length * 11000);
+    ctx.fillText(hz >= 1000 ? (hz/1000).toFixed(1)+'k' : hz, idx * barW + barW/2, H - 1);
+  });
   ctx.textAlign = 'start';
 }
 
 function drawSilentMelSpectrum() {
-  const c = document.getElementById('melCanvas');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.clearRect(0,0,W,H);
-  // Draw empty bars (all same low height)
-  const nBins = 32;
-  const barW = W / nBins;
+  const info = _canvases['melCanvas'];
+  if (!info) return;
+  const ctx = info.elem.getContext('2d');
+  const W = info.elem.width, H = info.elem.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const nBins = 32, barW = W / nBins;
   for (let i = 0; i < nBins; i++) {
-    ctx.fillStyle = '#21262d';
+    ctx.fillStyle = '#1a1e26';
     ctx.fillRect(i * barW, H - 2, barW - 1, 2);
   }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  const fs = Math.max(7, H/7);
+  ctx.font = `${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  [0, 8, 16, 24, 31].forEach(idx => {
+    const hz = Math.round(idx / nBins * 11000);
+    ctx.fillText(hz >= 1000 ? (hz/1000).toFixed(1)+'k' : hz, idx * barW + barW/2, H - 1);
+  });
+  ctx.textAlign = 'start';
 }
 
 function drawAzimuth(az, hasAudio) {
-  const c = document.getElementById('azimuthCanvas');
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.clearRect(0,0,W,H);
+  const info = _canvases['azimuthCanvas'];
+  if (!info) return;
+  const ctx = info.elem.getContext('2d');
+  const W = info.elem.width, H = info.elem.height;
+  ctx.clearRect(0, 0, W, H);
 
-  // Semi-circle compass
-  const cx = W/2, cy = H-2, r = H-4;
-  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 2;
+  const cx = W/2, cy = H - 2, r = H - 6;
+  // Arc
+  ctx.strokeStyle = '#30363d';
+  ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 0); ctx.stroke();
 
+  // Direction indicator
   if (hasAudio) {
-    // Pointer
-    const angle = Math.PI - (az / 90) * Math.PI/2; // map [-90,90] → [3π/2, π/2]
-    const px = cx + Math.cos(angle) * r * 0.8;
-    const py = cy + Math.sin(angle) * r * 0.8;
+    const angle = Math.PI - (az / 90) * Math.PI/2;
+    const px = cx + Math.cos(angle) * r * 0.75;
+    const py = cy + Math.sin(angle) * r * 0.75;
+    // Glow
+    ctx.fillStyle = 'rgba(240,136,62,0.3)';
+    ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = '#f0883e';
     ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
   }
 
-  ctx.fillStyle = '#8b949e'; ctx.font = '8px sans-serif';
-  ctx.fillText('L', 2, H-2);
-  ctx.fillText('R', W-10, H-2);
-}
-
-function drawCameraFrame(b64) {
-  const img = new Image();
-  img.onload = () => {
-    const c = document.getElementById('vizCanvas');
-    const ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0, c.width, c.height);
-  };
-  img.src = 'data:image/jpeg;base64,' + b64;
-}
-
-function drawVisualPlaceholder() {
-  const c = document.getElementById('vizCanvas');
-  if (!c) return;
-  const ctx = c.getContext('2d');
-  const W = c.width, H = c.height;
-  ctx.clearRect(0, 0, W, H);
-  // Draw "no camera" icon
-  ctx.fillStyle = '#161b22';
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#30363d';
-  const cx = W/2, cy = H/2 - 6, r = Math.min(W, H) * 0.2;
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
-  // Camera body
-  ctx.fillStyle = '#484f58';
-  ctx.fillRect(cx - r*0.8, cy - r*0.4, r*1.6, r*1.2);
-  ctx.fillRect(cx - r*0.3, cy - r*0.8, r*0.6, r*0.4);
+  // Labels
+  const fs = 8;
   ctx.fillStyle = '#8b949e';
-  const fs = Math.max(10, H/8);
   ctx.font = `${fs}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.fillText('无摄像头', cx, cy + r*1.8);
+  ctx.fillText('◀ L', 2, H - 2);
+  ctx.textAlign = 'right';
+  ctx.fillText('R ▶', W - 2, H - 2);
   ctx.textAlign = 'start';
+  ctx.fillText('前', cx - 6, 8);
 }
 
-function updateVizBars(vis) {
-  document.getElementById('vizMode').textContent = vis.has_frame ? '摄像头' : '语义代理';
-  ['v1','v2','v4','it'].forEach(k => {
-    const v = vis[k+'_mean'] || 0;
-    const pct = Math.min(100, v * 100);
-    document.getElementById(k+'Bar').style.width = pct + '%';
-    document.getElementById(k+'Val').textContent = v.toFixed(2);
+// ============================================================
+// Circadian & Sleep Panel
+// ============================================================
+function updateCircadian() {
+  const c = state.circadian || {};
+  const s = state.sleep || {};
+
+  document.getElementById('melVal').textContent = (c.melatonin||0).toFixed(2);
+  document.getElementById('corVal').textContent = (c.cortisol||0).toFixed(2);
+  document.getElementById('spVal').textContent = (c.sleep_pressure||0).toFixed(2);
+  document.getElementById('spropVal').textContent = (c.sleep_propensity||0).toFixed(2);
+
+  const badge = document.getElementById('sleepBadge');
+  if (s.is_rem) { badge.textContent = 'REM 做梦'; badge.style.color = 'var(--rem)'; }
+  else if (s.is_asleep) { badge.textContent = s.state?.replace('nrem_','N') || 'NREM'; badge.style.color = 'var(--nrem)'; }
+  else { badge.textContent = '清醒'; badge.style.color = 'var(--awake)'; }
+
+  drawCircadianClock(c, s);
+  drawSleepDepth(s);
+}
+
+function drawCircadianClock(c, s) {
+  const info = _canvases['circaClock'];
+  if (!info) return;
+  const ctx = info.elem.getContext('2d');
+  const W = info.elem.width, H = info.elem.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = W/2, cy = H/2, r = Math.min(W, H)/2 - 6;
+
+  // Night/day background
+  for (let i = 0; i < 24; i++) {
+    const angStart = (i / 24) * Math.PI*2 - Math.PI/2;
+    const angEnd = ((i+1) / 24) * Math.PI*2 - Math.PI/2;
+    const isNight = i >= 18 || i < 6;
+    ctx.fillStyle = isNight ? 'rgba(30,40,80,0.3)' : 'rgba(80,80,40,0.15)';
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, angStart, angEnd);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // Clock ring
+  ctx.strokeStyle = '#30363d';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
+
+  // Hour ticks
+  for (let i = 0; i < 24; i++) {
+    const ang = (i / 24) * Math.PI*2 - Math.PI/2;
+    const len = i % 6 === 0 ? 5 : 2;
+    ctx.strokeStyle = i % 6 === 0 ? '#8b949e' : '#30363d';
+    ctx.lineWidth = i % 6 === 0 ? 1.5 : 0.5;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(ang) * (r - len), cy + Math.sin(ang) * (r - len));
+    ctx.lineTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r);
+    ctx.stroke();
+  }
+
+  // Circadian phase hand
+  const phase = c.phase || 0;
+  const handAng = phase - Math.PI/2;
+  ctx.strokeStyle = '#f0883e';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(handAng) * r * 0.7, cy + Math.sin(handAng) * r * 0.7);
+  ctx.stroke();
+  ctx.fillStyle = '#f0883e';
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2); ctx.fill();
+
+  // Melatonin arc (outer, right side)
+  const mel = c.melatonin || 0;
+  if (mel > 0.05) {
+    ctx.strokeStyle = `rgba(188,140,255,${0.3 + mel*0.5})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 5, Math.PI*0.3, Math.PI*0.7);
+    ctx.stroke();
+    // arc length based on melatonin level
+    const arcLen = Math.PI * 0.4 * mel;
+    ctx.strokeStyle = '#bc8cff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 5, Math.PI*0.5 - arcLen/2, Math.PI*0.5 + arcLen/2);
+    ctx.stroke();
+  }
+
+  // Cortisol arc (outer, left side)
+  const cor = c.cortisol || 0;
+  if (cor > 0.05) {
+    const arcLen = Math.PI * 0.4 * cor;
+    ctx.strokeStyle = '#f0883e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 5, Math.PI*1.5 - arcLen/2, Math.PI*1.5 + arcLen/2);
+    ctx.stroke();
+  }
+}
+
+function drawSleepDepth(s) {
+  const info = _canvases['sleepDepth'];
+  if (!info) return;
+  const ctx = info.elem.getContext('2d');
+  const W = info.elem.width, H = info.elem.height;
+  ctx.clearRect(0, 0, W, H);
+
+  if (!s.is_asleep && s.state === 'awake') {
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(0, 0, W, H);
+    const fs = Math.max(9, H/3);
+    ctx.fillStyle = '#484f58';
+    ctx.font = `${fs}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('清醒', W/2, H/2 + 4);
+    ctx.textAlign = 'start';
+    return;
+  }
+
+  // Sleep depth bar
+  const stateColors = {
+    'awake':   'rgba(63,185,80,0.3)',
+    'nrem_n1': 'rgba(88,166,255,0.4)',
+    'nrem_n2': 'rgba(88,166,255,0.7)',
+    'nrem_n3': 'rgba(88,166,255,1.0)',
+    'rem':     'rgba(188,140,255,0.8)',
+  };
+  const depth = s.state || 'awake';
+  ctx.fillStyle = stateColors[depth] || 'rgba(255,255,255,0.2)';
+  ctx.beginPath(); ctx.roundRect(2, 2, W - 4, H - 4, 4); ctx.fill();
+
+  // Label
+  const label = depth === 'awake' ? '清醒' :
+    depth === 'rem' ? 'REM' : depth.replace('nrem_', 'N').toUpperCase();
+  const fs = Math.max(9, H/3);
+  ctx.fillStyle = '#fff';
+  ctx.font = `bold ${fs}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillText(label, W/2, H/2 + 4);
+  ctx.textAlign = 'start';
+
+  // Progress indicator
+  const cyclePos = state.sleep?.cycle_position || 0;
+  if (cyclePos > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(W * cyclePos - 1, 0, 2, H);
+  }
+}
+
+// ============================================================
+// Memory & System Panel
+// ============================================================
+let sysHistory = { clusters: [], activation: [], F: [] };
+const MAX_SYS_HIST = 100;
+
+function updateMemory() {
+  const m = state.memory || {};
+  document.getElementById('nClusters').textContent = m.n_clusters || 0;
+  document.getElementById('nSemantic').textContent = m.n_semantic || 0;
+  document.getElementById('nSelf').textContent = m.n_self || 0;
+  document.getElementById('totalAct').textContent = (m.total_activation||0).toFixed(1);
+
+  // Track history
+  sysHistory.clusters.push(m.n_clusters || 0);
+  sysHistory.activation.push(m.total_activation || 0);
+  sysHistory.F.push(state.F?.total || 0);
+  if (sysHistory.clusters.length > MAX_SYS_HIST) {
+    sysHistory.clusters = sysHistory.clusters.slice(-MAX_SYS_HIST);
+    sysHistory.activation = sysHistory.activation.slice(-MAX_SYS_HIST);
+    sysHistory.F = sysHistory.F.slice(-MAX_SYS_HIST);
+  }
+
+  drawSystemCanvas();
+
+  // Summary stats
+  if (trendVals.length > 0) {
+    const vs = trendVals.slice(-50).map(t => t.v);
+    const as = trendVals.slice(-50).map(t => t.a);
+    const fs = trendVals.slice(-50).map(t => t.f);
+    const mean = arr => arr.reduce((a,b)=>a+b,0)/arr.length;
+    document.getElementById('sysFmean').textContent = `F̅: ${mean(fs).toFixed(2)}`;
+    document.getElementById('sysVmean').textContent = `V̅: ${mean(vs).toFixed(2)}`;
+    document.getElementById('sysAmean').textContent = `A̅: ${mean(as).toFixed(2)}`;
+  }
+  document.getElementById('sysSteps').textContent = `步: ${state.session?.total_steps || 0}`;
+}
+
+function drawSystemCanvas() {
+  const info = _canvases['sysCanvas'];
+  if (!info) return;
+  const ctx = info.elem.getContext('2d');
+  const W = info.elem.width, H = info.elem.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Sparklines
+  const drawSpark = (data, color, yScale, yOff, label) => {
+    if (data.length < 2) return;
+    const step = W / Math.max(data.length - 1, 1);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    const maxV = Math.max(...data.map(Math.abs), 0.01);
+    data.forEach((v, i) => {
+      const x = i * step;
+      const y = yOff + (1 - (v / maxV) * yScale) * (H/3 - 4);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  };
+
+  drawSpark(sysHistory.clusters, '#58a6ff', 0.8, 0, 'clusters');
+  drawSpark(sysHistory.activation, '#3fb950', 0.8, H/3, 'activation');
+  drawSpark(sysHistory.F, '#f0883e', 0.8, H*2/3, 'F');
+
+  // Separator lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  [H/3, H*2/3].forEach(y => {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   });
+
+  // Labels
+  const fs = Math.max(8, H/12);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.font = `${fs}px sans-serif`;
+  ctx.fillText('集群', 2, H/3 - 2);
+  ctx.fillText('激活', 2, H*2/3 - 2);
+  ctx.fillText('F', 2, H - 2);
 }
 
+// ============================================================
+// Activity Stream
+// ============================================================
+function updateActivityStream() {
+  const log = state.activity_log || [];
+  if (!log.length) {
+    document.getElementById('activityStream').innerHTML =
+      '<span style="color:var(--text-muted);font-size:10px">📝 等待活动...</span>';
+    return;
+  }
+
+  const icons = {
+    'chat': '💬', 'reading': '📖', 'wandering': '💭',
+    'monologue': '🗣', 'sleeping': '😴', 'resting': '😌',
+    'rumination': '🔄', 'streaming': '📡', 'idle': '⏳',
+    'dream': '🌙',
+  };
+
+  let html = '';
+  log.slice(-8).reverse().forEach((item, i) => {
+    const icon = icons[item.type] || '•';
+    const cls = i < 2 ? 'activity-item recent' : 'activity-item';
+    html += `<span class="${cls}"><span class="act-icon">${icon}</span>${item.text || item.type}</span>`;
+    html += '<span class="activity-dot"></span>';
+  });
+  document.getElementById('activityStream').innerHTML = html;
+}
+
+// ============================================================
+// Reading
+// ============================================================
 function updateReading() {
   const r = state.reader;
-  const div = document.getElementById('readingInfo');
+  const progressDiv = document.getElementById('readingProgress');
+  const fill = document.getElementById('rpFill');
+
   if (r && r.is_active) {
-    const status = r.is_paused ? '⏸ 暂停' : '📖 阅读中';
-    div.textContent = `${status}: ${r.file_name || ''} ${(r.progress*100).toFixed(0)}% (${r.sentences_read}/${r.total_sentences})`;
+    progressDiv.style.display = 'block';
+    const pct = ((r.current_index || 0) / Math.max(r.total_sentences || 1, 1) * 100).toFixed(0);
+    fill.style.width = pct + '%';
   } else {
-    div.textContent = '';
+    progressDiv.style.display = 'none';
   }
 }
 
 // ============================================================
 // Chat
 // ============================================================
+function updateChatPlaceholder() {
+  const input = document.getElementById('chatInput');
+  if (!input.value && document.activeElement !== input) {
+    const idx = Math.floor(Date.now() / 4000) % PLACEHOLDERS.length;
+    input.placeholder = PLACEHOLDERS[idx];
+  }
+}
+
 async function sendChat() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  input.placeholder = '发送中...';
 
   addChatMsg('human', text);
   try {
     const resp = await fetch('/api/chat', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({text})
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
     });
     const data = await resp.json();
     if (data.response) addChatMsg('agent', data.response);
-  } catch(e) { addChatMsg('agent', '...'); }
+    else if (data.error) addChatMsg('agent', '⚠ ' + data.error);
+  } catch (e) {
+    addChatMsg('agent', '⚠ 连接错误');
+  }
 }
 
 function addChatMsg(who, text) {
-  chatMsgs.push({who,text});
-  if (chatMsgs.length > 20) chatMsgs = chatMsgs.slice(-20);
+  chatMsgs.push({ who, text });
+  if (chatMsgs.length > 30) chatMsgs = chatMsgs.slice(-30);
   const div = document.getElementById('chatMessages');
   div.innerHTML = chatMsgs.map(m =>
-    `<div class="chat-msg"><span class="${m.who}">${m.who==='human'?'You':'Agent'}:</span> ${m.text}</div>`
+    `<div class="chat-msg ${m.who}"><span class="who">${m.who === 'human' ? '🧑 You' : '🤖 Agent'}</span>${m.text}</div>`
   ).join('');
   div.scrollTop = div.scrollHeight;
 }
@@ -611,38 +1569,55 @@ document.getElementById('chatInput').addEventListener('keydown', (e) => {
 });
 
 // ============================================================
-// Reading controls
+// Reading Controls
 // ============================================================
 async function startReading() {
   const path = prompt('输入文本文件路径:', '');
   if (!path) return;
   try {
     const resp = await fetch('/api/reading/start', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({file_path: path})
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_path: path }),
     });
     const data = await resp.json();
     if (data.error) alert(data.error);
-    else addChatMsg('agent', `📖 开始阅读: ${data.file_name} (${data.total_sentences} 句)`);
-  } catch(e) { alert('Error: ' + e); }
+    else addChatMsg('agent', '📖 开始阅读: ' + (data.file_name || '') +
+      ' (' + data.total_sentences + ' 句)');
+  } catch (e) {
+    alert('Error: ' + e);
+  }
 }
 
 async function stopReading() {
-  await fetch('/api/reading/stop', {method:'POST'});
+  await fetch('/api/reading/stop', { method: 'POST' });
   addChatMsg('agent', '📖 已停止阅读');
 }
 
 // ============================================================
-// Init
+// Init & Resize
 // ============================================================
-window.addEventListener('DOMContentLoaded', () => {
-  setupCanvases();
-});
+function initAll() {
+  setupAllCanvases();
+  // Initial draws
+  drawVisualPlaceholder();
+  drawSilentWaveform();
+  drawSilentMelSpectrum();
+  drawAzimuth(0, false);
 
+  // Rotate placeholder text
+  setInterval(updateChatPlaceholder, 4000);
+}
+
+window.addEventListener('DOMContentLoaded', initAll);
+
+let resizeTimeout;
 window.addEventListener('resize', () => {
-  setupCanvases();
-  // Re-draw with new resolution
-  updateAll();
+  clearTimeout(resizeTimeout);
+  resizeTimeout = setTimeout(() => {
+    setupAllCanvases();
+    updateAll();
+  }, 200);
 });
 </script>
 </body>

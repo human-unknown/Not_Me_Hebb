@@ -68,8 +68,19 @@ def _build_status(agent) -> dict:
     sleep = {
         'is_asleep': agent.vlpo.is_asleep if hasattr(agent, 'vlpo') else False,
         'is_rem': agent.vlpo.is_in_rem if hasattr(agent, 'vlpo') else False,
+        'is_nrem': agent.vlpo.is_in_nrem if hasattr(agent, 'vlpo') else False,
         'state': agent._sleep_state.state if hasattr(agent, '_sleep_state') else 'awake',
+        'phase': agent._sleep_state.phase if hasattr(agent, '_sleep_state') else 'none',
         'time_in_state': int(getattr(agent._sleep_state, 'time_in_state', 0)),
+        'time_in_phase': int(getattr(agent._sleep_state, 'time_in_phase', 0)),
+        'cycle_count': int(getattr(agent._sleep_state, 'sleep_cycle_count', 0)),
+        'n_episodes': int(getattr(agent._sleep_state, 'n_sleep_episodes', 0)),
+        'vlpo_activation': float(getattr(agent._sleep_state, 'vlpo_activation', 0.0)),
+        'rem_on': float(getattr(agent._sleep_state, 'rem_on_activity', 0.0)),
+        'rem_off': float(getattr(agent._sleep_state, 'rem_off_activity', 0.0)),
+        'total_sleep_steps': int(getattr(agent._sleep_state, 'total_sleep_steps', 0)),
+        'total_nrem_steps': int(getattr(agent._sleep_state, 'total_nrem_steps', 0)),
+        'total_rem_steps': int(getattr(agent._sleep_state, 'total_rem_steps', 0)),
     }
 
     # Memory
@@ -87,11 +98,21 @@ def _build_status(agent) -> dict:
     neuro = {
         'tonic_ne': float(agent._lc_result.get('tonic_ne', 0.2)
                          if agent._lc_result else 0.2),
+        'phasic_ne': float(agent._lc_result.get('phasic_ne', 0.0)
+                          if agent._lc_result else 0.0),
+        'ne_snr': float(agent._lc_result.get('snr', 0.5)
+                       if agent._lc_result else 0.5),
         'rpe': float(agent._vta_result.get('rpe', 0.0)
                     if agent._vta_result else 0.0),
+        'da_tonic': float(agent._vta_result.get('tonic_da', 0.3)
+                         if agent._vta_result else 0.3),
+        'da_phasic': float(agent._vta_result.get('phasic_da', 0.0)
+                          if agent._vta_result else 0.0),
         'tpn_act': float(agent.tpn.tpn_activation if hasattr(agent, 'tpn') else 0.0),
         'dmn_act': float(1.0 - (agent.tpn.tpn_activation
                                if hasattr(agent, 'tpn') else 0.3)),
+        'fpn_act': float(agent.fpn.tpn_activation if hasattr(agent, 'fpn') else 0.5),
+        'ach_level': float(agent.vlpo.get_ach_level() if hasattr(agent, 'vlpo') else 0.4),
     }
 
     # F components
@@ -115,6 +136,16 @@ def _build_status(agent) -> dict:
     if hasattr(agent, 'reader') and agent.reader is not None:
         reader = agent.reader.get_progress()
 
+    # Activity log (recent internal activities)
+    activity_log = []
+    if hasattr(agent, '_activity_log') and agent._activity_log:
+        activity_log = list(agent._activity_log[-10:])
+
+    # Session info
+    session_info = {}
+    if hasattr(agent, 'telemetry') and agent.telemetry is not None:
+        session_info = agent.telemetry.get_session_info()
+
     return {
         'valence': float(v),
         'arousal': float(a),
@@ -126,6 +157,8 @@ def _build_status(agent) -> dict:
         'F': F,
         'activity': activity,
         'reader': reader,
+        'activity_log': activity_log,
+        'session': session_info,
         'timestamp': time.time(),
     }
 
@@ -458,8 +491,13 @@ def init_agent(fresh: bool = False):
     _agent.telemetry = Telemetry()
     _agent.reader = Reader()
 
+    # 初始化传感器占位 (摄像头/麦克风默认不活跃)
+    _agent._current_image = None
+    _agent._current_audio_data = None
+    _agent._streaming = False
+
     print(f"  Agent initialized: {_agent.net.n_clusters} clusters, "
-          f"clean mode, 0 trigrams")
+          f"clean mode, 0 trigrams", flush=True)
 
     # Autonomous loop
     from entry.autonomous import AutonomousLoop
@@ -468,7 +506,7 @@ def init_agent(fresh: bool = False):
     _loop.telemetry = _agent.telemetry
     _loop.internal_life = _agent.internal_life
 
-    print("  AutonomousLoop ready")
+    print("  AutonomousLoop ready", flush=True)
 
 
 def start_autonomous_loop():
@@ -483,7 +521,237 @@ def start_autonomous_loop():
 
     _loop_thread = threading.Thread(target=run_loop, daemon=True)
     _loop_thread.start()
-    print("  Autonomous loop started (background thread)")
+    print("  Autonomous loop started (background thread)", flush=True)
+
+
+# ---- Sensor Capture (摄像头 + 麦克风) ----
+
+_sensor_thread = None
+_sensor_running = False
+_has_camera = False
+_has_mic = False
+
+
+def _sensor_capture_loop():
+    """后台线程: 持续采集摄像头帧 + 麦克风音频，写入 agent 供 SSE 读取.
+
+    使用 queue.Queue 进行线程安全的音频数据传输。
+    摄像头帧直接写入 agent._current_image (原子赋值).
+    """
+    global _agent, _sensor_running, _has_camera, _has_mic
+    import time as _time
+    from queue import Queue, Empty
+
+    cam = None
+    mic_stream = None
+    mic_sr = 22050
+    mic_chunk = 512
+    mic_queue = Queue(maxsize=50)  # 线程安全队列，上限 50 块
+
+    # --- 并行打开摄像头和麦克风 (提速) ---
+    print("  [Sensor] Opening camera + microphone (may take 1-3s)...", flush=True)
+
+    cam_result = {'cam': None, 'ok': False}
+    mic_result = {'stream': None, 'ok': False, 'callback': None}
+
+    def _open_camera():
+        try:
+            from tools.sensor_io import CameraInput
+            c = CameraInput(camera_id=0, fps=5.0, resolution=(128, 128))
+            if c.open():
+                cam_result['cam'] = c
+                cam_result['ok'] = True
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+    def _open_mic():
+        try:
+            import sounddevice as sd
+
+            def mic_callback(indata, frames, time_info, status):
+                if status:
+                    return
+                try:
+                    mic_queue.put_nowait(indata.copy())
+                except Exception:
+                    pass
+
+            stream = sd.InputStream(
+                samplerate=mic_sr, channels=1, blocksize=mic_chunk,
+                callback=mic_callback, dtype='float32',
+                latency='low')
+            stream.start()
+            mic_result['stream'] = stream
+            mic_result['ok'] = True
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+    # 并行打开
+    t_cam = threading.Thread(target=_open_camera, daemon=True)
+    t_mic = threading.Thread(target=_open_mic, daemon=True)
+    t_cam.start()
+    t_mic.start()
+    t_cam.join(timeout=8.0)
+    t_mic.join(timeout=8.0)
+
+    if cam_result['ok']:
+        cam = cam_result['cam']
+        _has_camera = True
+        print("  [Sensor] Camera opened (128x128 @ 5fps, DSHOW)", flush=True)
+    else:
+        print("  [Sensor] No camera found (or opencv-python missing)", flush=True)
+
+    if mic_result['ok']:
+        mic_stream = mic_result['stream']
+        _has_mic = True
+        print(f"  [Sensor] Microphone opened ({mic_sr}Hz, mono)", flush=True)
+    else:
+        print("  [Sensor] No microphone (or sounddevice missing)", flush=True)
+
+    if not _has_camera and not _has_mic:
+        print("  [Sensor] No sensors available — visual/audio panels show placeholders", flush=True)
+        _sensor_running = False
+        return
+
+    # 标记 streaming 活跃 (触发 autonomous loop 进入 streaming 模式)
+    if _agent is not None:
+        _agent._streaming = True
+
+    print("  [Sensor] Capture loop started", flush=True)
+
+    # --- 采集循环 ---
+    last_cam_read = 0.0
+    cam_interval = 0.2  # 5fps
+
+    while _sensor_running:
+        try:
+            # 摄像头帧 (非阻塞)
+            if _has_camera and cam is not None:
+                now = _time.time()
+                if now - last_cam_read >= cam_interval:
+                    try:
+                        frame = cam.read_frame()
+                        if frame is not None and _agent is not None:
+                            _agent._current_image = frame
+                    except Exception:
+                        pass
+                    last_cam_read = now
+
+            # 麦克风音频 (从线程安全队列中排空)
+            if _has_mic:
+                chunks = []
+                try:
+                    while True:
+                        chunk = mic_queue.get_nowait()
+                        chunks.append(chunk)
+                except Empty:
+                    pass
+
+                if chunks and _agent is not None:
+                    audio_chunk = np.concatenate(chunks, axis=0).ravel()
+                    if len(audio_chunk) >= 64:
+                        # 降采样到 128 点波形
+                        step = max(1, len(audio_chunk) // 128)
+                        waveform = audio_chunk[::step][:128].astype(np.float32)
+                        # Mel 频谱近似: FFT → 32 bins
+                        fft = np.abs(np.fft.rfft(audio_chunk))
+                        n_fft_bins = len(fft)
+                        mel = np.zeros(32, dtype=np.float32)
+                        bin_step = max(1, n_fft_bins // 32)
+                        for i in range(32):
+                            seg = fft[i*bin_step:(i+1)*bin_step]
+                            mel[i] = float(np.mean(seg)) if len(seg) > 0 else 0.0
+                        mel = mel / (np.max(mel) + 1e-8)
+                        rms = float(np.sqrt(np.mean(np.square(audio_chunk))) + 1e-8)
+                        _agent._current_audio_data = {
+                            'waveform': waveform,
+                            'spectrum': mel,
+                            'rms_level': rms,
+                            'azimuth': 0.0,
+                        }
+
+            _time.sleep(0.05)  # 20Hz 采集循环，主动释放 GIL
+
+        except Exception:
+            _time.sleep(0.5)
+
+    # --- 清理 ---
+    _has_camera = False
+    _has_mic = False
+    if cam is not None:
+        try:
+            cam.release()
+        except Exception:
+            pass
+    if mic_stream is not None:
+        try:
+            mic_stream.stop()
+            mic_stream.close()
+        except Exception:
+            pass
+
+    print("  [Sensor] Capture stopped", flush=True)
+
+
+def start_sensors():
+    """启动传感器采集线程."""
+    global _sensor_thread, _sensor_running
+    if _sensor_running:
+        return
+    _sensor_running = True
+    _sensor_thread = threading.Thread(target=_sensor_capture_loop, daemon=True)
+    _sensor_thread.start()
+
+
+def stop_sensors():
+    """停止传感器采集."""
+    global _sensor_running, _sensor_thread
+    _sensor_running = False
+    if _sensor_thread is not None:
+        _sensor_thread.join(timeout=2.0)
+        _sensor_thread = None
+
+
+def _kill_existing_on_port(port: int):
+    """自动清理占用目标端口的陈旧进程 (Windows + Linux)."""
+    import subprocess, platform
+    killed = False
+    try:
+        if platform.system() == 'Windows':
+            # 找到占用端口的 PID
+            result = subprocess.run(
+                ['netstat', '-ano'], capture_output=True, text=True, timeout=5)
+            for line in result.stdout.splitlines():
+                if f':{port}' in line and 'LISTENING' in line:
+                    parts = line.split()
+                    pid = parts[-1]
+                    if pid.isdigit() and int(pid) != os.getpid():
+                        print(f"  [Cleanup] Killing stale process on port {port} (PID {pid})...", flush=True)
+                        subprocess.run(['taskkill', '/F', '/PID', pid],
+                                      capture_output=True, timeout=5)
+                        killed = True
+                        import time as _t
+                        _t.sleep(0.5)
+        else:
+            # Linux/macOS: lsof + kill
+            result = subprocess.run(
+                ['lsof', '-ti', f':{port}'], capture_output=True, text=True, timeout=5)
+            pids = result.stdout.strip().split()
+            for pid in pids:
+                if pid.isdigit() and int(pid) != os.getpid():
+                    print(f"  [Cleanup] Killing stale process on port {port} (PID {pid})...", flush=True)
+                    subprocess.run(['kill', '-9', pid], capture_output=True, timeout=5)
+                    killed = True
+                    import time as _t
+                    _t.sleep(0.3)
+    except Exception:
+        pass
+    if killed:
+        print("  [Cleanup] Port freed, continuing...", flush=True)
 
 
 def main():
@@ -494,9 +762,14 @@ def main():
     parser.add_argument('--fresh', action='store_true', help='Force fresh agent')
     parser.add_argument('--no-auto', action='store_true',
                        help='Disable autonomous loop')
+    parser.add_argument('--no-sensors', action='store_true',
+                       help='Disable camera + microphone capture')
     parser.add_argument('--dev', action='store_true',
                        help='Force Flask dev server (skip Waitress)')
     args = parser.parse_args()
+
+    # ---- 端口冲突自动清理 ----
+    _kill_existing_on_port(args.port)
 
     print("=" * 50)
     print("  NotMe v6.4 — Web Interface")
@@ -505,12 +778,21 @@ def main():
     # Init
     init_agent(fresh=args.fresh)
 
-    # Start autonomous loop
+    # Start autonomous loop FIRST
     if not args.no_auto:
         start_autonomous_loop()
 
-    print(f"\n  Opening http://{args.host}:{args.port}")
-    print("  Press Ctrl+C to stop\n")
+    # Print startup banner (use localhost for 0.0.0.0)
+    display_host = 'localhost' if args.host in ('0.0.0.0', '::') else args.host
+    print(f"\n  🔗 打开浏览器访问: http://{display_host}:{args.port}", flush=True)
+    print("  Press Ctrl+C to stop\n", flush=True)
+
+    # Start sensors AFTER everything else is ready (avoids GIL contention during init)
+    if not args.no_sensors:
+        # Small delay to let agent stabilize
+        import time as _stime
+        _stime.sleep(0.3)
+        start_sensors()
 
     # Use production WSGI server (Waitress) when available,
     # fall back to Flask dev server with warning.
@@ -524,6 +806,36 @@ def main():
             print("  [INFO] Install with: pip install waitress")
             print("  [INFO] Or use --dev to suppress this message.\n")
 
+    # ---- 注册退出清理 (确保 Ctrl+C / 终端关闭 / kill 都能清理) ----
+    import atexit as _atexit
+    import signal as _signal
+
+    def _cleanup():
+        """退出前清理所有资源."""
+        stop_sensors()
+        if _loop:
+            try:
+                _loop.stop()
+            except Exception:
+                pass
+        if _agent and _agent.telemetry:
+            try:
+                _agent.telemetry.flush()
+            except Exception:
+                pass
+
+    _atexit.register(_cleanup)
+
+    # 捕获 SIGTERM (kill 命令) 和 SIGINT (Ctrl+C)
+    def _sig_handler(signum, frame):
+        print("\n  Shutting down...", flush=True)
+        _cleanup()
+        print("  Goodbye!", flush=True)
+        os._exit(0)
+
+    _signal.signal(_signal.SIGTERM, _sig_handler)
+    _signal.signal(_signal.SIGINT, _sig_handler)
+
     try:
         if use_waitress:
             print("  Using Waitress production WSGI server")
@@ -531,12 +843,7 @@ def main():
         else:
             app.run(host=args.host, port=args.port, debug=False, threaded=True)
     except KeyboardInterrupt:
-        print("\n  Shutting down...")
-        if _loop:
-            _loop.stop()
-        if _agent and _agent.telemetry:
-            _agent.telemetry.flush()
-        print("  Goodbye!")
+        pass  # 信号处理器已处理
 
 
 if __name__ == '__main__':

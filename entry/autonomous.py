@@ -338,6 +338,10 @@ class AutonomousLoop:
                                      activity='reading',
                                      text_input=sentence)
 
+            # Log reading activity
+            if hasattr(agent, '_log_activity'):
+                agent._log_activity('reading', f"📖 {sentence[:80]}")
+
             # 记录理解深度
             self.reader.record_comprehension(comprehension)
 
@@ -592,6 +596,10 @@ class AutonomousLoop:
                     'arousal_after': float(arousal_now),
                     'eval_score': None,
                 })
+
+            # Log activity
+            if hasattr(agent, '_log_activity'):
+                agent._log_activity('chat', f"人类: {human_text[:60]}")
 
             return {
                 'response': response,
