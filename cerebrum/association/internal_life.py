@@ -277,7 +277,7 @@ class InternalLife:
                 # 自听 → 语音回路 → 情感传染
                 try:
                     from environments.text_interface import TextEnvironment
-                    te = TextEnvironment()
+                    te = TextEnvironment(load_corpus=False)
                     thought_vec = te.encode_text(text).astype(np.float32)
                     agent.phonological_loop.hear(thought_vec[:64])
 

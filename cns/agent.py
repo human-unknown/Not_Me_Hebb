@@ -1732,7 +1732,7 @@ class Agent:
         if text_input is not None:
             try:
                 from environments.text_interface import TextEnvironment
-                te = TextEnvironment()
+                te = TextEnvironment(load_corpus=False)
                 sensory[:64] = te.encode_text(text_input)[:64].astype(np.float32)
             except Exception:
                 sensory[:64] = self._last_comprehension[:64].copy()
@@ -2060,7 +2060,7 @@ def _fallback_internal_thought(agent: Agent, thought_type: str,
                     # 自听 → 语音回路
                     try:
                         from environments.text_interface import TextEnvironment
-                        te = TextEnvironment()
+                        te = TextEnvironment(load_corpus=False)
                         thought_vec = te.encode_text("".join(words)).astype(np.float32)
                         agent.phonological_loop.hear(thought_vec[:64])
                     except Exception:

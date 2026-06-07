@@ -139,6 +139,60 @@ body{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-seri
 
 <script>
 // ============================================================
+// Canvas DPI scaling — fix blur on high-DPI displays
+// ============================================================
+const _canvases = {};  // {id: {elem, drawFn, cssW, cssH}}
+
+function setupCanvases() {
+  const dpr = window.devicePixelRatio || 1;
+
+  // Register all canvases that need DPI-aware sizing
+  const specs = [
+    {id: 'vizCanvas',     cssW: null, cssH: 128,  drawFn: 'camera'},
+    {id: 'valenceCanvas', cssW: null, cssH: 60,   drawFn: 'valence'},
+    {id: 'circaCanvas',   cssW: null, cssH: 50,   drawFn: 'circa'},
+    {id: 'trendCanvas',   cssW: null, cssH: 50,   drawFn: 'trend'},
+    {id: 'waveCanvas',    cssW: 256,  cssH: 60,   drawFn: 'wave'},
+    {id: 'melCanvas',     cssW: 256,  cssH: 40,   drawFn: 'mel'},
+    {id: 'azimuthCanvas', cssW: 80,   cssH: 40,   drawFn: 'azimuth'},
+  ];
+
+  specs.forEach(s => {
+    const el = document.getElementById(s.id);
+    if (!el) return;
+
+    // Determine CSS display width
+    let cssW = s.cssW;
+    let cssH = s.cssH;
+    if (cssW === null) {
+      // Use parent element width
+      const parent = el.parentElement;
+      if (parent) {
+        const rect = parent.getBoundingClientRect();
+        cssW = rect.width - 22; // padding
+        cssW = Math.max(40, cssW);
+      } else {
+        cssW = el.clientWidth || 200;
+      }
+      el.style.width = cssW + 'px';
+    } else {
+      el.style.width = cssW + 'px';
+    }
+    el.style.height = cssH + 'px';
+
+    // Set canvas resolution to match CSS size × DPR
+    el.width = Math.round(cssW * dpr);
+    el.height = Math.round(cssH * dpr);
+
+    // Store for redraw
+    _canvases[s.id] = {elem: el, drawFn: s.drawFn, cssW, cssH, dpr};
+  });
+}
+
+// Initialize immediately (script runs after all DOM elements exist)
+setupCanvases();
+
+// ============================================================
 // State & SSE
 // ============================================================
 let state = {};
@@ -216,8 +270,7 @@ function drawTrends() {
   const c = document.getElementById('valenceCanvas');
   if (!c) return;
   const ctx = c.getContext('2d');
-  const W = c.width = c.clientWidth;
-  const H = c.height = 60;
+  const W = c.width, H = c.height;
   ctx.clearRect(0,0,W,H);
 
   const draw = (data, color, scale) => {
@@ -278,8 +331,7 @@ function drawCircadian(c) {
   const canvas = document.getElementById('circaCanvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const W = canvas.width = canvas.clientWidth;
-  const H = canvas.height = 50;
+  const W = canvas.width, H = canvas.height;
   ctx.clearRect(0,0,W,H);
 
   // Phase indicator
@@ -316,8 +368,7 @@ function drawMemoryTrend(F) {
   const c = document.getElementById('trendCanvas');
   if (!c) return;
   const ctx = c.getContext('2d');
-  const W = c.width = c.clientWidth;
-  const H = c.height = 50;
+  const W = c.width, H = c.height;
   ctx.clearRect(0,0,W,H);
 
   // Draw latest F components as horizontal bars
@@ -493,6 +544,19 @@ async function stopReading() {
   await fetch('/api/reading/stop', {method:'POST'});
   addChatMsg('agent', '📖 已停止阅读');
 }
+
+// ============================================================
+// Init
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  setupCanvases();
+});
+
+window.addEventListener('resize', () => {
+  setupCanvases();
+  // Re-draw with new resolution
+  updateAll();
+});
 </script>
 </body>
 </html>

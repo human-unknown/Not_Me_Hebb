@@ -15,6 +15,7 @@ Pillow>=9.0.0
 
 # Web UI (required for web interface)
 flask>=2.0.0
+waitress>=2.0.0        # production WSGI server (recommended)
 
 # Optional
 rich>=10.0.0          # terminal UI (interactive.py)

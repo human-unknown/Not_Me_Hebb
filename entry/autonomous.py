@@ -313,7 +313,7 @@ class AutonomousLoop:
             # 理解句子
             try:
                 from environments.text_interface import TextEnvironment
-                te = TextEnvironment()
+                te = TextEnvironment(load_corpus=False)
                 sent_vec = te.encode_text(sentence)[:64].astype(np.float32)
             except Exception:
                 sent_vec = np.zeros(64, dtype=np.float32)
@@ -485,7 +485,7 @@ class AutonomousLoop:
             from cerebrum.limbic_system.cingulate import SocialContext
 
             if text_env is None:
-                text_env = TextEnvironment()
+                text_env = TextEnvironment(load_corpus=False)
             if social_ctx is None:
                 social_ctx = SocialContext(tau=25.0)
 

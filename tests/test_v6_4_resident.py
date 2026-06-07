@@ -238,8 +238,8 @@ def test_internal_life_monologue():
         s = make_deterministic_s(i, text_signal=1.0)
         agent.net.learn(s)
 
-    # Broca (纯净模式)
-    te = TextEnvironment()
+    # Broca (纯净模式 — headless TextEnvironment)
+    te = TextEnvironment(load_corpus=False)
     broca = Broca(text_env=te, load_corpus=False)
 
     il = InternalLife()

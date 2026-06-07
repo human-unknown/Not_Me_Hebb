@@ -47,7 +47,7 @@ def _get_text_env():
     global _text_env
     if _text_env is None:
         from environments.text_interface import TextEnvironment
-        _text_env = TextEnvironment()
+        _text_env = TextEnvironment(load_corpus=False)
     return _text_env
 
 
@@ -446,7 +446,7 @@ def init_agent(fresh: bool = False):
     ACTION_DIRECTIONS[4] = [0.0, 0.0]
 
     # Broca (纯净模式)
-    te = TextEnvironment()
+    te = TextEnvironment(load_corpus=False)
     _broca = Broca(text_env=te, load_corpus=False)
 
     # v6.4: InternalLife + Telemetry + Reader
@@ -494,6 +494,8 @@ def main():
     parser.add_argument('--fresh', action='store_true', help='Force fresh agent')
     parser.add_argument('--no-auto', action='store_true',
                        help='Disable autonomous loop')
+    parser.add_argument('--dev', action='store_true',
+                       help='Force Flask dev server (skip Waitress)')
     args = parser.parse_args()
 
     print("=" * 50)
@@ -510,8 +512,24 @@ def main():
     print(f"\n  Opening http://{args.host}:{args.port}")
     print("  Press Ctrl+C to stop\n")
 
+    # Use production WSGI server (Waitress) when available,
+    # fall back to Flask dev server with warning.
+    use_waitress = False
+    if not args.dev:
+        try:
+            from waitress import serve
+            use_waitress = True
+        except ImportError:
+            print("  [INFO] Waitress not installed. Using Flask dev server.")
+            print("  [INFO] Install with: pip install waitress")
+            print("  [INFO] Or use --dev to suppress this message.\n")
+
     try:
-        app.run(host=args.host, port=args.port, debug=False, threaded=True)
+        if use_waitress:
+            print("  Using Waitress production WSGI server")
+            serve(app, host=args.host, port=args.port, threads=4)
+        else:
+            app.run(host=args.host, port=args.port, debug=False, threaded=True)
     except KeyboardInterrupt:
         print("\n  Shutting down...")
         if _loop:

@@ -37,14 +37,17 @@ class TextEnvironment:
     """
 
     def __init__(self, corpus: list[str] = None, embed_dim: int = 64,
-                 use_semantic: bool = True):
+                 use_semantic: bool = True, load_corpus: bool = True):
         import os, pickle
         self.embed_dim = embed_dim
 
-        if corpus:
+        if corpus is not None:
             self.chunks = corpus
-        else:
+        elif load_corpus:
             self.chunks = _fetch_corpus()
+        else:
+            # v6.4: headless mode — skip corpus loading, only need encoder
+            self.chunks = []
 
         self.n_chunks = len(self.chunks)
         self.cursor = 0
@@ -52,9 +55,12 @@ class TextEnvironment:
         self.last_output_embedding = None  # A₃ 输出的嵌入
         self.last_output_text = ''          # A₃ 输出的文本
 
-        print(f"  Corpus: {self.n_chunks} sentences")
+        if self.n_chunks > 0:
+            print(f"  Corpus: {self.n_chunks} sentences")
+        else:
+            print(f"  TextEnvironment: headless mode (no corpus, encoder only)")
 
-        if use_semantic:
+        if use_semantic and self.n_chunks > 0:
             cache_dir = os.path.join(os.path.dirname(__file__), '.cache')
             os.makedirs(cache_dir, exist_ok=True)
             # 用 corpus 的 hash 做缓存键，避免语料变了还用旧缓存
@@ -99,6 +105,11 @@ class TextEnvironment:
                 with open(pca_cache, 'wb') as f:
                     pickle.dump(self.pca, f)
                 print(f"  Cached to: {emb_cache}")
+        elif use_semantic and self.n_chunks == 0:
+            # v6.4: headless mode — no PCA, encoder loads lazily, raw embedding
+            self.pca = None
+            self.embeddings = np.zeros((0, embed_dim), dtype=np.float32)
+            print(f"  TextEnvironment: encoder will load on first encode_text()")
         else:
             rng = np.random.default_rng(42)
             self.embeddings = rng.normal(
@@ -171,8 +182,14 @@ class TextEnvironment:
         if not hasattr(self, '_encoder'):
             from sentence_transformers import SentenceTransformer
             self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
-        full = self._encoder.encode([text])[0]
-        emb = self.pca.transform(full.reshape(1, -1))[0]
+        full = self._encoder.encode([text])[0]  # (384,)
+        if self.pca is not None:
+            emb = self.pca.transform(full.reshape(1, -1))[0]
+        else:
+            # v6.4: headless mode — truncate/pad raw embedding to 64d
+            emb = np.zeros(64, dtype=np.float32)
+            n = min(64, len(full))
+            emb[:n] = full[:n]
         if len(emb) < 64:
             p = np.zeros(64); p[:len(emb)] = emb; emb = p
         return emb.astype(float)
@@ -188,7 +205,13 @@ class TextEnvironment:
             self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
         full = self._encoder.encode(texts, show_progress_bar=True,
                                     batch_size=batch_size)
-        emb = self.pca.transform(full).astype(np.float32)
+        if self.pca is not None:
+            emb = self.pca.transform(full).astype(np.float32)
+        else:
+            # v6.4: headless mode — truncate/pad raw embedding to 64d
+            emb = np.zeros((full.shape[0], 64), dtype=np.float32)
+            n = min(64, full.shape[1])
+            emb[:, :n] = full[:, :n]
         if emb.shape[1] < 64:
             p = np.zeros((emb.shape[0], 64), dtype=np.float32)
             p[:, :emb.shape[1]] = emb
