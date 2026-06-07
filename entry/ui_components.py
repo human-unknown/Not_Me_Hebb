@@ -30,13 +30,11 @@ def valence_color(v: float) -> str:
     elif v < -0.05: return "red"
     return "yellow"
 
-def valence_emoji(v: float) -> str:
-    """效价 → emoji."""
-    if v > 0.3: return "😊"
-    elif v > 0.05: return "🙂"
-    elif v < -0.3: return "😢"
-    elif v < -0.05: return "😐"
-    return "😐"
+def valence_sign(v: float) -> str:
+    """效价 → 数学符号 (不模拟qualia)."""
+    if v > 0.05: return "V+"
+    elif v < -0.05: return "V−"
+    return "V~"
 
 def bar_chart(value: float, width: int = 10, color: str = "green") -> str:
     """简易条形图."""
@@ -73,7 +71,7 @@ def render_header(agent, meta: dict = None, broca=None, age: int = 0) -> Panel:
     n_turns = meta.get('total_turns', 0) if meta else 0
 
     # Age display
-    age_names = {0: '👶', 1: '🧒', 2: '🧑', 3: '🧠'}
+    age_names = {0: '·', 1: '∘', 2: '◎', 3: '●'}
     age_emoji = age_names.get(age, '🧠')
 
     parts = [
@@ -82,7 +80,7 @@ def render_header(agent, meta: dict = None, broca=None, age: int = 0) -> Panel:
         f"Session #{n_sessions}",
         f"{n_turns} turns",
         f"F={F:.2f}",
-        f"V={fmt_val(v)} {valence_emoji(v)}",
+        f"V={fmt_val(v)} {valence_sign(v)}",
         f"A={a:.2f}",
         f"Mem: {n_clusters} clusters",
     ]
@@ -327,7 +325,7 @@ def render_free_energy_panel(agent) -> Panel:
                   f"acc={Fa:.3f} lang={Fl:.3f}")
     table.add_row("Valence",
                   f"[{valence_color(v)}]{v:+.2f}[/{valence_color(v)}] "
-                  f"{valence_emoji(v)}")
+                  f"{valence_sign(v)}")
     table.add_row("Arousal", f"{a:.2f}")
     table.add_row("Attention", f"{att:.2f}")
 

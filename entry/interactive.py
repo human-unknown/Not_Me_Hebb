@@ -50,7 +50,7 @@ from entry.input_bus import InputBus
 # ---- UI Components ----
 from entry.ui_components import (
     render_header, render_all_status_panels, render_diag, render_help,
-    valence_emoji, fmt_val, valence_color,
+    valence_sign, fmt_val, valence_color,
 )
 
 
@@ -672,7 +672,7 @@ class InteractiveSession:
                 elif input_type == 'touch':
                     console.print(f"  [You] [touch]={bus.touch_intensity:.2f}: {human_text_clean}")
                 else:
-                    v_icon = valence_emoji(s_valence)
+                    v_icon = valence_sign(s_valence)
                     console.print(f"  [You] {v_icon}: {human_text_clean}")
                     console.print(f"         v={s_valence:+.2f} "
                                   f"a={s_arousal:.2f} "
@@ -782,7 +782,7 @@ class InteractiveSession:
 
                             # Display
                             v_now = agent.valence_history[-1] if agent.valence_history else 0
-                            feel = valence_emoji(v_now)
+                            feel = valence_sign(v_now)
                             eval_str = f' score={eval_score:.2f}' if eval_score else ''
                             console.print(f"  [Agent] {feel}: {response}")
                             console.print(f"          V={fmt_val(v_now)} "

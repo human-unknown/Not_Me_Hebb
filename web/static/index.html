@@ -3,396 +3,674 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NotMe v6.5 — 自由能原理情感智能体</title>
+<title>NOTME v6.5 — 自由能原理情感智能体</title>
 <style>
 /* ============================================================
-   Design System — CSS Variables
+   Design System — Neo-Futurist Cyber-Bio CSS Variables
    ============================================================ */
 :root {
-  --bg-primary:   #0a0e14;
-  --bg-secondary: #12171f;
-  --bg-tertiary:  #181e28;
-  --bg-card:      #161c26;
-  --border:       #252b36;
-  --border-hover: #30363d;
-  --text-primary: #e0e6ed;
-  --text-secondary: #8b949e;
-  --text-muted:   #565e6b;
-  --accent-blue:  #58a6ff;
-  --accent-green: #3fb950;
-  --accent-orange:#f0883e;
-  --accent-red:   #da3633;
-  --accent-purple:#bc8cff;
-  --accent-cyan:  #39d2c0;
-  --accent-pink:  #f778ba;
-  --accent-yellow:#d29922;
-  --awake:        #3fb950;
-  --nrem:         #58a6ff;
-  --rem:          #bc8cff;
-  --sleep-gray:   #484f58;
-  --shadow:       0 1px 3px rgba(0,0,0,0.4);
-  --shadow-lg:    0 4px 12px rgba(0,0,0,0.5);
-  --radius:       8px;
-  --radius-sm:    4px;
-  --transition:   0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --bg-deep:     #050510;
+  --bg-primary:  #08081a;
+  --bg-surface:  #0c0c22;
+  --bg-elevated: rgba(14, 14, 40, 0.85);
+  --bg-glass:    rgba(10, 10, 30, 0.75);
+  --border-subtle: rgba(100, 120, 200, 0.12);
+  --border-glow:   rgba(100, 140, 255, 0.22);
+  --border-active: rgba(120, 160, 255, 0.45);
+  --text-primary:   #d8dce8;
+  --text-secondary: #8892a8;
+  --text-muted:     #4a5268;
+  --accent-cyan:    #00e5ff;
+  --accent-blue:    #4488ff;
+  --accent-purple:  #9966ff;
+  --accent-green:   #00e676;
+  --accent-orange:  #ff8844;
+  --accent-red:     #ff4455;
+  --accent-pink:    #ff66aa;
+  --accent-yellow:  #ffcc44;
+  --awake:    #00e676;
+  --nrem:     #4488ff;
+  --rem:      #9966ff;
+  --sleep-gray: #3a4058;
+  --glow-cyan:   0 0 6px rgba(0, 229, 255, 0.25);
+  --glow-blue:   0 0 6px rgba(68, 136, 255, 0.25);
+  --glow-purple: 0 0 6px rgba(153, 102, 255, 0.25);
+  --panel-glow:  0 0 12px rgba(60, 80, 160, 0.12);
+  --radius:      12px;
+  --radius-sm:   6px;
+  --transition:  0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
+  --font-mono:   'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --font-ui:     'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
+
+/* ---- Fonts ---- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
+/* ---- Reset ---- */
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden}
 body{
-  background:var(--bg-primary);
-  color:var(--text-primary);
-  font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;
-  font-size:13px;
-  line-height:1.5;
-  display:flex;
-  flex-direction:column;
-  -webkit-font-smoothing:antialiased;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Ambient background ---- */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 50%, rgba(0, 180, 255, 0.04), transparent),
+    radial-gradient(ellipse 60% 80% at 80% 50%, rgba(120, 60, 255, 0.04), transparent),
+    radial-gradient(ellipse 40% 40% at 50% 30%, rgba(0, 200, 150, 0.02), transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---- Scanline overlay ---- */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.015) 2px,
+    rgba(0, 0, 0, 0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 999;
 }
 
 /* ============================================================
    Header
    ============================================================ */
 .header{
-  background:var(--bg-secondary);
-  border-bottom:1px solid var(--border);
-  padding:6px 16px;
-  display:flex;
-  align-items:center;
-  gap:12px;
-  flex-shrink:0;
-  z-index:10;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-glow);
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  z-index: 10;
+  position: relative;
+  backdrop-filter: blur(12px);
 }
 .header-brand{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  font-weight:700;
-  font-size:14px;
-  color:var(--accent-blue);
-  letter-spacing:-0.3px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent-cyan);
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 .header-dot{
-  width:10px;height:10px;
-  border-radius:50%;
-  background:var(--awake);
-  transition:background var(--transition), box-shadow var(--transition);
-  flex-shrink:0;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--awake);
+  transition: all var(--transition);
+  flex-shrink: 0;
+  position: relative;
 }
-.header-dot.asleep{background:var(--sleep-gray)}
+.header-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  transition: all var(--transition);
+}
+.header-dot.awake-pulse::after {
+  border-color: rgba(0, 230, 118, 0.3);
+  animation: bio-pulse 2s ease-in-out infinite;
+}
+.header-dot.asleep{background: var(--sleep-gray)}
+.header-dot.asleep::after{border-color: transparent}
 .header-dot.rem{
-  background:var(--rem);
-  box-shadow:0 0 8px var(--rem);
-  animation:pulse-rem 2s ease-in-out infinite;
+  background: var(--rem);
+  box-shadow: 0 0 12px var(--rem);
+  animation: rem-glow 1.5s ease-in-out infinite;
 }
-.header-dot.awake-pulse{
-  box-shadow:0 0 6px var(--awake);
-  animation:pulse-awake 3s ease-in-out infinite;
+.header-dot.rem::after {
+  border-color: rgba(153, 102, 255, 0.4);
+  animation: rem-ring 1.5s ease-in-out infinite;
 }
-@keyframes pulse-rem {
-  0%,100%{box-shadow:0 0 4px var(--rem)}
-  50%{box-shadow:0 0 14px var(--rem)}
+@keyframes bio-pulse {
+  0%,100%{transform: scale(1); opacity: 0.6}
+  50%{transform: scale(1.6); opacity: 0}
 }
-@keyframes pulse-awake {
-  0%,100%{box-shadow:0 0 4px var(--awake)}
-  50%{box-shadow:0 0 10px var(--awake)}
+@keyframes rem-glow {
+  0%,100%{box-shadow: 0 0 8px var(--rem)}
+  50%{box-shadow: 0 0 20px var(--rem)}
 }
+@keyframes rem-ring {
+  0%,100%{transform: scale(1); opacity: 0.3}
+  50%{transform: scale(1.8); opacity: 0}
+}
+
+.header-age {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent-purple);
+  padding: 3px 10px;
+  border: 1px solid rgba(153, 102, 255, 0.25);
+  border-radius: 20px;
+  background: rgba(153, 102, 255, 0.06);
+}
+.header-age .stage-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent-purple);
+  box-shadow: 0 0 6px rgba(153, 102, 255, 0.6);
+}
+
 .header-info{
-  display:flex;
-  gap:16px;
-  font-size:11px;
-  color:var(--text-secondary);
-  margin-left:auto;
-  align-items:center;
+  display: flex;
+  gap: 18px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-left: auto;
+  align-items: center;
+  font-family: var(--font-mono);
 }
+.header-info span { display: flex; align-items: center; gap: 5px; }
+.header-info .hi-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
 .header-tag{
-  padding:2px 8px;
-  border-radius:10px;
-  font-size:10px;
-  font-weight:600;
-  text-transform:uppercase;
-  letter-spacing:0.5px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
 }
-.header-tag.awake{background:#1a3a1a;color:var(--awake)}
-.header-tag.nrem{background:#1a1a3a;color:var(--nrem)}
-.header-tag.rem{background:#2a1a3a;color:var(--rem)}
-.header-tag.idle{background:#1a1a2a;color:var(--text-muted)}
+.header-tag.awake{background: rgba(0,230,118,0.10); color: var(--awake); border: 1px solid rgba(0,230,118,0.2)}
+.header-tag.nrem{background: rgba(68,136,255,0.10); color: var(--nrem); border: 1px solid rgba(68,136,255,0.2)}
+.header-tag.rem{background: rgba(153,102,255,0.10); color: var(--rem); border: 1px solid rgba(153,102,255,0.2)}
+.header-tag.idle{background: rgba(136,146,168,0.06); color: var(--text-muted); border: 1px solid var(--border-subtle)}
 
 /* ============================================================
-   Main Grid — 4 columns × 2 rows
+   Main Layout — Left Chat (35%) + Right Grid 3×3 (65%)
    ============================================================ */
-.main-grid{
-  display:grid;
-  grid-template-columns:repeat(4, 1fr);
-  grid-template-rows:1fr 1fr;
-  gap:8px;
-  padding:8px;
-  flex:1;
-  min-height:0;
+.main-layout{
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  flex: 1;
+  min-height: 0;
 }
+
+/* ---- Left: Chat Panel ---- */
+.chat-panel{
+  width: 35%;
+  min-width: 320px;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: relative;
+  backdrop-filter: blur(8px);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.chat-panel:hover {
+  border-color: var(--border-active);
+  box-shadow: var(--panel-glow);
+}
+.chat-panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,229,255,0.3), transparent);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.chat-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.chat-header .ch-icon {
+  font-size: 14px;
+  filter: grayscale(0);
+  opacity: 0.8;
+}
+.chat-header h3 {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-family: var(--font-mono);
+}
+.chat-header .ch-badge {
+  margin-left: auto;
+  font-size: 9px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0,229,255,0.06);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(0,229,255,0.15);
+  font-family: var(--font-mono);
+}
+
+.chat-messages{
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.chat-messages::-webkit-scrollbar { width: 3px; }
+.chat-messages::-webkit-scrollbar-track { background: transparent; }
+.chat-messages::-webkit-scrollbar-thumb { background: rgba(100,120,200,0.2); border-radius: 3px; }
+
+.chat-msg{
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  max-width: 92%;
+  line-height: 1.5;
+  font-size: 12px;
+  animation: msg-in 0.25s ease;
+  position: relative;
+}
+.chat-msg.human{
+  align-self: flex-end;
+  background: rgba(0, 180, 255, 0.08);
+  border: 1px solid rgba(0, 180, 255, 0.15);
+  color: var(--accent-cyan);
+  border-bottom-right-radius: 2px;
+}
+.chat-msg.agent{
+  align-self: flex-start;
+  background: rgba(0, 230, 118, 0.06);
+  border: 1px solid rgba(0, 230, 118, 0.12);
+  color: var(--accent-green);
+  border-bottom-left-radius: 2px;
+}
+.chat-msg .who{
+  font-size: 9px;
+  opacity: 0.6;
+  margin-bottom: 2px;
+  display: block;
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+@keyframes msg-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.reading-progress{
+  height: 2px;
+  background: rgba(255,255,255,0.04);
+  flex-shrink: 0;
+  position: relative;
+}
+.reading-progress .rp-fill{
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue));
+  transition: width 0.6s ease;
+  box-shadow: 0 0 6px rgba(0,229,255,0.4);
+}
+
+.chat-input-area {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.chat-input-area input{
+  flex: 1;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: var(--font-ui);
+  outline: none;
+  transition: all var(--transition);
+}
+.chat-input-area input:focus{
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 8px rgba(0,229,255,0.1);
+}
+.chat-input-area input::placeholder{color: var(--text-muted)}
+.btn{
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  transition: all var(--transition);
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.btn:hover{opacity: 0.9; transform: translateY(-1px)}
+.btn-send{
+  background: rgba(0,230,118,0.12);
+  border-color: rgba(0,230,118,0.25);
+  color: var(--accent-green);
+}
+.btn-send:hover{box-shadow: 0 0 10px rgba(0,230,118,0.2)}
+.btn-read{
+  background: rgba(0,229,255,0.10);
+  border-color: rgba(0,229,255,0.2);
+  color: var(--accent-cyan);
+  font-size: 14px;
+  padding: 5px 8px;
+}
+.btn-stop{
+  background: rgba(255,68,85,0.10);
+  border-color: rgba(255,68,85,0.2);
+  color: var(--accent-red);
+  font-size: 14px;
+  padding: 5px 8px;
+}
+
+/* ---- Right: Data Grid ---- */
+.data-grid{
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+/* ---- Panel base ---- */
 .panel{
-  background:var(--bg-card);
-  border:1px solid var(--border);
-  border-radius:var(--radius);
-  padding:10px 12px;
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-  transition:border-color var(--transition), box-shadow var(--transition);
-  position:relative;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  backdrop-filter: blur(8px);
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
 .panel:hover{
-  border-color:var(--border-hover);
-  box-shadow:var(--shadow-lg);
+  border-color: var(--border-glow);
+  box-shadow: var(--panel-glow);
 }
+/* Corner accent */
+.panel::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 20px; height: 20px;
+  border-top: 1px solid rgba(100,140,255,0.15);
+  border-right: 1px solid rgba(100,140,255,0.15);
+  border-radius: 0 var(--radius) 0 0;
+  pointer-events: none;
+}
+
 .panel-header{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  margin-bottom:6px;
-  flex-shrink:0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  flex-shrink: 0;
 }
-.panel-header .icon{font-size:14px;line-height:1}
+.panel-header .picon{
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.7;
+}
 .panel-header h3{
-  font-size:11px;
-  font-weight:600;
-  color:var(--text-secondary);
-  text-transform:uppercase;
-  letter-spacing:0.6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-family: var(--font-mono);
 }
 .panel-header .badge{
-  margin-left:auto;
-  font-size:10px;
-  padding:1px 6px;
-  border-radius:8px;
-  background:var(--bg-tertiary);
-  color:var(--text-muted);
+  margin-left: auto;
+  font-size: 8px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(100,140,255,0.06);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  border: 1px solid var(--border-subtle);
 }
-.panel-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.panel-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 
 /* ============================================================
-   Emotion Panel
+   Free Energy Panel (replaces Emotion — no phenomenology)
    ============================================================ */
-.emo-core{display:flex;align-items:center;gap:10px;flex:1}
-.emo-face{
-  font-size:36px;
-  text-align:center;
-  width:48px;
-  flex-shrink:0;
-  transition:transform var(--transition);
+.fe-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
 }
-.emo-vals{font-size:11px;text-align:center;flex-shrink:0}
-.emo-vals .v{font-weight:700;font-size:15px}
-.emo-vals .a{font-weight:600;font-size:13px;color:var(--accent-orange)}
-.emo-canvas-wrap{flex:1;min-width:0}
-.emo-canvas-wrap canvas{width:100%;border-radius:var(--radius-sm);background:var(--bg-primary)}
+.fe-total {
+  text-align: center;
+  font-family: var(--font-mono);
+}
+.fe-total .fe-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  text-shadow: 0 0 12px rgba(0,229,255,0.3);
+}
+.fe-total .fe-label {
+  font-size: 8px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: -2px;
+}
+.fe-components {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  margin: 2px 0;
+}
+.fe-comp {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  font-family: var(--font-mono);
+}
+.fe-comp .fcl { color: var(--text-muted); }
+.fe-comp .fcv { font-weight: 500; }
+.fe-va {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-top: 1px;
+}
+.fe-va .va-item {
+  text-align: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(100,140,255,0.04);
+  border: 1px solid var(--border-subtle);
+  min-width: 60px;
+}
+.fe-va .va-val { font-weight: 700; font-size: 14px; }
+.fe-va .va-tag { font-size: 7px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+.fe-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  margin-top: 2px;
+}
+.fe-canvas-wrap canvas {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: rgba(0,0,0,0.2);
+}
 
 /* ============================================================
-   Body Panel
+   Body State Panel
    ============================================================ */
-.body-list{display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto}
-.body-row{display:flex;align-items:center;gap:6px;font-size:10px}
-.body-row .icon{width:18px;text-align:center;flex-shrink:0;font-size:12px}
-.body-row .label{width:28px;color:var(--text-secondary);text-align:left;flex-shrink:0;font-size:10px}
-.body-row .bar-wrap{flex:1;height:12px;background:var(--bg-primary);border-radius:6px;overflow:hidden;position:relative}
-.body-row .bar-fill{height:100%;border-radius:6px;transition:width 0.5s ease}
+.body-list{display:flex;flex-direction:column;gap:1px;flex:1;overflow-y:auto}
+.body-row{display:flex;align-items:center;gap:5px;font-size:9px}
+.body-row .bicon{width:16px;text-align:center;flex-shrink:0;font-size:10px;opacity:0.6}
+.body-row .blabel{width:22px;color:var(--text-muted);text-align:left;flex-shrink:0;font-size:9px;font-family:var(--font-mono)}
+.body-row .bar-wrap{flex:1;height:10px;background:rgba(0,0,0,0.3);border-radius:5px;overflow:hidden;position:relative}
+.body-row .bar-fill{height:100%;border-radius:5px;transition:width 0.5s ease}
 .body-row .bar-sp{
-  position:absolute;top:0;width:2px;height:100%;
-  background:var(--text-primary);opacity:0.6;z-index:2;
+  position:absolute;top:-1px;width:2px;height:12px;
+  background:rgba(255,255,255,0.5);z-index:2;
   transition:left 0.5s ease;
 }
-.body-row .val{width:30px;font-size:9px;color:var(--text-muted);text-align:right;flex-shrink:0}
+.body-row .bval{width:26px;font-size:8px;color:var(--text-muted);text-align:right;flex-shrink:0;font-family:var(--font-mono)}
 
 /* ============================================================
    Brain Networks Panel
    ============================================================ */
-.network-bars{display:flex;flex-direction:column;gap:8px;flex:1}
-.network-row{display:flex;align-items:center;gap:8px}
-.network-row .nlabel{width:36px;font-size:10px;color:var(--text-secondary);text-align:right;flex-shrink:0}
-.network-row .nbar-wrap{flex:1;height:16px;background:var(--bg-primary);border-radius:8px;overflow:hidden}
-.network-row .nbar-fill{height:100%;border-radius:8px;transition:width 0.5s ease}
-.network-row .nval{width:32px;font-size:10px;text-align:right;flex-shrink:0}
-.seesaw-viz{flex:1;position:relative;min-height:40px}
-.seesaw-viz canvas{width:100%;height:100%;border-radius:var(--radius-sm);background:var(--bg-primary)}
+.network-bars{display:flex;flex-direction:column;gap:5px;flex:1}
+.network-row{display:flex;align-items:center;gap:6px}
+.network-row .nlabel{width:28px;font-size:9px;text-align:right;flex-shrink:0;font-family:var(--font-mono);font-weight:500}
+.network-row .nbar-wrap{flex:1;height:12px;background:rgba(0,0,0,0.3);border-radius:6px;overflow:hidden}
+.network-row .nbar-fill{height:100%;border-radius:6px;transition:width 0.5s ease}
+.network-row .nval{width:30px;font-size:9px;text-align:right;flex-shrink:0;font-family:var(--font-mono)}
+.seesaw-viz{flex:1;position:relative;min-height:30px}
+.seesaw-viz canvas{width:100%;height:100%;border-radius:var(--radius-sm);background:rgba(0,0,0,0.2)}
 
 /* ============================================================
    Neurochemical Panel
    ============================================================ */
-.neuro-gauges{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1}
+.neuro-gauges{display:grid;grid-template-columns:1fr 1fr;gap:4px;flex:1}
 .neuro-gauge{text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.neuro-gauge canvas{width:100%;max-width:80px;height:60px}
-.neuro-gauge .ng-label{font-size:10px;color:var(--text-secondary);margin-top:2px}
-.neuro-gauge .ng-val{font-size:13px;font-weight:700}
+.neuro-gauge canvas{width:100%;max-width:64px;height:48px}
+.neuro-gauge .ng-label{font-size:8px;color:var(--text-muted);margin-top:1px;font-family:var(--font-mono)}
+.neuro-gauge .ng-val{font-size:11px;font-weight:700;font-family:var(--font-mono)}
 
 /* ============================================================
    Visual Panel
    ============================================================ */
-.visual-main{display:flex;gap:8px;flex:1;min-height:0}
+.visual-main{display:flex;gap:6px;flex:1;min-height:0}
 .visual-frame-wrap{flex-shrink:0;position:relative}
-.visual-frame-wrap canvas{border-radius:var(--radius-sm);border:1px solid var(--border)}
-.visual-channels{flex:1;display:flex;flex-direction:column;gap:4px;justify-content:center}
-.vis-ch-row{display:flex;align-items:center;gap:6px;font-size:10px}
-.vis-ch-row .ch-label{width:20px;color:var(--text-muted)}
-.vis-ch-row .ch-bar-wrap{flex:1;height:8px;background:var(--bg-primary);border-radius:4px;overflow:hidden}
-.vis-ch-row .ch-bar-fill{height:100%;border-radius:4px;transition:width 0.4s ease}
-.vis-ch-row .ch-val{width:28px;font-size:9px;color:var(--text-muted);text-align:right}
+.visual-frame-wrap canvas{border-radius:var(--radius-sm);border:1px solid var(--border-subtle)}
+.visual-channels{flex:1;display:flex;flex-direction:column;gap:2px;justify-content:center}
+.vis-ch-row{display:flex;align-items:center;gap:4px;font-size:9px}
+.vis-ch-row .ch-label{width:16px;color:var(--text-muted);font-family:var(--font-mono)}
+.vis-ch-row .ch-bar-wrap{flex:1;height:6px;background:rgba(0,0,0,0.3);border-radius:3px;overflow:hidden}
+.vis-ch-row .ch-bar-fill{height:100%;border-radius:3px;transition:width 0.4s ease}
+.vis-ch-row .ch-val{width:24px;font-size:8px;color:var(--text-muted);text-align:right;font-family:var(--font-mono)}
 
 /* ============================================================
    Audio Panel
    ============================================================ */
-.audio-section{display:flex;flex-direction:column;gap:4px;flex:1}
-.audio-section canvas{border-radius:var(--radius-sm);background:var(--bg-primary)}
-.audio-section .wave-canvas{width:100%;height:45px}
-.audio-section .mel-canvas{width:100%;height:32px}
-.audio-bottom{display:flex;align-items:center;gap:8px;justify-content:center}
-.audio-bottom canvas{width:70px;height:35px}
-.audio-bottom .az-label{font-size:9px;color:var(--text-muted)}
+.audio-section{display:flex;flex-direction:column;gap:3px;flex:1}
+.audio-section canvas{border-radius:var(--radius-sm);background:rgba(0,0,0,0.2)}
+.audio-section .wave-canvas{width:100%;height:38px}
+.audio-section .mel-canvas{width:100%;height:26px}
+.audio-bottom{display:flex;align-items:center;gap:6px;justify-content:center}
+.audio-bottom canvas{width:56px;height:28px}
+.audio-bottom .az-label{font-size:8px;color:var(--text-muted);font-family:var(--font-mono)}
 
 /* ============================================================
    Circadian & Sleep Panel
    ============================================================ */
-.circa-layout{display:flex;gap:8px;flex:1;min-height:0}
+.circa-layout{display:flex;gap:6px;flex:1;min-height:0}
 .circa-clock-wrap{flex-shrink:0;display:flex;align-items:center;justify-content:center}
-.circa-clock-wrap canvas{width:90px;height:90px}
-.circa-details{flex:1;display:flex;flex-direction:column;gap:3px;justify-content:center}
-.circa-row{display:flex;justify-content:space-between;font-size:10px}
-.circa-row .clabel{color:var(--text-muted)}
-.circa-row .cval{font-weight:600}
-.sleep-depth-wrap{flex:1;min-height:24px}
-.sleep-depth-wrap canvas{width:100%;height:100%;border-radius:var(--radius-sm);background:var(--bg-primary)}
+.circa-clock-wrap canvas{width:76px;height:76px}
+.circa-details{flex:1;display:flex;flex-direction:column;gap:2px;justify-content:center}
+.circa-row{display:flex;justify-content:space-between;font-size:9px;align-items:baseline}
+.circa-row .clabel{color:var(--text-muted);font-family:var(--font-mono)}
+.circa-row .cval{font-weight:600;font-family:var(--font-mono)}
+.sleep-depth-wrap{flex:1;min-height:20px}
+.sleep-depth-wrap canvas{width:100%;height:100%;border-radius:var(--radius-sm);background:rgba(0,0,0,0.2)}
 
 /* ============================================================
    Memory & System Panel
    ============================================================ */
-.mem-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:4px}
-.mem-stat{text-align:center;padding:4px 2px;background:var(--bg-tertiary);border-radius:var(--radius-sm)}
-.mem-stat .mnum{font-size:16px;font-weight:700}
-.mem-stat .mlbl{font-size:9px;color:var(--text-muted)}
+.mem-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:3px}
+.mem-stat{text-align:center;padding:3px 2px;background:rgba(100,140,255,0.04);border-radius:var(--radius-sm)}
+.mem-stat .mnum{font-size:14px;font-weight:700;font-family:var(--font-mono)}
+.mem-stat .mlbl{font-size:8px;color:var(--text-muted);font-family:var(--font-mono)}
 .sys-canvas-wrap{flex:1;min-height:0}
-.sys-canvas-wrap canvas{width:100%;height:100%;border-radius:var(--radius-sm);background:var(--bg-primary)}
-.sys-summary{display:flex;gap:8px;font-size:9px;color:var(--text-muted);margin-top:2px;justify-content:space-between}
+.sys-canvas-wrap canvas{width:100%;height:100%;border-radius:var(--radius-sm);background:rgba(0,0,0,0.2)}
+.sys-summary{display:flex;gap:6px;font-size:8px;color:var(--text-muted);margin-top:2px;justify-content:space-between;font-family:var(--font-mono)}
 
 /* ============================================================
    Activity Stream
    ============================================================ */
 .activity-stream{
-  background:var(--bg-secondary);
-  border-top:1px solid var(--border);
-  border-bottom:1px solid var(--border);
-  padding:4px 12px;
-  display:flex;
-  gap:12px;
-  overflow-x:auto;
-  flex-shrink:0;
-  min-height:28px;
-  align-items:center;
-  white-space:nowrap;
+  background: var(--bg-glass);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 4px 16px;
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  min-height: 26px;
+  align-items: center;
+  white-space: nowrap;
 }
 .activity-item{
-  font-size:10px;
-  color:var(--text-muted);
-  display:flex;
-  align-items:center;
-  gap:4px;
-  flex-shrink:0;
-  opacity:0.5;
-  transition:opacity var(--transition);
+  font-size: 9px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0.45;
+  transition: opacity var(--transition);
+  font-family: var(--font-mono);
 }
-.activity-item.recent{opacity:1;color:var(--text-primary)}
-.activity-item .act-icon{font-size:12px}
+.activity-item.recent{opacity: 1; color: var(--text-primary)}
+.activity-item .act-icon{font-size: 10px}
 .activity-dot{
-  width:4px;height:4px;
-  border-radius:50%;
-  background:var(--border);
-  flex-shrink:0;
-}
-
-/* ============================================================
-   Chat Bar
-   ============================================================ */
-.chat-bar{
-  background:var(--bg-secondary);
-  border-top:1px solid var(--border);
-  padding:6px 12px;
-  display:flex;
-  flex-direction:column;
-  gap:4px;
-  flex-shrink:0;
-}
-.chat-messages{
-  font-size:12px;
-  max-height:70px;
-  overflow-y:auto;
-  display:flex;
-  flex-direction:column;
-  gap:2px;
-}
-.chat-msg{
-  padding:3px 8px;
-  border-radius:var(--radius-sm);
-  max-width:80%;
-  line-height:1.4;
-  animation:fadeIn 0.2s ease;
-}
-.chat-msg.human{
-  align-self:flex-end;
-  background:#1a3a4a;
-  color:var(--accent-blue);
-}
-.chat-msg.agent{
-  align-self:flex-start;
-  background:#1a2a1a;
-  color:var(--accent-green);
-}
-.chat-msg .who{font-size:9px;opacity:0.7;margin-bottom:1px;display:block}
-@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-.chat-input-row{display:flex;gap:8px;align-items:center}
-.chat-input-row input{
-  flex:1;
-  background:var(--bg-primary);
-  border:1px solid var(--border);
-  color:var(--text-primary);
-  padding:6px 10px;
-  border-radius:var(--radius-sm);
-  font-size:13px;
-  outline:none;
-  transition:border-color var(--transition);
-}
-.chat-input-row input:focus{border-color:var(--accent-blue)}
-.chat-input-row input::placeholder{color:var(--text-muted)}
-.btn{
-  padding:5px 10px;
-  border-radius:var(--radius-sm);
-  border:none;
-  cursor:pointer;
-  font-size:11px;
-  font-weight:600;
-  transition:background var(--transition), opacity var(--transition);
-  flex-shrink:0;
-}
-.btn:hover{opacity:0.85}
-.btn-send{background:var(--accent-green);color:#fff}
-.btn-read{background:var(--accent-blue);color:#fff;font-size:14px;padding:4px 8px}
-.btn-stop{background:var(--accent-red);color:#fff;font-size:14px;padding:4px 8px}
-.reading-progress{
-  height:3px;background:var(--bg-primary);border-radius:2px;overflow:hidden;flex-shrink:0
-}
-.reading-progress .rp-fill{
-  height:100%;background:var(--accent-blue);
-  border-radius:2px;transition:width 0.5s ease
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--border-subtle);
+  flex-shrink: 0;
 }
 
 /* ============================================================
    Responsive
    ============================================================ */
-@media (max-width:1200px){
-  .main-grid{grid-template-columns:repeat(3, 1fr)}
+@media (max-width: 1200px) {
+  .main-layout { flex-direction: column; }
+  .chat-panel { width: 100%; max-width: none; min-width: 0; max-height: 40%; }
+  .data-grid { grid-template-columns: repeat(3, 1fr); }
 }
-@media (max-width:900px){
-  .main-grid{grid-template-columns:repeat(2, 1fr);grid-template-rows:auto}
+@media (max-width: 800px) {
+  .data-grid { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; }
 }
-@media (max-width:600px){
-  .main-grid{grid-template-columns:1fr}
-  .header-info{gap:8px;font-size:10px}
+@media (max-width: 500px) {
+  .data-grid { grid-template-columns: 1fr; }
+  .header-info { gap: 8px; font-size: 9px; }
 }
 </style>
 </head>
@@ -404,176 +682,220 @@ body{
 <div class="header">
   <div class="header-brand">
     <span class="header-dot awake-pulse" id="hdrDot"></span>
-    NotMe v6.5
+    NOTME v6.5
   </div>
-  <span class="header-tag idle" id="hdrTag">idle</span>
+
+  <!-- Developmental Age -->
+  <div class="header-age" id="hdrAge" title="发育阶段">
+    <span class="stage-dot"></span>
+    <span id="ageLabel">--</span>
+  </div>
+
+  <span class="header-tag idle" id="hdrTag">IDLE</span>
+
   <div class="header-info">
-    <span id="hdrTime">🕐 --:--</span>
-    <span id="hdrUptime">⏱ 0</span>
-    <span id="hdrStep">步: 0</span>
+    <span><span class="hi-dot" style="background:var(--accent-yellow)"></span><span id="hdrTime">--:--</span></span>
+    <span><span class="hi-dot" style="background:var(--accent-cyan)"></span><span id="hdrUptime">0</span> steps</span>
+    <span><span class="hi-dot" style="background:var(--accent-purple)"></span><span id="hdrSleepLabel">AWAKE</span></span>
   </div>
 </div>
 
 <!-- ============================================================
-     Main Grid — 8 Panels
+     Main Layout
      ============================================================ -->
-<div class="main-grid">
+<div class="main-layout">
 
-  <!-- 🎭 情感仪表 -->
-  <div class="panel" id="pEmo">
-    <div class="panel-header">
-      <span class="icon">🎭</span><h3>情感仪表</h3>
-      <span class="badge" id="emoBadge">核心情感空间</span>
+  <!-- ===== LEFT: Chat Panel ===== -->
+  <div class="chat-panel" id="chatPanel">
+    <div class="chat-header">
+      <span class="ch-icon">◇</span>
+      <h3>对话 — Dialogue</h3>
+      <span class="ch-badge" id="chatBadge">LIVE</span>
     </div>
-    <div class="panel-body">
-      <div class="emo-core">
-        <div>
-          <div class="emo-face" id="emoFace">😐</div>
-          <div class="emo-vals">
-            <div class="v" id="emoV" style="color:var(--awake)">0.00</div>
-            <div class="a" id="emoA">0.50</div>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-msg agent">
+        <span class="who">AGENT</span>
+        NotMe v6.5 — 自由能原理情感智能体。基于预测加工与赫布可塑性，从身体稳态中涌现行为。
+      </div>
+    </div>
+
+    <div class="reading-progress" id="readingProgress" style="display:none">
+      <div class="rp-fill" id="rpFill" style="width:0%"></div>
+    </div>
+
+    <div class="chat-input-area">
+      <input id="chatInput" placeholder="输入消息，Enter 发送..." autofocus>
+      <button class="btn btn-send" onclick="sendChat()">发送</button>
+      <button class="btn btn-read" onclick="startReading()" title="开始阅读">▸</button>
+      <button class="btn btn-stop" onclick="stopReading()" title="停止阅读">■</button>
+    </div>
+  </div>
+
+  <!-- ===== RIGHT: Data Grid 3×3 ===== -->
+  <div class="data-grid">
+
+    <!-- Free Energy (was Emotion) — no phenomenology -->
+    <div class="panel" id="pFE">
+      <div class="panel-header">
+        <span class="picon">◇</span><h3>自由能 F</h3>
+        <span class="badge" id="feBadge">预测误差</span>
+      </div>
+      <div class="panel-body">
+        <div class="fe-main">
+          <div class="fe-total">
+            <div class="fe-num" id="feTotal">0.00</div>
+            <div class="fe-label">F total</div>
+          </div>
+          <div class="fe-components" id="feComponents">
+            <!-- filled by JS -->
+          </div>
+          <div class="fe-va">
+            <div class="va-item">
+              <div class="va-val" id="feV" style="color:var(--accent-green)">0.00</div>
+              <div class="va-tag">Valence</div>
+            </div>
+            <div class="va-item">
+              <div class="va-val" id="feA" style="color:var(--accent-orange)">0.50</div>
+              <div class="va-tag">Arousal</div>
+            </div>
+          </div>
+          <div class="fe-canvas-wrap"><canvas id="feCanvas"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Body Homeostasis -->
+    <div class="panel" id="pBody">
+      <div class="panel-header"><span class="picon">○</span><h3>身体稳态</h3><span class="badge">9 维度</span></div>
+      <div class="panel-body"><div class="body-list" id="bodyBars"></div></div>
+    </div>
+
+    <!-- Circadian & Sleep -->
+    <div class="panel" id="pCirca">
+      <div class="panel-header"><span class="picon">◎</span><h3>昼夜节律</h3><span class="badge" id="sleepBadge">清醒</span></div>
+      <div class="panel-body">
+        <div class="circa-layout">
+          <div class="circa-clock-wrap"><canvas id="circaClock" width="76" height="76"></canvas></div>
+          <div class="circa-details">
+            <div class="circa-row"><span class="clabel">mel</span><span class="cval" id="melVal" style="color:var(--accent-purple)">0.00</span></div>
+            <div class="circa-row"><span class="clabel">cor</span><span class="cval" id="corVal" style="color:var(--accent-orange)">0.00</span></div>
+            <div class="circa-row"><span class="clabel">sp</span><span class="cval" id="spVal" style="color:var(--accent-blue)">0.00</span></div>
+            <div class="circa-row"><span class="clabel">prop</span><span class="cval" id="spropVal" style="color:var(--text-muted)">0.00</span></div>
           </div>
         </div>
-        <div class="emo-canvas-wrap"><canvas id="emoSpace"></canvas></div>
+        <div class="sleep-depth-wrap"><canvas id="sleepDepth"></canvas></div>
       </div>
     </div>
-  </div>
 
-  <!-- 🏃 身体状态 -->
-  <div class="panel" id="pBody">
-    <div class="panel-header"><span class="icon">🏃</span><h3>身体稳态</h3><span class="badge">9 维内稳态</span></div>
-    <div class="panel-body"><div class="body-list" id="bodyBars"></div></div>
-  </div>
-
-  <!-- 🧠 脑网络 -->
-  <div class="panel" id="pNet">
-    <div class="panel-header"><span class="icon">🧠</span><h3>脑网络</h3><span class="badge" id="netBadge">跷跷板</span></div>
-    <div class="panel-body">
-      <div class="network-bars">
-        <div class="network-row">
-          <span class="nlabel" style="color:var(--accent-orange)">TPN</span>
-          <div class="nbar-wrap"><div class="nbar-fill" id="tpnBar" style="width:50%;background:linear-gradient(90deg,#f0883e,#f778ba)"></div></div>
-          <span class="nval" id="tpnVal">0.50</span>
+    <!-- Brain Networks -->
+    <div class="panel" id="pNet">
+      <div class="panel-header"><span class="picon">△</span><h3>脑网络</h3><span class="badge" id="netBadge">跷跷板</span></div>
+      <div class="panel-body">
+        <div class="network-bars">
+          <div class="network-row">
+            <span class="nlabel" style="color:var(--accent-orange)">TPN</span>
+            <div class="nbar-wrap"><div class="nbar-fill" id="tpnBar" style="width:50%;background:linear-gradient(90deg,#ff8844,#ff66aa)"></div></div>
+            <span class="nval" id="tpnVal">0.50</span>
+          </div>
+          <div class="network-row">
+            <span class="nlabel" style="color:var(--accent-blue)">DMN</span>
+            <div class="nbar-wrap"><div class="nbar-fill" id="dmnBar" style="width:50%;background:linear-gradient(90deg,#4488ff,#9966ff)"></div></div>
+            <span class="nval" id="dmnVal">0.50</span>
+          </div>
+          <div class="network-row">
+            <span class="nlabel" style="color:var(--accent-cyan)">FPN</span>
+            <div class="nbar-wrap"><div class="nbar-fill" id="fpnBar" style="width:50%;background:linear-gradient(90deg,#00e5ff,#4488ff)"></div></div>
+            <span class="nval" id="fpnVal">0.50</span>
+          </div>
         </div>
-        <div class="network-row">
-          <span class="nlabel" style="color:var(--accent-blue)">DMN</span>
-          <div class="nbar-wrap"><div class="nbar-fill" id="dmnBar" style="width:50%;background:linear-gradient(90deg,#58a6ff,#bc8cff)"></div></div>
-          <span class="nval" id="dmnVal">0.50</span>
-        </div>
-        <div class="network-row">
-          <span class="nlabel" style="color:var(--accent-cyan)">FPN</span>
-          <div class="nbar-wrap"><div class="nbar-fill" id="fpnBar" style="width:50%;background:linear-gradient(90deg,#39d2c0,#58a6ff)"></div></div>
-          <span class="nval" id="fpnVal">0.50</span>
-        </div>
-      </div>
-      <div class="seesaw-viz"><canvas id="seesawCanvas"></canvas></div>
-    </div>
-  </div>
-
-  <!-- 💊 神经化学 -->
-  <div class="panel" id="pNeuro">
-    <div class="panel-header"><span class="icon">💊</span><h3>神经化学</h3><span class="badge">神经调节</span></div>
-    <div class="panel-body">
-      <div class="neuro-gauges" id="neuroGauges">
-        <!-- filled by JS -->
+        <div class="seesaw-viz"><canvas id="seesawCanvas"></canvas></div>
       </div>
     </div>
-  </div>
 
-  <!-- 👁 AI看到的画面 -->
-  <div class="panel" id="pVis">
-    <div class="panel-header"><span class="icon">👁</span><h3>AI看到的画面</h3><span class="badge" id="visBadge">语义代理</span></div>
-    <div class="panel-body">
-      <div class="visual-main">
-        <div class="visual-frame-wrap"><canvas id="vizCanvas" width="112" height="112"></canvas></div>
-        <div class="visual-channels" id="visChannels">
+    <!-- Neurochemical -->
+    <div class="panel" id="pNeuro">
+      <div class="panel-header"><span class="picon">◇</span><h3>神经化学</h3><span class="badge">调节</span></div>
+      <div class="panel-body">
+        <div class="neuro-gauges" id="neuroGauges">
           <!-- filled by JS -->
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- 🔊 AI听到的声音 -->
-  <div class="panel" id="pAud">
-    <div class="panel-header"><span class="icon">🔊</span><h3>AI听到的声音</h3><span class="badge" id="audBadge">静默</span></div>
-    <div class="panel-body">
-      <div class="audio-section">
-        <canvas id="waveCanvas" class="wave-canvas" width="256" height="45"></canvas>
-        <canvas id="melCanvas" class="mel-canvas" width="256" height="32"></canvas>
-        <div class="audio-bottom">
-          <canvas id="azimuthCanvas" width="70" height="35"></canvas>
-          <span class="az-label" id="rmsLabel">Az: 0°</span>
+    <!-- Memory & System -->
+    <div class="panel" id="pSys">
+      <div class="panel-header"><span class="picon">□</span><h3>记忆系统</h3><span class="badge" id="sysBadge">运行</span></div>
+      <div class="panel-body">
+        <div class="mem-grid">
+          <div class="mem-stat"><div class="mnum" id="nClusters" style="color:var(--accent-blue)">0</div><div class="mlbl">情景记忆</div></div>
+          <div class="mem-stat"><div class="mnum" id="nSemantic" style="color:var(--accent-green)">0</div><div class="mlbl">语义概念</div></div>
+          <div class="mem-stat"><div class="mnum" id="nSelf" style="color:var(--accent-orange)">0</div><div class="mlbl">自我体验</div></div>
+          <div class="mem-stat"><div class="mnum" id="totalAct" style="color:var(--accent-purple)">0</div><div class="mlbl">总激活</div></div>
+        </div>
+        <div class="sys-canvas-wrap"><canvas id="sysCanvas"></canvas></div>
+        <div class="sys-summary">
+          <span id="sysFmean">F̅: --</span>
+          <span id="sysVmean">V̅: --</span>
+          <span id="sysAmean">A̅: --</span>
+          <span id="sysSteps">步: 0</span>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- 🕐 昼夜节律 & 睡眠 -->
-  <div class="panel" id="pCirca">
-    <div class="panel-header"><span class="icon">🕐</span><h3>昼夜节律 & 睡眠</h3><span class="badge" id="sleepBadge">清醒</span></div>
-    <div class="panel-body">
-      <div class="circa-layout">
-        <div class="circa-clock-wrap"><canvas id="circaClock" width="90" height="90"></canvas></div>
-        <div class="circa-details">
-          <div class="circa-row"><span class="clabel">🌙 褪黑素</span><span class="cval" id="melVal" style="color:var(--accent-purple)">0.00</span></div>
-          <div class="circa-row"><span class="clabel">☀️ 皮质醇</span><span class="cval" id="corVal" style="color:var(--accent-orange)">0.00</span></div>
-          <div class="circa-row"><span class="clabel">😴 睡眠压力</span><span class="cval" id="spVal" style="color:var(--accent-blue)">0.00</span></div>
-          <div class="circa-row"><span class="clabel">💤 睡眠倾向</span><span class="cval" id="spropVal" style="color:var(--text-muted)">0.00</span></div>
+    <!-- Visual Perception -->
+    <div class="panel" id="pVis">
+      <div class="panel-header"><span class="picon">◎</span><h3>视觉通道</h3><span class="badge" id="visBadge">语义代理</span></div>
+      <div class="panel-body">
+        <div class="visual-main">
+          <div class="visual-frame-wrap"><canvas id="vizCanvas" width="84" height="84"></canvas></div>
+          <div class="visual-channels" id="visChannels">
+            <!-- filled by JS -->
+          </div>
         </div>
       </div>
-      <div class="sleep-depth-wrap"><canvas id="sleepDepth"></canvas></div>
     </div>
-  </div>
 
-  <!-- 📊 系统状态 -->
-  <div class="panel" id="pSys">
-    <div class="panel-header"><span class="icon">📊</span><h3>记忆 & 系统</h3><span class="badge" id="sysBadge">运行中</span></div>
-    <div class="panel-body">
-      <div class="mem-grid">
-        <div class="mem-stat"><div class="mnum" id="nClusters" style="color:var(--accent-blue)">0</div><div class="mlbl">情景记忆</div></div>
-        <div class="mem-stat"><div class="mnum" id="nSemantic" style="color:var(--accent-green)">0</div><div class="mlbl">语义概念</div></div>
-        <div class="mem-stat"><div class="mnum" id="nSelf" style="color:var(--accent-orange)">0</div><div class="mlbl">自我体验</div></div>
-        <div class="mem-stat"><div class="mnum" id="totalAct" style="color:var(--accent-purple)">0</div><div class="mlbl">总激活</div></div>
-      </div>
-      <div class="sys-canvas-wrap"><canvas id="sysCanvas"></canvas></div>
-      <div class="sys-summary">
-        <span id="sysFmean">F̅: --</span>
-        <span id="sysVmean">V̅: --</span>
-        <span id="sysAmean">A̅: --</span>
-        <span id="sysSteps">步: 0</span>
+    <!-- Auditory Perception -->
+    <div class="panel" id="pAud">
+      <div class="panel-header"><span class="picon">◈</span><h3>听觉通道</h3><span class="badge" id="audBadge">静默</span></div>
+      <div class="panel-body">
+        <div class="audio-section">
+          <canvas id="waveCanvas" class="wave-canvas" width="220" height="38"></canvas>
+          <canvas id="melCanvas" class="mel-canvas" width="220" height="26"></canvas>
+          <div class="audio-bottom">
+            <canvas id="azimuthCanvas" width="56" height="28"></canvas>
+            <span class="az-label" id="rmsLabel">Az: 0°</span>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
+    <!-- Network Info (spare panel) -->
+    <div class="panel" id="pInfo">
+      <div class="panel-header"><span class="picon">▿</span><h3>运行状态</h3><span class="badge" id="infoBadge">在线</span></div>
+      <div class="panel-body" style="justify-content:center;align-items:center;gap:4px;">
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);text-align:center" id="infoText">
+          自主循环运行中
+        </div>
+        <div style="font-family:var(--font-mono);font-size:8px;color:var(--text-muted);text-align:center" id="infoSub">
+          NotMe v6.5 — Neo-Futurist
+        </div>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <!-- ============================================================
      Activity Stream
      ============================================================ -->
 <div class="activity-stream" id="activityStream">
-  <span style="color:var(--text-muted);font-size:10px">📝 等待活动...</span>
+  <span style="color:var(--text-muted);font-size:9px;">▸ 等待活动...</span>
 </div>
 
 <!-- ============================================================
-     Chat Bar
-     ============================================================ -->
-<div class="chat-bar">
-  <div class="reading-progress" id="readingProgress" style="display:none">
-    <div class="rp-fill" id="rpFill" style="width:0%"></div>
-  </div>
-  <div class="chat-messages" id="chatMessages">
-    <div class="chat-msg agent"><span class="who">Agent</span>你好，我是 NotMe。一个基于自由能原理的情感智能体。</div>
-  </div>
-  <div class="chat-input-row">
-    <input id="chatInput" placeholder="和 Agent 说话..." autofocus>
-    <button class="btn btn-send" onclick="sendChat()">发送</button>
-    <button class="btn btn-read" onclick="startReading()" title="开始阅读">📖</button>
-    <button class="btn btn-stop" onclick="stopReading()" title="停止阅读">⏹</button>
-  </div>
-</div>
-
-<!-- ============================================================
-     JavaScript — All Logic
+     JavaScript
      ============================================================ -->
 <script>
 // ============================================================
@@ -593,56 +915,58 @@ function setupDPI(canvasId, cssW, cssH) {
 }
 
 function setupAllCanvases() {
-  // Emotion space
-  const emoWrap = document.querySelector('.emo-canvas-wrap');
-  const emoW = emoWrap ? emoWrap.clientWidth - 4 : 160;
-  setupDPI('emoSpace', Math.max(60, emoW), 90);
+  // Free Energy canvas
+  const feWrap = document.querySelector('.fe-canvas-wrap');
+  const feW = feWrap ? feWrap.clientWidth - 4 : 120;
+  const feH = feWrap ? feWrap.clientHeight - 4 : 50;
+  setupDPI('feCanvas', Math.max(40, feW), Math.max(30, feH));
 
   // Seesaw
-  const seesawWrap = document.querySelector('.seesaw-viz');
-  const seesawW = seesawWrap ? seesawWrap.clientWidth - 4 : 120;
-  setupDPI('seesawCanvas', Math.max(60, seesawW), Math.max(30, seesawWrap?.clientHeight || 40));
+  const sWrap = document.querySelector('.seesaw-viz');
+  const sW = sWrap ? sWrap.clientWidth - 4 : 100;
+  const sH = sWrap ? sWrap.clientHeight || 30 : 30;
+  setupDPI('seesawCanvas', Math.max(40, sW), Math.max(20, sH));
 
   // Neuro gauges
   document.querySelectorAll('.neuro-gauge canvas').forEach(c => {
-    const w = c.parentElement?.clientWidth || 80;
-    setupDPI(c.id, Math.min(w - 8, 80), 60);
+    const w = c.parentElement?.clientWidth || 64;
+    setupDPI(c.id, Math.min(w - 6, 64), 48);
   });
 
-  // Viz canvas (fixed size)
-  setupDPI('vizCanvas', 112, 112);
+  // Viz canvas
+  setupDPI('vizCanvas', 84, 84);
 
-  // Audio canvases
-  const audPanel = document.getElementById('pAud');
-  const audW = audPanel ? audPanel.clientWidth - 28 : 220;
-  setupDPI('waveCanvas', Math.max(120, audW), 45);
-  setupDPI('melCanvas', Math.max(120, audW), 32);
-  setupDPI('azimuthCanvas', 70, 35);
+  // Audio
+  const audW = document.getElementById('pAud')?.clientWidth - 24 || 200;
+  setupDPI('waveCanvas', Math.max(100, audW), 38);
+  setupDPI('melCanvas', Math.max(100, audW), 26);
+  setupDPI('azimuthCanvas', 56, 28);
 
-  // Circa clock
-  setupDPI('circaClock', 90, 90);
+  // Circa
+  setupDPI('circaClock', 76, 76);
 
   // Sleep depth
   const sdWrap = document.querySelector('.sleep-depth-wrap');
-  const sdW = sdWrap ? sdWrap.clientWidth - 4 : 120;
-  setupDPI('sleepDepth', Math.max(60, sdW), Math.max(20, sdWrap?.clientHeight || 24));
+  const sdW = sdWrap ? sdWrap.clientWidth - 4 : 100;
+  const sdH = sdWrap ? sdWrap.clientHeight || 20 : 20;
+  setupDPI('sleepDepth', Math.max(40, sdW), Math.max(14, sdH));
 
-  // System canvas
+  // System sparklines
   const sysWrap = document.querySelector('.sys-canvas-wrap');
-  const sysW = sysWrap ? sysWrap.clientWidth - 4 : 140;
-  setupDPI('sysCanvas', Math.max(80, sysW), Math.max(30, sysWrap?.clientHeight || 40));
+  const sysW = sysWrap ? sysWrap.clientWidth - 4 : 110;
+  const sysH = sysWrap ? sysWrap.clientHeight || 30 : 30;
+  setupDPI('sysCanvas', Math.max(60, sysW), Math.max(20, sysH));
 }
 
 // ============================================================
 // Global State
 // ============================================================
 let state = {};
-let trendVals = [];     // [{v, a, f}]
+let trendVals = [];
 const MAX_TREND = 200;
 let chatMsgs = [];
-let activityItems = [];
 const PLACEHOLDERS = [
-  '和 Agent 说话...',
+  '输入消息，Enter 发送...',
   'Agent 正在后台思考...',
   '问问 Agent 在想什么...',
   '分享一段文字给 Agent...',
@@ -673,7 +997,7 @@ visSource.onmessage = (e) => {
 // ============================================================
 function updateAll() {
   updateHeader();
-  updateEmotion();
+  updateFreeEnergy();
   updateBody();
   updateBrainNetworks();
   updateNeurochemical();
@@ -683,6 +1007,7 @@ function updateAll() {
   updateActivityStream();
   updateReading();
   updateChatPlaceholder();
+  updateInfoPanel();
 }
 
 // ============================================================
@@ -705,9 +1030,20 @@ function updateHeader() {
     tag.className = 'header-tag nrem';
   } else {
     dot.classList.add('awake-pulse');
-    tag.textContent = a.mode || 'idle';
+    tag.textContent = a.mode?.toUpperCase() || 'IDLE';
     tag.className = 'header-tag awake';
   }
+
+  // Developmental Age
+  const dev = state.development || {};
+  const stage = dev.stage || 1;
+  const stageNames = {1: 'INFANT', 2: 'CHILD', 3: 'ADOLESCENT', 4: 'ADULT'};
+  const stageIcons = {1: '·', 2: '∘', 3: '◎', 4: '●'};
+  document.getElementById('ageLabel').textContent =
+    `S${stage} ${stageIcons[stage] || '?'} ${stageNames[stage] || '--'}`;
+  // Color intensity by stage
+  const alpha = 0.15 + stage * 0.05;
+  document.getElementById('hdrAge').style.background = `rgba(153,102,255,${alpha})`;
 
   // SCN time
   const phase = state.circadian?.phase || 0;
@@ -715,114 +1051,140 @@ function updateHeader() {
   const h = Math.floor(hours);
   const m = Math.floor((hours - h) * 60);
   document.getElementById('hdrTime').textContent =
-    `🕐 ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 
-  // Uptime
+  // Steps
   const steps = state.session?.total_steps || 0;
-  document.getElementById('hdrUptime').textContent =
-    `⏱ ${steps}`;
-  document.getElementById('hdrStep').textContent =
-    `步: ${steps}`;
+  document.getElementById('hdrUptime').textContent = `${steps} steps`;
+
+  // Sleep state label
+  let slLabel = 'AWAKE', slColor = 'var(--accent-green)';
+  if (s.is_rem) { slLabel = 'REM'; slColor = 'var(--accent-purple)'; }
+  else if (s.is_asleep) { slLabel = s.state?.replace('nrem_','N').toUpperCase() || 'NREM'; slColor = 'var(--accent-blue)'; }
+  const slEl = document.getElementById('hdrSleepLabel');
+  slEl.textContent = slLabel;
+  slEl.style.color = slColor;
 }
 
 // ============================================================
-// Emotion Panel
+// Free Energy Panel (no phenomenology — pure math)
 // ============================================================
-function updateEmotion() {
+function updateFreeEnergy() {
+  const F = state.F || {};
   const v = state.valence || 0;
   const a = state.arousal || 0;
 
-  // Emoji
-  let emo = '😐';
-  if (v > 0.4) emo = a > 0.6 ? '🤩' : '😊';
-  else if (v > 0.1) emo = a > 0.6 ? '😃' : '🙂';
-  else if (v < -0.4) emo = a > 0.6 ? '😭' : '😢';
-  else if (v < -0.1) emo = a > 0.6 ? '😰' : '😟';
-  else if (a > 0.7) emo = '😲';
-  else if (a < 0.2) emo = '😴';
-  document.getElementById('emoFace').textContent = emo;
+  // F total
+  document.getElementById('feTotal').textContent = (F.total || 0).toFixed(2);
+  const fColor = (F.total || 0) < 0.5 ? 'var(--accent-cyan)' :
+    (F.total || 0) < 1.5 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+  document.getElementById('feTotal').style.color = fColor;
 
-  const vc = v >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
-  document.getElementById('emoV').style.color = vc;
-  document.getElementById('emoV').textContent = v.toFixed(2);
-  document.getElementById('emoA').textContent = a.toFixed(2);
+  // Components
+  const comps = [
+    { k: 'body', label: 'F_body', color: 'var(--accent-orange)' },
+    { k: 'social', label: 'F_social', color: 'var(--accent-pink)' },
+    { k: 'cognitive', label: 'F_cog', color: 'var(--accent-purple)' },
+    { k: 'accuracy', label: 'F_acc', color: 'var(--accent-blue)' },
+  ];
+  let html = '';
+  comps.forEach(c => {
+    const val = F[c.k] || 0;
+    html += `<div class="fe-comp">
+      <span class="fcl">${c.label}</span>
+      <span class="fcv" style="color:${c.color}">${val.toFixed(2)}</span>
+    </div>`;
+  });
+  document.getElementById('feComponents').innerHTML = html;
+
+  // Valence / Arousal (mathematical: V = tanh(-η·F_body), A = tanh(η·|F_body|))
+  const vEl = document.getElementById('feV');
+  vEl.textContent = v.toFixed(2);
+  vEl.style.color = v >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+  document.getElementById('feA').textContent = a.toFixed(2);
 
   // Trend
-  trendVals.push({v, a, f: state.F?.total || 0});
+  trendVals.push({v, a, f: F.total || 0});
   if (trendVals.length > MAX_TREND) trendVals = trendVals.slice(-MAX_TREND);
 
-  drawEmotionSpace();
+  drawFESpace();
 }
 
-function drawEmotionSpace() {
-  const info = _canvases['emoSpace'];
+function drawFESpace() {
+  const info = _canvases['feCanvas'];
   if (!info) return;
   const { elem: c, dpr } = info;
   const ctx = c.getContext('2d');
   const W = c.width, H = c.height;
   ctx.clearRect(0, 0, W, H);
 
-  // Background quadrants
   const cx = W / 2, cy = H / 2;
-  const colors = [
-    'rgba(63,185,80,0.06)',   // +V +A: excited
-    'rgba(218,54,51,0.06)',   // -V +A: anxious
-    'rgba(63,185,80,0.03)',   // +V -A: calm
-    'rgba(88,166,255,0.04)',  // -V -A: depressed
-  ];
-  [0,1,2,3].forEach(i => {
-    ctx.fillStyle = colors[i];
-    const x = i % 2 === 0 ? cx : 0;
-    const y = i < 2 ? 0 : cy;
-    ctx.fillRect(x, y, cx, cy);
-  });
+
+  // Background gradient
+  const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W,H)/1.5);
+  bgGrad.addColorStop(0, 'rgba(0, 180, 255, 0.06)');
+  bgGrad.addColorStop(0.5, 'rgba(80, 40, 160, 0.03)');
+  bgGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
 
   // Axes
-  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.strokeStyle = 'rgba(100, 140, 200, 0.2)';
   ctx.lineWidth = 1;
+  ctx.setLineDash([3, 8]);
   ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(W, cy); ctx.stroke();
+  ctx.setLineDash([]);
 
-  // Labels
-  const fs = Math.max(9, H/12);
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.font = `${fs}px sans-serif`;
+  // Axis labels (math notation, no phenomenology)
+  const fs = Math.max(9, H/10);
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.font = `${fs}px "JetBrains Mono", monospace`;
   ctx.textAlign = 'center';
-  ctx.fillText('兴奋', cx*1.5, cy*0.2);
-  ctx.fillText('焦虑', cx*0.5, cy*0.2);
-  ctx.fillText('满足', cx*1.5, cy*1.9);
-  ctx.fillText('抑郁', cx*0.5, cy*1.9);
+  ctx.fillText('V+', cx + 4, 10);
+  ctx.fillText('V−', cx - 4, H - 2);
+  ctx.fillText('A+', W - 4, cy - 4);
+  ctx.fillText('A−', 4, cy + 10);
 
   // Trail
   if (trendVals.length > 2) {
-    ctx.strokeStyle = 'rgba(88,166,255,0.3)';
+    ctx.strokeStyle = 'rgba(68, 136, 255, 0.25)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     trendVals.forEach((p, i) => {
-      const x = cx + p.v * cx * 0.85;
-      const y = cy - (p.a - 0.5) * H * 0.85;
+      const x = cx + p.v * cx * 0.8;
+      const y = cy - (p.a - 0.5) * H * 0.8;
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.stroke();
   }
 
   // Current point
-  const px = cx + (state.valence||0) * cx * 0.85;
-  const py = cy - ((state.arousal||0) - 0.5) * H * 0.85;
+  const px = cx + (state.valence||0) * cx * 0.8;
+  const py = cy - ((state.arousal||0) - 0.5) * H * 0.8;
+
+  // Glow
+  const glow = ctx.createRadialGradient(px, py, 0, px, py, 12);
+  glow.addColorStop(0, 'rgba(0, 229, 255, 0.4)');
+  glow.addColorStop(1, 'rgba(0, 229, 255, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(px, py, 12, 0, Math.PI*2); ctx.fill();
+
+  // Point
   ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = vc = (state.valence||0) >= 0 ? '#3fb950' : '#da3633';
-  ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI*2); ctx.fill();
-  ctx.textAlign = 'start';
+  ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
+  const vc = (state.valence||0) >= 0 ? '#00e676' : '#ff4455';
+  ctx.fillStyle = vc;
+  ctx.beginPath(); ctx.arc(px, py, 2.5, 0, Math.PI*2); ctx.fill();
 }
 
 // ============================================================
 // Body Panel
 // ============================================================
-const BODY_ICONS = ['👥','⚡','🔥','🆕','🎯','👁','👂','🧠','🛡'];
+const BODY_ICONS = ['○','◇','△','▿','◎','◈','◉','◧','◆'];
 const BODY_LABELS = ['社交','能量','压力','新颖','专注','视觉','听觉','认知','组织'];
-const BODY_COLORS = ['#58a6ff','#3fb950','#da3633','#f0883e','#bc8cff',
-                     '#58a6ff','#39d2c0','#f0883e','#3fb950'];
+const BODY_COLORS = ['#4488ff','#00e676','#ff4455','#ff8844','#9966ff',
+                     '#4488ff','#00e5ff','#ff8844','#00e676'];
 const BODY_SETPOINTS = [0.65, 0.70, 0.05, 0.20, 0.40, 0.30, 0.30, 0.50, 0.90];
 
 function updateBody() {
@@ -834,22 +1196,22 @@ function updateBody() {
     const spPct = Math.round(sp * 100);
     const dev = v - sp;
     let color = BODY_COLORS[i];
-    if (Math.abs(dev) > 0.25) color = dev > 0 ? '#da3633' : '#58a6ff';
+    if (Math.abs(dev) > 0.25) color = dev > 0 ? '#ff4455' : '#4488ff';
     html += `<div class="body-row">
-      <span class="icon">${BODY_ICONS[i]}</span>
-      <span class="label">${BODY_LABELS[i]}</span>
+      <span class="bicon">${BODY_ICONS[i]}</span>
+      <span class="blabel">${BODY_LABELS[i]}</span>
       <div class="bar-wrap">
         <div class="bar-fill" style="width:${pct}%;background:${color}"></div>
         <div class="bar-sp" style="left:${spPct}%"></div>
       </div>
-      <span class="val">${v.toFixed(2)}</span>
+      <span class="bval">${v.toFixed(2)}</span>
     </div>`;
   });
   document.getElementById('bodyBars').innerHTML = html;
 }
 
 // ============================================================
-// Brain Networks Panel
+// Brain Networks
 // ============================================================
 function updateBrainNetworks() {
   const neuro = state.neuro || {};
@@ -864,7 +1226,6 @@ function updateBrainNetworks() {
   document.getElementById('fpnBar').style.width = (fpn*100).toFixed(0) + '%';
   document.getElementById('fpnVal').textContent = fpn.toFixed(2);
 
-  // Badge
   const badge = document.getElementById('netBadge');
   if (tpn > 0.6) badge.textContent = '任务主导';
   else if (dmn > 0.6) badge.textContent = '走神主导';
@@ -881,48 +1242,56 @@ function drawSeesaw(tpn, dmn, fpn) {
   const W = c.width, H = c.height;
   ctx.clearRect(0, 0, W, H);
 
-  // Seesaw line
-  const cx = W/2, top = 6, bot = H - 6;
+  const cx = W/2, top = 4, bot = H - 4;
   const leftY = top + (1-tpn) * (bot-top);
   const rightY = top + dmn * (bot-top);
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(15, leftY); ctx.lineTo(W-15, rightY); ctx.stroke();
+
+  // Seesaw line
+  ctx.strokeStyle = 'rgba(100, 140, 200, 0.25)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(12, leftY); ctx.lineTo(W-12, rightY); ctx.stroke();
 
   // TPN ball
-  ctx.fillStyle = '#f0883e';
-  ctx.beginPath(); ctx.arc(15, leftY, 7, 0, Math.PI*2); ctx.fill();
+  const tGrad = ctx.createRadialGradient(12, leftY, 2, 12, leftY, 8);
+  tGrad.addColorStop(0, '#ff8844');
+  tGrad.addColorStop(1, 'rgba(255,136,68,0.2)');
+  ctx.fillStyle = tGrad;
+  ctx.beginPath(); ctx.arc(12, leftY, 7, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#fff';
-  ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('T', 15, leftY + 3);
+  ctx.font = '8px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('T', 12, leftY + 3);
   ctx.textAlign = 'start';
 
   // DMN ball
-  ctx.fillStyle = '#58a6ff';
-  ctx.beginPath(); ctx.arc(W-15, rightY, 7, 0, Math.PI*2); ctx.fill();
+  const dGrad = ctx.createRadialGradient(W-12, rightY, 2, W-12, rightY, 8);
+  dGrad.addColorStop(0, '#4488ff');
+  dGrad.addColorStop(1, 'rgba(68,136,255,0.2)');
+  ctx.fillStyle = dGrad;
+  ctx.beginPath(); ctx.arc(W-12, rightY, 7, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
-  ctx.fillText('D', W-15, rightY + 3);
+  ctx.fillText('D', W-12, rightY + 3);
   ctx.textAlign = 'start';
 
-  // FPN indicator (center glow)
-  const glowR = 4 + fpn * 8;
-  ctx.fillStyle = `rgba(57,210,192,${0.2 + fpn*0.5})`;
+  // FPN center glow
+  const glowR = 3 + fpn * 6;
+  ctx.fillStyle = `rgba(0,229,255,${0.15 + fpn*0.4})`;
   ctx.beginPath(); ctx.arc(cx, H/2, glowR, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#39d2c0';
-  ctx.beginPath(); ctx.arc(cx, H/2, 3, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#00e5ff';
+  ctx.beginPath(); ctx.arc(cx, H/2, 2.5, 0, Math.PI*2); ctx.fill();
 }
 
 // ============================================================
-// Neurochemical Panel
+// Neurochemical
 // ============================================================
 function updateNeurochemical() {
   const neuro = state.neuro || {};
   const gauges = [
-    { id: 'ne',  label: 'NE 蓝斑核',   val: neuro.tonic_ne || 0.2,  color: '#58a6ff', max: 1.0, unit: '' },
-    { id: 'ach', label: 'ACh 基底前脑', val: neuro.ach_level || 0.4, color: '#3fb950', max: 1.0, unit: '' },
-    { id: 'da',  label: 'DA 腹侧被盖', val: neuro.da_tonic || 0.3,  color: '#f0883e', max: 1.0, unit: '' },
-    { id: 'rpe', label: 'RPE 预测误差', val: neuro.rpe || 0,         color: '#bc8cff', max: 0.5, unit: '', signed: true },
+    { id: 'ne',  label: 'NE',  val: neuro.tonic_ne || 0.2,  color: '#4488ff', max: 1.0 },
+    { id: 'ach', label: 'ACh', val: neuro.ach_level || 0.4, color: '#00e676', max: 1.0 },
+    { id: 'da',  label: 'DA',  val: neuro.da_tonic || 0.3,  color: '#ff8844', max: 1.0 },
+    { id: 'rpe', label: 'RPE', val: neuro.rpe || 0,         color: '#9966ff', max: 0.5, signed: true },
   ];
 
   let html = '';
@@ -936,12 +1305,11 @@ function updateNeurochemical() {
   });
   document.getElementById('neuroGauges').innerHTML = html;
 
-  // Draw each gauge after DOM update
   requestAnimationFrame(() => {
     gauges.forEach((g, i) => {
       const canvasId = 'neuroGauge' + i;
-      const w = document.getElementById(canvasId)?.parentElement?.clientWidth || 80;
-      setupDPI(canvasId, Math.min(w - 8, 80), 60);
+      const w = document.getElementById(canvasId)?.parentElement?.clientWidth || 64;
+      setupDPI(canvasId, Math.min(w - 6, 64), 48);
       drawNeuroGauge(canvasId, g);
     });
   });
@@ -955,38 +1323,40 @@ function drawNeuroGauge(canvasId, gauge) {
   const W = c.width, H = c.height;
   ctx.clearRect(0, 0, W, H);
 
-  const cx = W/2, barW = 14, barH = H - 16;
-  const barX = cx - barW/2, barY = 8;
+  const cx = W/2, barW = 12, barH = H - 14;
+  const barX = cx - barW/2, barY = 6;
 
-  // Background
-  ctx.fillStyle = 'rgba(255,255,255,0.05)';
-  ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 7); ctx.fill();
+  // Background tube
+  ctx.fillStyle = 'rgba(100,140,200,0.06)';
+  ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 6); ctx.fill();
 
   // Fill
   let fillH;
   if (gauge.signed) {
     fillH = Math.abs(gauge.val) / gauge.max * barH;
     const fillY = gauge.val >= 0 ? barY + barH/2 - fillH : barY + barH/2;
-    ctx.fillStyle = gauge.val >= 0 ? '#3fb950' : '#da3633';
-    ctx.beginPath(); ctx.roundRect(barX, fillY, barW, fillH, 7); ctx.fill();
+    ctx.fillStyle = gauge.val >= 0 ? '#00e676' : '#ff4455';
+    ctx.beginPath(); ctx.roundRect(barX, fillY, barW, fillH, 6); ctx.fill();
     // Center line
-    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
     ctx.lineWidth = 1;
+    ctx.setLineDash([2, 4]);
     ctx.beginPath(); ctx.moveTo(barX, barY + barH/2); ctx.lineTo(barX + barW, barY + barH/2); ctx.stroke();
+    ctx.setLineDash([]);
   } else {
     fillH = Math.min(gauge.val / gauge.max, 1.0) * barH;
     ctx.fillStyle = gauge.color;
-    ctx.beginPath(); ctx.roundRect(barX, barY + barH - fillH, barW, fillH, 7); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(barX, barY + barH - fillH, barW, fillH, 6); ctx.fill();
   }
 
-  // Glow at top
-  if (fillH > 4) {
+  // Glow at fill top
+  if (fillH > 3) {
     const glowY = gauge.signed && gauge.val < 0 ? barY + barH/2 : barY + barH - fillH;
-    const grad = ctx.createRadialGradient(cx, glowY, 0, cx, glowY, 8);
-    grad.addColorStop(0, gauge.color + '99');
+    const grad = ctx.createRadialGradient(cx, glowY, 0, cx, glowY, 6);
+    grad.addColorStop(0, gauge.color + '88');
     grad.addColorStop(1, 'transparent');
     ctx.fillStyle = grad;
-    ctx.fillRect(barX - 4, glowY - 8, barW + 8, 16);
+    ctx.fillRect(barX - 3, glowY - 6, barW + 6, 12);
   }
 }
 
@@ -996,10 +1366,10 @@ function drawNeuroGauge(canvasId, gauge) {
 function updateVisChannels(vis) {
   document.getElementById('visBadge').textContent = vis.has_frame ? '摄像头' : '语义代理';
   const channels = [
-    { k: 'v1', label: 'V1', color: '#58a6ff' },
-    { k: 'v2', label: 'V2', color: '#3fb950' },
-    { k: 'v4', label: 'V4', color: '#f0883e' },
-    { k: 'it', label: 'IT', color: '#bc8cff' },
+    { k: 'v1', label: 'V1', color: '#4488ff' },
+    { k: 'v2', label: 'V2', color: '#00e676' },
+    { k: 'v4', label: 'V4', color: '#ff8844' },
+    { k: 'it', label: 'IT', color: '#9966ff' },
   ];
   let html = '';
   channels.forEach(ch => {
@@ -1020,16 +1390,15 @@ function drawCameraFrame(b64) {
     const info = _canvases['vizCanvas'];
     if (!info) return;
     const ctx = info.elem.getContext('2d');
-    // Rounded clip
-    const W = info.elem.width, H = info.elem.height, r = 8;
+    const W = info.elem.width, H = info.elem.height, r = 6;
     ctx.clearRect(0, 0, W, H);
     ctx.save();
     ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.clip();
     ctx.drawImage(img, 0, 0, W, H);
     ctx.restore();
-    // Glow border
-    ctx.strokeStyle = 'rgba(88,166,255,0.4)';
-    ctx.lineWidth = 2;
+    // Neon border
+    ctx.strokeStyle = 'rgba(68, 136, 255, 0.3)';
+    ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.roundRect(1, 1, W-2, H-2, r); ctx.stroke();
   };
   img.src = 'data:image/jpeg;base64,' + b64;
@@ -1039,40 +1408,36 @@ function drawVisualPlaceholder() {
   const info = _canvases['vizCanvas'];
   if (!info) return;
   const ctx = info.elem.getContext('2d');
-  const W = info.elem.width, H = info.elem.height, r = 8;
+  const W = info.elem.width, H = info.elem.height, r = 6;
 
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#12171f';
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath(); ctx.roundRect(0, 0, W, H, r); ctx.fill();
 
-  // Camera icon
-  const cx = W/2, cy = H/2 - 6, radius = Math.min(W, H) * 0.18;
-  ctx.fillStyle = '#252b36';
-  ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI*2); ctx.fill();
+  // Geometric camera icon (no emoji)
+  const cx = W/2, cy = H/2 - 4, rad = Math.min(W, H) * 0.15;
+  ctx.strokeStyle = '#3a4058';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, rad + 3, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI*2); ctx.stroke();
 
-  // Lens ring
-  ctx.strokeStyle = '#484f58';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(cx, cy, radius + 4, 0, Math.PI*2); ctx.stroke();
+  // Lens crosshair
+  ctx.beginPath(); ctx.moveTo(cx - rad*0.6, cy); ctx.lineTo(cx + rad*0.6, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - rad*0.6); ctx.lineTo(cx, cy + rad*0.6); ctx.stroke();
 
-  // Camera body
-  ctx.fillStyle = '#30363d';
-  ctx.fillRect(cx - radius*0.8, cy - radius*0.4, radius*1.6, radius*1.1);
-  ctx.fillRect(cx - radius*0.25, cy - radius*0.75, radius*0.5, radius*0.35);
-
-  // Text
-  const fs = Math.max(10, H/10);
-  ctx.fillStyle = '#565e6b';
-  ctx.font = `${fs}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.fillText('无摄像头', cx, cy + radius*1.8);
-  ctx.textAlign = 'start';
-
-  // Pulsing dot animation
+  // Pulsing dot
   const t = Date.now() / 1000;
-  const alpha = 0.15 + Math.sin(t * 1.5) * 0.1;
-  ctx.fillStyle = `rgba(88,166,255,${alpha})`;
-  ctx.beginPath(); ctx.arc(cx, cy, radius*0.3, 0, Math.PI*2); ctx.fill();
+  const alpha = 0.12 + Math.sin(t * 1.5) * 0.08;
+  ctx.fillStyle = `rgba(68, 136, 255, ${alpha})`;
+  ctx.beginPath(); ctx.arc(cx, cy, rad*0.25, 0, Math.PI*2); ctx.fill();
+
+  // Label
+  const fs = Math.max(9, H/9);
+  ctx.fillStyle = '#4a5268';
+  ctx.font = `${fs}px "JetBrains Mono", monospace`;
+  ctx.textAlign = 'center';
+  ctx.fillText('NO SIGNAL', cx, cy + rad*1.8);
+  ctx.textAlign = 'start';
 }
 
 // ============================================================
@@ -1108,31 +1473,28 @@ function drawWaveform(wave) {
   const W = info.elem.width, H = info.elem.height;
   ctx.clearRect(0, 0, W, H);
 
-  // Gradient fill under waveform
   const step = W / wave.length;
   ctx.beginPath();
   wave.forEach((v, i) => {
     const x = i * step;
-    const y = H/2 - v * H/2 * 0.85;
+    const y = H/2 - v * H/2 * 0.8;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  // Fill below
   ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, 'rgba(88,166,255,0.2)');
-  grad.addColorStop(1, 'rgba(88,166,255,0.02)');
+  grad.addColorStop(0, 'rgba(0, 229, 255, 0.15)');
+  grad.addColorStop(1, 'rgba(0, 229, 255, 0.01)');
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Wave line
   ctx.beginPath();
   wave.forEach((v, i) => {
     const x = i * step;
-    const y = H/2 - v * H/2 * 0.85;
+    const y = H/2 - v * H/2 * 0.8;
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   });
-  ctx.strokeStyle = '#58a6ff';
-  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#00e5ff';
+  ctx.lineWidth = 1.2;
   ctx.stroke();
 }
 
@@ -1143,20 +1505,19 @@ function drawSilentWaveform() {
   const W = info.elem.width, H = info.elem.height;
   ctx.clearRect(0, 0, W, H);
 
-  // Breathing line
   const t = Date.now() / 1000;
-  const alpha = 0.1 + Math.sin(t * 0.8) * 0.05;
-  ctx.strokeStyle = `rgba(72,79,88,${alpha})`;
+  const alpha = 0.08 + Math.sin(t * 0.8) * 0.04;
+  ctx.strokeStyle = `rgba(74, 82, 104, ${alpha})`;
   ctx.lineWidth = 1;
-  ctx.setLineDash([6, 10]);
+  ctx.setLineDash([4, 10]);
   ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
   ctx.setLineDash([]);
 
-  const fs = Math.max(9, H/5);
-  ctx.fillStyle = '#484f58';
-  ctx.font = `${fs}px sans-serif`;
+  const fs = Math.max(9, H/4);
+  ctx.fillStyle = '#4a5268';
+  ctx.font = `${fs}px "JetBrains Mono", monospace`;
   ctx.textAlign = 'center';
-  ctx.fillText('静默', W/2, H/2 - 6);
+  ctx.fillText('SILENCE', W/2, H/2 + fs*0.4);
   ctx.textAlign = 'start';
 }
 
@@ -1169,22 +1530,11 @@ function drawMelSpectrum(spec) {
 
   const barW = W / spec.length;
   spec.forEach((v, i) => {
-    const h = Math.max(1, v * H * 0.85);
+    const h = Math.max(1, v * H * 0.8);
     const hue = 250 - (i / spec.length) * 220;
-    ctx.fillStyle = `hsl(${hue}, 70%, ${28 + v * 55}%)`;
+    ctx.fillStyle = `hsla(${hue}, 70%, ${25 + v * 50}%, 0.85)`;
     ctx.fillRect(i * barW, H - h, barW - 1, h);
   });
-
-  // Frequency labels
-  ctx.fillStyle = 'rgba(255,255,255,0.2)';
-  const fs = Math.max(7, H/7);
-  ctx.font = `${fs}px sans-serif`;
-  ctx.textAlign = 'center';
-  [0, spec.length/4, spec.length/2, spec.length*3/4, spec.length-1].forEach(idx => {
-    const hz = Math.round(idx / spec.length * 11000);
-    ctx.fillText(hz >= 1000 ? (hz/1000).toFixed(1)+'k' : hz, idx * barW + barW/2, H - 1);
-  });
-  ctx.textAlign = 'start';
 }
 
 function drawSilentMelSpectrum() {
@@ -1196,19 +1546,9 @@ function drawSilentMelSpectrum() {
 
   const nBins = 32, barW = W / nBins;
   for (let i = 0; i < nBins; i++) {
-    ctx.fillStyle = '#1a1e26';
-    ctx.fillRect(i * barW, H - 2, barW - 1, 2);
+    ctx.fillStyle = 'rgba(74,82,104,0.15)';
+    ctx.fillRect(i * barW, H - 1.5, barW - 1, 1.5);
   }
-
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  const fs = Math.max(7, H/7);
-  ctx.font = `${fs}px sans-serif`;
-  ctx.textAlign = 'center';
-  [0, 8, 16, 24, 31].forEach(idx => {
-    const hz = Math.round(idx / nBins * 11000);
-    ctx.fillText(hz >= 1000 ? (hz/1000).toFixed(1)+'k' : hz, idx * barW + barW/2, H - 1);
-  });
-  ctx.textAlign = 'start';
 }
 
 function drawAzimuth(az, hasAudio) {
@@ -1219,36 +1559,36 @@ function drawAzimuth(az, hasAudio) {
   ctx.clearRect(0, 0, W, H);
 
   const cx = W/2, cy = H - 2, r = H - 6;
-  // Arc
-  ctx.strokeStyle = '#30363d';
-  ctx.lineWidth = 2;
+
+  ctx.strokeStyle = '#3a4058';
+  ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 0); ctx.stroke();
 
-  // Direction indicator
   if (hasAudio) {
     const angle = Math.PI - (az / 90) * Math.PI/2;
-    const px = cx + Math.cos(angle) * r * 0.75;
-    const py = cy + Math.sin(angle) * r * 0.75;
-    // Glow
-    ctx.fillStyle = 'rgba(240,136,62,0.3)';
-    ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#f0883e';
-    ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
+    const px = cx + Math.cos(angle) * r * 0.7;
+    const py = cy + Math.sin(angle) * r * 0.7;
+    const glow = ctx.createRadialGradient(px, py, 0, px, py, 8);
+    glow.addColorStop(0, 'rgba(255,136,68,0.4)');
+    glow.addColorStop(1, 'rgba(255,136,68,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#ff8844';
+    ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI*2); ctx.fill();
   }
 
-  // Labels
-  const fs = 8;
-  ctx.fillStyle = '#8b949e';
-  ctx.font = `${fs}px sans-serif`;
-  ctx.fillText('◀ L', 2, H - 2);
+  const fs = 7;
+  ctx.fillStyle = '#8892a8';
+  ctx.font = `${fs}px "JetBrains Mono", monospace`;
+  ctx.fillText('L', 2, H - 2);
   ctx.textAlign = 'right';
-  ctx.fillText('R ▶', W - 2, H - 2);
+  ctx.fillText('R', W - 2, H - 2);
   ctx.textAlign = 'start';
-  ctx.fillText('前', cx - 6, 8);
+  ctx.fillText('↑', cx - 4, 7);
 }
 
 // ============================================================
-// Circadian & Sleep Panel
+// Circadian & Sleep
 // ============================================================
 function updateCircadian() {
   const c = state.circadian || {};
@@ -1260,7 +1600,7 @@ function updateCircadian() {
   document.getElementById('spropVal').textContent = (c.sleep_propensity||0).toFixed(2);
 
   const badge = document.getElementById('sleepBadge');
-  if (s.is_rem) { badge.textContent = 'REM 做梦'; badge.style.color = 'var(--rem)'; }
+  if (s.is_rem) { badge.textContent = 'REM'; badge.style.color = 'var(--rem)'; }
   else if (s.is_asleep) { badge.textContent = s.state?.replace('nrem_','N') || 'NREM'; badge.style.color = 'var(--nrem)'; }
   else { badge.textContent = '清醒'; badge.style.color = 'var(--awake)'; }
 
@@ -1275,75 +1615,47 @@ function drawCircadianClock(c, s) {
   const W = info.elem.width, H = info.elem.height;
   ctx.clearRect(0, 0, W, H);
 
-  const cx = W/2, cy = H/2, r = Math.min(W, H)/2 - 6;
+  const cx = W/2, cy = H/2, r = Math.min(W, H)/2 - 5;
 
   // Night/day background
   for (let i = 0; i < 24; i++) {
     const angStart = (i / 24) * Math.PI*2 - Math.PI/2;
     const angEnd = ((i+1) / 24) * Math.PI*2 - Math.PI/2;
     const isNight = i >= 18 || i < 6;
-    ctx.fillStyle = isNight ? 'rgba(30,40,80,0.3)' : 'rgba(80,80,40,0.15)';
+    ctx.fillStyle = isNight ? 'rgba(30, 40, 80, 0.25)' : 'rgba(60, 60, 30, 0.1)';
     ctx.beginPath(); ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, r, angStart, angEnd);
     ctx.closePath(); ctx.fill();
   }
 
-  // Clock ring
-  ctx.strokeStyle = '#30363d';
-  ctx.lineWidth = 1.5;
+  // Ring
+  ctx.strokeStyle = 'rgba(100, 140, 200, 0.2)';
+  ctx.lineWidth = 1;
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
 
-  // Hour ticks
+  // Ticks
   for (let i = 0; i < 24; i++) {
     const ang = (i / 24) * Math.PI*2 - Math.PI/2;
-    const len = i % 6 === 0 ? 5 : 2;
-    ctx.strokeStyle = i % 6 === 0 ? '#8b949e' : '#30363d';
-    ctx.lineWidth = i % 6 === 0 ? 1.5 : 0.5;
+    const len = i % 6 === 0 ? 4 : 1.5;
+    ctx.strokeStyle = i % 6 === 0 ? 'rgba(136,146,168,0.4)' : 'rgba(74,82,104,0.3)';
+    ctx.lineWidth = i % 6 === 0 ? 1 : 0.5;
     ctx.beginPath();
     ctx.moveTo(cx + Math.cos(ang) * (r - len), cy + Math.sin(ang) * (r - len));
     ctx.lineTo(cx + Math.cos(ang) * r, cy + Math.sin(ang) * r);
     ctx.stroke();
   }
 
-  // Circadian phase hand
+  // Phase hand
   const phase = c.phase || 0;
   const handAng = phase - Math.PI/2;
-  ctx.strokeStyle = '#f0883e';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#ff8844';
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(cx, cy);
-  ctx.lineTo(cx + Math.cos(handAng) * r * 0.7, cy + Math.sin(handAng) * r * 0.7);
+  ctx.lineTo(cx + Math.cos(handAng) * r * 0.65, cy + Math.sin(handAng) * r * 0.65);
   ctx.stroke();
-  ctx.fillStyle = '#f0883e';
-  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI*2); ctx.fill();
-
-  // Melatonin arc (outer, right side)
-  const mel = c.melatonin || 0;
-  if (mel > 0.05) {
-    ctx.strokeStyle = `rgba(188,140,255,${0.3 + mel*0.5})`;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r + 5, Math.PI*0.3, Math.PI*0.7);
-    ctx.stroke();
-    // arc length based on melatonin level
-    const arcLen = Math.PI * 0.4 * mel;
-    ctx.strokeStyle = '#bc8cff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r + 5, Math.PI*0.5 - arcLen/2, Math.PI*0.5 + arcLen/2);
-    ctx.stroke();
-  }
-
-  // Cortisol arc (outer, left side)
-  const cor = c.cortisol || 0;
-  if (cor > 0.05) {
-    const arcLen = Math.PI * 0.4 * cor;
-    ctx.strokeStyle = '#f0883e';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r + 5, Math.PI*1.5 - arcLen/2, Math.PI*1.5 + arcLen/2);
-    ctx.stroke();
-  }
+  ctx.fillStyle = '#ff8844';
+  ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI*2); ctx.fill();
 }
 
 function drawSleepDepth(s) {
@@ -1354,49 +1666,40 @@ function drawSleepDepth(s) {
   ctx.clearRect(0, 0, W, H);
 
   if (!s.is_asleep && s.state === 'awake') {
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    ctx.fillRect(0, 0, W, H);
-    const fs = Math.max(9, H/3);
-    ctx.fillStyle = '#484f58';
-    ctx.font = `${fs}px sans-serif`;
+    ctx.fillStyle = 'rgba(0, 230, 118, 0.05)';
+    ctx.beginPath(); ctx.roundRect(1, 1, W-2, H-2, 3); ctx.fill();
+    ctx.fillStyle = '#4a5268';
+    const fs = Math.max(9, H/2.5);
+    ctx.font = `${fs}px "JetBrains Mono", monospace`;
     ctx.textAlign = 'center';
-    ctx.fillText('清醒', W/2, H/2 + 4);
+    ctx.fillText('AWAKE', W/2, H/2 + fs*0.35);
     ctx.textAlign = 'start';
     return;
   }
 
-  // Sleep depth bar
   const stateColors = {
-    'awake':   'rgba(63,185,80,0.3)',
-    'nrem_n1': 'rgba(88,166,255,0.4)',
-    'nrem_n2': 'rgba(88,166,255,0.7)',
-    'nrem_n3': 'rgba(88,166,255,1.0)',
-    'rem':     'rgba(188,140,255,0.8)',
+    'awake':   'rgba(0, 230, 118, 0.2)',
+    'nrem_n1': 'rgba(68, 136, 255, 0.3)',
+    'nrem_n2': 'rgba(68, 136, 255, 0.6)',
+    'nrem_n3': 'rgba(68, 136, 255, 0.9)',
+    'rem':     'rgba(153, 102, 255, 0.7)',
   };
   const depth = s.state || 'awake';
-  ctx.fillStyle = stateColors[depth] || 'rgba(255,255,255,0.2)';
-  ctx.beginPath(); ctx.roundRect(2, 2, W - 4, H - 4, 4); ctx.fill();
+  ctx.fillStyle = stateColors[depth] || 'rgba(255,255,255,0.1)';
+  ctx.beginPath(); ctx.roundRect(2, 2, W - 4, H - 4, 3); ctx.fill();
 
-  // Label
-  const label = depth === 'awake' ? '清醒' :
+  const label = depth === 'awake' ? 'AWAKE' :
     depth === 'rem' ? 'REM' : depth.replace('nrem_', 'N').toUpperCase();
-  const fs = Math.max(9, H/3);
+  const fs = Math.max(9, H/2.5);
   ctx.fillStyle = '#fff';
-  ctx.font = `bold ${fs}px sans-serif`;
+  ctx.font = `bold ${fs}px "JetBrains Mono", monospace`;
   ctx.textAlign = 'center';
-  ctx.fillText(label, W/2, H/2 + 4);
+  ctx.fillText(label, W/2, H/2 + fs*0.35);
   ctx.textAlign = 'start';
-
-  // Progress indicator
-  const cyclePos = state.sleep?.cycle_position || 0;
-  if (cyclePos > 0) {
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.fillRect(W * cyclePos - 1, 0, 2, H);
-  }
 }
 
 // ============================================================
-// Memory & System Panel
+// Memory & System
 // ============================================================
 let sysHistory = { clusters: [], activation: [], F: [] };
 const MAX_SYS_HIST = 100;
@@ -1408,7 +1711,6 @@ function updateMemory() {
   document.getElementById('nSelf').textContent = m.n_self || 0;
   document.getElementById('totalAct').textContent = (m.total_activation||0).toFixed(1);
 
-  // Track history
   sysHistory.clusters.push(m.n_clusters || 0);
   sysHistory.activation.push(m.total_activation || 0);
   sysHistory.F.push(state.F?.total || 0);
@@ -1420,7 +1722,6 @@ function updateMemory() {
 
   drawSystemCanvas();
 
-  // Summary stats
   if (trendVals.length > 0) {
     const vs = trendVals.slice(-50).map(t => t.v);
     const as = trendVals.slice(-50).map(t => t.a);
@@ -1440,40 +1741,73 @@ function drawSystemCanvas() {
   const W = info.elem.width, H = info.elem.height;
   ctx.clearRect(0, 0, W, H);
 
-  // Sparklines
-  const drawSpark = (data, color, yScale, yOff, label) => {
+  const drawSpark = (data, color, yOff, h) => {
     if (data.length < 2) return;
     const step = W / Math.max(data.length - 1, 1);
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     const maxV = Math.max(...data.map(Math.abs), 0.01);
     data.forEach((v, i) => {
       const x = i * step;
-      const y = yOff + (1 - (v / maxV) * yScale) * (H/3 - 4);
+      const y = yOff + (1 - (v / maxV) * 0.8) * h;
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.stroke();
   };
 
-  drawSpark(sysHistory.clusters, '#58a6ff', 0.8, 0, 'clusters');
-  drawSpark(sysHistory.activation, '#3fb950', 0.8, H/3, 'activation');
-  drawSpark(sysHistory.F, '#f0883e', 0.8, H*2/3, 'F');
+  const segH = H / 3;
+  drawSpark(sysHistory.clusters, '#4488ff', 0, segH);
+  drawSpark(sysHistory.activation, '#00e676', segH, segH);
+  drawSpark(sysHistory.F, '#ff8844', segH * 2, segH);
 
-  // Separator lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.strokeStyle = 'rgba(100,140,200,0.08)';
   ctx.lineWidth = 1;
-  [H/3, H*2/3].forEach(y => {
+  [segH, segH * 2].forEach(y => {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   });
 
-  // Labels
-  const fs = Math.max(8, H/12);
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.font = `${fs}px sans-serif`;
-  ctx.fillText('集群', 2, H/3 - 2);
-  ctx.fillText('激活', 2, H*2/3 - 2);
+  const fs = Math.max(7, H/12);
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.font = `${fs}px "JetBrains Mono", monospace`;
+  ctx.fillText('cluster', 2, segH - 2);
+  ctx.fillText('act', 2, segH * 2 - 2);
   ctx.fillText('F', 2, H - 2);
+}
+
+// ============================================================
+// Info Panel
+// ============================================================
+function updateInfoPanel() {
+  const s = state.sleep || {};
+  const a = state.activity || {};
+  const d = state.development || {};
+  const infoText = document.getElementById('infoText');
+  const infoBadge = document.getElementById('infoBadge');
+
+  if (s.is_asleep) {
+    infoText.textContent = 'SLEEP STATE';
+    infoBadge.textContent = '休眠';
+  } else if (a.mode === 'reading') {
+    infoText.textContent = 'READING MODE';
+    infoBadge.textContent = '阅读';
+  } else if (a.mode === 'streaming') {
+    infoText.textContent = 'STREAMING';
+    infoBadge.textContent = '传感器';
+  } else {
+    infoText.textContent = 'AUTONOMOUS LOOP';
+    infoBadge.textContent = '在线';
+  }
+
+  const dev = state.development || {};
+  const stageFactors = {
+    1: 'High plasticity, rapid learning',
+    2: 'Language burst, social imitation',
+    3: 'Abstract reasoning, identity formation',
+    4: 'Stable cognition, full integration',
+  };
+  document.getElementById('infoSub').textContent =
+    `S${dev.stage || 1} · ${stageFactors[dev.stage || 1] || '--'}`;
 }
 
 // ============================================================
@@ -1483,20 +1817,20 @@ function updateActivityStream() {
   const log = state.activity_log || [];
   if (!log.length) {
     document.getElementById('activityStream').innerHTML =
-      '<span style="color:var(--text-muted);font-size:10px">📝 等待活动...</span>';
+      '<span style="color:var(--text-muted);font-size:9px;font-family:var(--font-mono)">▸ awaiting activity...</span>';
     return;
   }
 
   const icons = {
-    'chat': '💬', 'reading': '📖', 'wandering': '💭',
-    'monologue': '🗣', 'sleeping': '😴', 'resting': '😌',
-    'rumination': '🔄', 'streaming': '📡', 'idle': '⏳',
-    'dream': '🌙',
+    'chat': '◆', 'reading': '◇', 'wandering': '○',
+    'monologue': '△', 'sleeping': '◎', 'resting': '▿',
+    'rumination': '◈', 'streaming': '◉', 'idle': '·',
+    'dream': '◈',
   };
 
   let html = '';
   log.slice(-8).reverse().forEach((item, i) => {
-    const icon = icons[item.type] || '•';
+    const icon = icons[item.type] || '·';
     const cls = i < 2 ? 'activity-item recent' : 'activity-item';
     html += `<span class="${cls}"><span class="act-icon">${icon}</span>${item.text || item.type}</span>`;
     html += '<span class="activity-dot"></span>';
@@ -1537,7 +1871,7 @@ async function sendChat() {
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
-  input.placeholder = '发送中...';
+  input.placeholder = '处理中...';
 
   addChatMsg('human', text);
   try {
@@ -1548,18 +1882,18 @@ async function sendChat() {
     });
     const data = await resp.json();
     if (data.response) addChatMsg('agent', data.response);
-    else if (data.error) addChatMsg('agent', '⚠ ' + data.error);
+    else if (data.error) addChatMsg('agent', '[ERR] ' + data.error);
   } catch (e) {
-    addChatMsg('agent', '⚠ 连接错误');
+    addChatMsg('agent', '[ERR] 连接失败');
   }
 }
 
 function addChatMsg(who, text) {
   chatMsgs.push({ who, text });
-  if (chatMsgs.length > 30) chatMsgs = chatMsgs.slice(-30);
+  if (chatMsgs.length > 50) chatMsgs = chatMsgs.slice(-50);
   const div = document.getElementById('chatMessages');
   div.innerHTML = chatMsgs.map(m =>
-    `<div class="chat-msg ${m.who}"><span class="who">${m.who === 'human' ? '🧑 You' : '🤖 Agent'}</span>${m.text}</div>`
+    `<div class="chat-msg ${m.who}"><span class="who">${m.who === 'human' ? 'HUMAN' : 'AGENT'}</span>${m.text}</div>`
   ).join('');
   div.scrollTop = div.scrollHeight;
 }
@@ -1572,7 +1906,7 @@ document.getElementById('chatInput').addEventListener('keydown', (e) => {
 // Reading Controls
 // ============================================================
 async function startReading() {
-  const path = prompt('输入文本文件路径:', '');
+  const path = prompt('Input text file path:', '');
   if (!path) return;
   try {
     const resp = await fetch('/api/reading/start', {
@@ -1582,8 +1916,8 @@ async function startReading() {
     });
     const data = await resp.json();
     if (data.error) alert(data.error);
-    else addChatMsg('agent', '📖 开始阅读: ' + (data.file_name || '') +
-      ' (' + data.total_sentences + ' 句)');
+    else addChatMsg('agent', '[READ] ' + (data.file_name || '') +
+      ' (' + data.total_sentences + ' sentences)');
   } catch (e) {
     alert('Error: ' + e);
   }
@@ -1591,7 +1925,7 @@ async function startReading() {
 
 async function stopReading() {
   await fetch('/api/reading/stop', { method: 'POST' });
-  addChatMsg('agent', '📖 已停止阅读');
+  addChatMsg('agent', '[READ] Stopped');
 }
 
 // ============================================================
@@ -1599,13 +1933,10 @@ async function stopReading() {
 // ============================================================
 function initAll() {
   setupAllCanvases();
-  // Initial draws
   drawVisualPlaceholder();
   drawSilentWaveform();
   drawSilentMelSpectrum();
   drawAzimuth(0, false);
-
-  // Rotate placeholder text
   setInterval(updateChatPlaceholder, 4000);
 }
 

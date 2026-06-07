@@ -1,5 +1,5 @@
 """
-server.py — NotMe v6.4 Web 界面 (Flask REST API + SSE 实时推送)
+server.py — NotMe v6.5 Web 界面 (Flask REST API + SSE 实时推送)
 
 提供:
   - REST API: Agent 状态查询、对话、阅读控制
@@ -81,6 +81,7 @@ def _build_status(agent) -> dict:
         'total_sleep_steps': int(getattr(agent._sleep_state, 'total_sleep_steps', 0)),
         'total_nrem_steps': int(getattr(agent._sleep_state, 'total_nrem_steps', 0)),
         'total_rem_steps': int(getattr(agent._sleep_state, 'total_rem_steps', 0)),
+        'cycle_position': float(getattr(agent._sleep_state, 'cycle_position', 0.0)),
     }
 
     # Memory
@@ -141,6 +142,22 @@ def _build_status(agent) -> dict:
     if hasattr(agent, '_activity_log') and agent._activity_log:
         activity_log = list(agent._activity_log[-10:])
 
+    # Developmental age
+    development = {}
+    if hasattr(agent, 'meta') and agent.meta is not None:
+        dev_factors = agent.meta.get_developmental_factors()
+        development = {
+            'stage': dev_factors.get('stage', 1),
+            'stage_name': dev_factors.get('stage_name', 'infant'),
+            'critical_window': dev_factors.get('critical_window', 1.0),
+            'plasticity': dev_factors.get('plasticity', 1.0),
+            'learn_rate_scale': dev_factors.get('learn_rate_scale', 1.0),
+            'is_infant': dev_factors.get('is_infant', True),
+            'is_child': dev_factors.get('is_child', False),
+            'is_adolescent': dev_factors.get('is_adolescent', False),
+            'is_adult': dev_factors.get('is_adult', False),
+        }
+
     # Session info
     session_info = {}
     if hasattr(agent, 'telemetry') and agent.telemetry is not None:
@@ -158,6 +175,7 @@ def _build_status(agent) -> dict:
         'activity': activity,
         'reader': reader,
         'activity_log': activity_log,
+        'development': development,
         'session': session_info,
         'timestamp': time.time(),
     }
@@ -756,7 +774,7 @@ def _kill_existing_on_port(port: int):
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='NotMe v6.4 Web Interface')
+    parser = argparse.ArgumentParser(description='NotMe v6.5 Web Interface')
     parser.add_argument('--port', type=int, default=8080, help='HTTP port')
     parser.add_argument('--host', default='0.0.0.0', help='Bind address')
     parser.add_argument('--fresh', action='store_true', help='Force fresh agent')
@@ -772,7 +790,7 @@ def main():
     _kill_existing_on_port(args.port)
 
     print("=" * 50)
-    print("  NotMe v6.4 — Web Interface")
+    print("  NotMe v6.5 — Web Interface")
     print("=" * 50)
 
     # Init
@@ -784,7 +802,7 @@ def main():
 
     # Print startup banner (use localhost for 0.0.0.0)
     display_host = 'localhost' if args.host in ('0.0.0.0', '::') else args.host
-    print(f"\n  🔗 打开浏览器访问: http://{display_host}:{args.port}", flush=True)
+    print(f"\n  [Web] Open: http://{display_host}:{args.port}", flush=True)
     print("  Press Ctrl+C to stop\n", flush=True)
 
     # Start sensors AFTER everything else is ready (avoids GIL contention during init)

@@ -482,6 +482,26 @@ class AutonomousLoop:
         self.pause()
         agent = self.agent
 
+        # ---- 睡眠唤醒检查 ----
+        was_asleep = agent.vlpo.is_asleep
+        sleep_state_before = None
+        if was_asleep:
+            sleep_state_before = agent._sleep_state.state if hasattr(agent, '_sleep_state') else 'nrem_n2'
+            # 社会刺激 → 直接唤醒 (人是社会性动物, 有人跟你说话≈紧急唤醒信号)
+            # 模拟: NE 瞬间飙升 → 觉醒中枢激活 → VLPO 被抑制
+            agent.vlpo._is_asleep = False
+            agent.vlpo.vlpo_activation = 0.0
+            agent.vlpo.arousal_center_activity = 0.6
+            agent.vlpo._transition_pending = 0
+            if hasattr(agent, '_sleep_state'):
+                agent._sleep_state.state = 'awake'
+                agent._sleep_state.phase = 'none'
+                agent._sleep_state.vlpo_activation = 0.0
+                agent._sleep_state.rem_on_activity = 0.0
+                agent._sleep_state.rem_off_activity = 0.0
+            # 高唤醒启动 (模拟"被叫醒"的迷蒙状态)
+            agent.body.b[4] = min(0.9, agent.body.b[4] + 0.2)  # 专注度↑
+
         try:
             from environments.text_interface import TextEnvironment
             from cerebrum.limbic_system.amygdala import (
@@ -601,11 +621,19 @@ class AutonomousLoop:
             if hasattr(agent, '_log_activity'):
                 agent._log_activity('chat', f"人类: {human_text[:60]}")
 
+            # 睡眠唤醒通知
+            if was_asleep and response:
+                # 自然语言提示: 被叫醒后可能比较迷糊
+                wake_notice = "[被唤醒] "
+                response = wake_notice + response
+
             return {
                 'response': response,
                 'comprehension': understanding,
                 'valence': agent.valence_history[-1] if agent.valence_history else 0,
                 'arousal': agent.arousal_history[-1] if agent.arousal_history else 0,
+                'was_asleep': was_asleep,
+                'sleep_state_before': sleep_state_before,
             }
 
         finally:

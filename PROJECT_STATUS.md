@@ -1,6 +1,6 @@
 # NotMe 项目状态报告
 
-> **版本**: v6.5 — Web 前端全面优化 + 实时传感器集成 (8面板仪表板 + 摄像头/麦克风实时流)
+> **版本**: v6.5 — Web 前端新未来主义重构 + 无现象学修复 + 发育年龄显示 + 睡眠节奏调整
 > **日期**: 2026-06-07
 > **基于**: v6.4 长期常驻学习 + 自由能原理 + Hebb 可塑性 + 脑网络可视化
 
@@ -28,7 +28,7 @@
 | **v6.2** | **2026-06-07** | **记忆巩固优化 — 突触标签捕获(STC) + CaMKII激活持续性 + PKMζ巩固锁定** |
 | **v6.3** | **2026-06-07** | **睡眠优化与时间维度 — SCN昼夜节律钟 + VLPO触发器开关 + NREM/REM双相睡眠 + α注意门控 + 类淋巴清除** |
 | **v6.4** | **2026-06-07** | **长期常驻学习 完整实现 — 自主时间流 + 通用阅读 + DMN内部生命 + Web仪表板 + 长期遥测** |
-| **v6.5** | **2026-06-07** | **Web 前端全面优化 + 实时传感器集成 — 8面板仪表板 + 脑网络 + 神经化学 + 摄像头/麦克风实时流** |
+| **v6.5** | **2026-06-07** | **前端新未来主义重构 + 无现象学修复 + 睡眠节奏调整 + 发育年龄显示** |
 
 ---
 
@@ -687,104 +687,87 @@ L4 内部生成 — DMN 走神/回忆/内部独白 → 自产感知 → Hebb 学
 
 ---
 
-## v6.5 核心变更 — Web 前端全面优化 + 实时传感器集成
+## v6.5 核心变更 — 前端新未来主义重构 + 无现象学修复 + 睡眠节奏调整
 
-### 设计哲学: 仪表板不只是"看数据"，而是"感受 Agent 的内心"
+### 设计哲学: 赛博生物风格 + 纯粹数学观测
 
-v6.4 的 Web 前端是 MVP 级别的 6 面板原型。v6.5 将仪表板重新设计为**展示 62 模块大脑内部活动的窗口**：
-从情感 2D 空间到脑网络跷跷板，从神经化学仪表到实时摄像头帧，每个面板都对应真实神经底物。
+v6.5 彻底重构 Web 前端，采用**新未来主义 (Neo-Futurism) 赛博生物风格**：
+有机曲线与数字叠加融合，霓虹边框发光效果，暗紫/青绿/蓝三色渐变，扫描线叠加。
+同时修复了严重的**无现象学违规**——emoji 表情映射和情感标签被替换为纯数学表示。
 
-### 前端 — 6→8 面板 + 设计系统重写
+### 前端 — 全新布局: 左侧对话 (35%) + 右侧3×3数据网格 (65%)
 
 ```
-v6.4 (650行)                          v6.5 (重写)
-┌─────────┬─────────┬─────────┐       ┌─────────┬─────────┬─────────┬─────────┐
-│ 🎭 情感 │ 🏃 身体 │ 👁 视觉 │       │ 🎭 情感 │ 🏃 身体 │ 🧠 脑网络│ 💊 神经 │
-├─────────┼─────────┼─────────┤  →    ├─────────┼─────────┼─────────┼─────────┤
-│ 🕐 昼夜 │ 🧠 记忆 │ 🔊 听觉 │       │ 👁 视觉 │ 🔊 听觉 │ 🕐 昼夜 │ 📊 系统 │
-├─────────┴─────────┴─────────┤       ├─────────┴─────────┴─────────┴─────────┤
-│        💬 聊天栏             │       │ 📝 活动流 (走神/独白/阅读/回忆)       │
-└──────────────────────────────┘       ├───────────────────────────────────────┤
-                                       │ 💬 增强聊天栏 + 📖 阅读控制            │
-                                       └───────────────────────────────────────┘
+v6.4 (4×2 grid, 聊天在底部)             v6.5 (聊天左列 + 数据3×3 grid)
+┌─────────┬─────────┬─────────┬─────────┐  ┌──────────────┬─────────┬─────────┬─────────┐
+│ 🎭 情感 │ 🏃 身体 │ 🧠 网络 │ 💊 神经 │  │              │ 自由能 F │ 身体稳态 │ 昼夜节律 │
+├─────────┼─────────┼─────────┼─────────┤  │              ├─────────┼─────────┼─────────┤
+│ 👁 视觉 │ 🔊 听觉 │ 🕐 昼夜 │ 📊 系统 │  │  💬 对话    │ 脑网络   │ 神经化学 │ 记忆系统 │
+├─────────┴─────────┴─────────┴─────────┤  │  35% 全高   ├─────────┼─────────┼─────────┤
+│        💬 聊天 (max-height:70px)       │  │              │ 视觉通道 │ 听觉通道 │ 运行状态 │
+└────────────────────────────────────────┘  └──────────────┴─────────┴─────────┴─────────┘
+         📝 活动流                                    📝 活动流 (迷你)
 ```
 
-| 面板 | v6.4 | v6.5 | 新增功能 |
-|------|------|------|---------|
-| 🎭 情感仪表 | 数字+emoji+折线 | Canvas 2D 核心情感空间 | valence×arousal 50点轨迹 + 四象限标注 (兴奋/焦虑/满足/抑郁) |
-| 🏃 身体稳态 | 简单条形图 | 设定点标记 + 图标 + 偏离变色 | 9维各自设定点竖线, 红=偏高 蓝=偏低 绿=正常 |
-| 🧠 脑网络 | — | **★ 新增** | TPN/DMN/FPN 三柱 + Canvas 跷跷板动画 |
-| 💊 神经化学 | — | **★ 新增** | NE蓝斑核/ACh基底前脑/DA腹侧被盖/RPE预测误差 四路温度计仪表 |
-| 👁 AI看到的画面 | Canvas 128×128 | 圆角裁切 + 发光边框 | 摄像头帧 + V1/V2/V4/IT 通道条 + 无摄像头脉动呼吸动画 |
-| 🔊 AI听到的声音 | 波形+频谱+罗盘 | 波形渐变填充 + 频率刻度 | Mel频谱带Hz标签 + 方位罗盘光晕 + 静默呼吸线 |
-| 🕐 昼夜&睡眠 | 相位点+数值 | Canvas 24h模拟时钟 | 昼/夜区段着色 + 褪黑素/皮质醇外弧 + 睡眠深度条 |
-| 📊 记忆&系统 | 数字统计+F趋势 | sparkline三线图 + 均值 | 集群/激活/F 迷你折线 + 滑动窗口均值±统计 |
-| 📝 活动流 | — | **★ 新增** | 横向滚动时间线, 图标(💭走神/💬独白/📖阅读/😴睡眠) + 文本摘要 |
-| 🔝 Header | 状态灯 | 脉冲动画 + SCN 24h | 清醒脉冲绿/REM呼吸紫 + 模拟时间 + 运行步数 |
+### 关键变更
 
-### 设计系统
+| 变更 | 旧 (v6.4) | 新 (v6.5) | 说明 |
+|------|----------|----------|------|
+| **视觉风格** | 深色基础 | **赛博生物 (Cyber-Bio)** | 半透明面板+霓虹边框发光+扫描线+暗紫/青绿/蓝渐变+JetBrains Mono字体 |
+| **情感仪表** | emoji 表情映射 (`😊😢😐`) + 情感象限标签 (`兴奋/焦虑/满足/抑郁`) | **自由能 F 面板** — F_total + F_body/social/cognitive/accuracy 数值分解 + V/A 纯数学坐标 | ★ 修复无现象学违规 |
+| **对话面板** | 底部栏, max-height:70px | **左侧 35% 全高列** — 可滚动消息历史 (~50条) + 增强输入区 + 阅读控件 | 解决空间太小问题 |
+| **布局** | 4×2 grid | **左侧对话 + 右侧3×3 compact grid** | 10面板 → 9面板+对话 |
+| **发育年龄** | 未显示 | **Header 中显示 Stage 1-4 + 阶段名称 (INFANT/CHILD/ADOLESCENT/ADULT)** | 从 meta.get_developmental_factors() 读取 |
+| **睡眠节奏** | NREM_REM_CYCLE_STEPS=30 (~30s) | **→300 (~5min)** + 所有相关常数 10× 缩放 | 适合演示观察 |
 
-- CSS 变量体系 (`--bg-primary`, `--accent-blue`, `--radius` 等 20+ 变量)
-- 4×2 响应式 Grid → 移动端自适应
-- 面板 hover 微升 + 0.25s 缓动过渡
-- 所有 Canvas 高 DPI 感知 (`devicePixelRatio` 自适应)
-- 状态颜色语义: 清醒=翠绿, NREM=靛蓝, REM=紫罗兰
+### 无现象学违规修复
 
-### 后端 — SSE 数据扩展
+| 位置 | 违规 | 修复 |
+|------|------|------|
+| `web/static/index.html` (旧) | emoji 表情映射 (😊🙂😐😢😭😰😟😲😴) | 删除, 替换为 V+/V− 数学符号 |
+| `web/static/index.html` (旧) | 情感空间标注 "兴奋/焦虑/满足/抑郁" | 替换为 V+/V−/A+/A− 轴标签 |
+| `entry/ui_components.py` | `valence_emoji()` 函数映射效价→emoji | 重命名为 `valence_sign()` → 返回 V+/V−/V~ |
+| `entry/interactive.py` | 显示 emoji 表情 (v_icon/feel) | 替换为 valence_sign() 数学符号 |
 
-`_build_status()` 新增字段:
+### 睡眠节奏调整
 
-| 新增字段 | 数据源 | 前端面板 |
-|---------|--------|---------|
-| `neuro.fpn_act` | `agent.fpn.tpn_activation` | 🧠 脑网络 |
-| `neuro.ach_level` | `agent.vlpo.get_ach_level()` | 💊 神经化学 |
-| `neuro.da_tonic`, `neuro.da_phasic` | `agent._vta_result` | 💊 神经化学 |
-| `neuro.phasic_ne`, `neuro.ne_snr` | `agent._lc_result` | 💊 神经化学 |
-| `sleep.*` (15字段) | `agent._sleep_state` | 🕐 昼夜&睡眠 |
-| `activity_log` | `agent._activity_log` | 📝 活动流 |
-| `session` | `agent.telemetry.get_session_info()` | 📊 系统 |
+所有 VLPO 时间常数 10× 缩放, 完整睡眠周期从 ~30s → ~5min:
 
-### Agent — 活动日志
+| 参数 | 旧值 | 新值 |
+|------|------|------|
+| `NREM_REM_CYCLE_STEPS` | 30 | **300** |
+| `MIN_NREM_DURATION` | 8 | **80** |
+| `MIN_REM_DURATION` | 4 | **40** |
+| `MAX_REM_DURATION` | 12 | **120** |
+| `REM_ON_GROWTH` | 0.08 | **0.008** |
+| `REM_OFF_GROWTH_IN_REM` | 0.12 | **0.012** |
+| `FLIP_FLOP_MIN_STABLE` | 15 | **150** |
 
-- `_activity_log: list[dict]` — 最近20条活动, 格式 `{time, type, text}`
-- `_log_activity(type, text)` — 在 `light_step()` / `interrupt_with_human_input()` / 阅读中自动记录
-- 前端活动流面板实时展示
+### SSE API — 新增字段
 
-### 传感器 — 摄像头 + 麦克风实时采集
+`_build_status()` 新增:
 
-| 特性 | 实现 |
-|------|------|
-| 并行打开 | 摄像头/麦克风在独立线程同时初始化 (时间减半) |
-| 线程安全 | `queue.Queue(maxsize=50)` 替代裸 list, 回调使用 `put_nowait` 防阻塞 |
-| Windows 优化 | `cv2.CAP_DSHOW` 后端 + `CAP_PROP_BUFFERSIZE=1` 最低延迟 |
-| 降级策略 | 缺 opencv / sounddevice → 静默禁用, 前端显示占位图 |
-| 启动 | `--no-sensors` 禁用, 否则自动在 Web 服务器就绪后启动 |
-
-### 运维 — 端口清理 + 信号处理
-
-| 特性 | 实现 |
-|------|------|
-| 端口自动清理 | 启动时 `_kill_existing_on_port()` 检测并 kill 占用目标端口的旧进程 |
-| 多层退出保护 | `atexit` 钩子 + `SIGTERM`/`SIGINT` 信号处理器 |
-| 启动信息 | 绑定 `0.0.0.0` 时显示 `localhost` URL (浏览器可访问) |
+| 字段 | 数据源 | 说明 |
+|------|--------|------|
+| `development` (9字段) | `agent.meta.get_developmental_factors()` | stage, stage_name, plasticity, learn_rate_scale, is_infant/child/adolescent/adult |
+| `sleep.cycle_position` | `agent._sleep_state.cycle_position` | 当前 NREM/REM 周期位置 [0, 1] |
 
 ### 文件变更
 
 | 文件 | 变更 |
 |------|------|
-| `web/static/index.html` | **REWRITTEN** — 650→~900行, 8面板 + 设计系统 + 活动流 + 增强Header/聊天 |
-| `web/server.py` | **UPGRADED** — +传感器采集线程 + SSE数据扩展 + 端口清理 + 信号处理 |
-| `cns/agent.py` | +`_activity_log` + `_log_activity()` |
-| `entry/autonomous.py` | +活动日志记录 (chat/reading) |
-| `tools/sensor_io.py` | +Windows DSHOW后端 + BUFFERSIZE优化 |
-| `PROJECT_STATUS.md` | 更新到 v6.5 |
+| `web/static/index.html` | **REWRITTEN** — 完整重写: 赛博生物CSS + 左对话右3×3布局 + 无现象学修复 + 发育年龄显示 + 新自由能面板 |
+| `web/server.py` | +development 字段 + sleep.cycle_position + v6.4→v6.5 版本号 + emoji 清理 |
+| `brainstem_cerebellum/pons/vlpo.py` | 所有睡眠时间常数 10× 缩放 (30→300 周期步数) |
+| `entry/ui_components.py` | valence_emoji→valence_sign + 年龄 emoji→几何符号 |
+| `entry/interactive.py` | valence_emoji→valence_sign |
+| `PROJECT_STATUS.md` | 更新到 v6.5 新内容 |
 
 ### Web 启动
 
 ```bash
-python web/server.py --port 8080          # 完整模式 (摄像头+麦克风自动启用)
-python web/server.py --port 8080 --no-sensors  # 禁用传感器
-python web/server.py --port 8080 --dev    # Flask开发服务器
+python web/server.py --port 8080          # 完整模式
+python web/server.py --port 8080 --no-auto --no-sensors --dev  # 最小测试模式
 ```
 
 浏览器访问 `http://localhost:8080`

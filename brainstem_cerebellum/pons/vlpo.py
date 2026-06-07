@@ -35,21 +35,21 @@ from cns.data_types import SleepState
 
 # 触发器开关参数
 FLIP_FLOP_HYSTERESIS = 0.20    # 迟滞 — 防止频繁切换 (睡眠需要更强信号)
-FLIP_FLOP_MIN_STABLE = 15      # ★ 最短稳态步数 — 必须连续满足条件才能翻转
+FLIP_FLOP_MIN_STABLE = 150     # ★ 最短稳态步数 (v6.5: 15→150, proportional to cycle scale)
 VLPO_ACTIVATION_RATE = 0.3     # VLPO 激活速度
 AROUSAL_CENTER_DECAY = 0.85    # 觉醒中枢在睡眠中的衰减因子
 
-# NREM/REM 周期参数
-NREM_REM_CYCLE_STEPS = 30      # 一个 NREM→REM 周期 (≈90min 等价)
-MIN_NREM_DURATION = 8          # 最短 NREM 持续步数 (防止过早 REM)
-MIN_REM_DURATION = 4           # 最短 REM 持续步数
-MAX_REM_DURATION = 12          # 最长 REM 持续步数 (REM 不应过长)
+# NREM/REM 周期参数 (v6.5: 30→300, ≈5min realtime per cycle)
+NREM_REM_CYCLE_STEPS = 300     # 一个 NREM→REM 周期 (≈5min 实时)
+MIN_NREM_DURATION = 80         # 最短 NREM 持续步数 (防止过早 REM)
+MIN_REM_DURATION = 40          # 最短 REM 持续步数
+MAX_REM_DURATION = 120         # 最长 REM 持续步数 (REM 不应过长)
 
-# REM 振荡器参数
-REM_ON_GROWTH = 0.08           # REM-on 神经元在 NREM 中的增长速率
+# REM 振荡器参数 (v6.5: proportionally scaled 10×)
+REM_ON_GROWTH = 0.008          # REM-on 神经元在 NREM 中的增长速率
 REM_OFF_DECAY_IN_NREM = 0.95   # REM-off 在 NREM 中的衰减
 REM_ON_DECAY_IN_REM = 0.90     # REM-on 在 REM 中逐渐衰减 (终止REM)
-REM_OFF_GROWTH_IN_REM = 0.12   # REM-off 在 REM 中重新积累
+REM_OFF_GROWTH_IN_REM = 0.012  # REM-off 在 REM 中重新积累
 
 # NE/ACh 调制参数
 NE_SLEEP_LEVEL = 0.05          # NREM 睡眠中 NE 基线
