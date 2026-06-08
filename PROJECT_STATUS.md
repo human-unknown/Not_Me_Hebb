@@ -40,10 +40,12 @@
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ★ 已实现 (含 v6.5 新增) | **67** | 76% |
-| ○ 占位 (接口设计完成, 待实现代码) | 10 | 11% |
-| — 配置/工具/入口 (无类定义但功能完备) | 16 | 18% |
-| **合计** | **93** | **100%** |
+| ★ 已实现 (含 v6.6 新增) | **67** | 68% |
+| ○ 占位 (接口设计完成, 待实现代码) | 10 | 10% |
+| — 配置/工具/入口/基础设施 | 21 | 21% |
+| **合计** | **98** | **100%** |
+
+> v7.0 Phase A: +5 个 `cns/nn/` 基础设施模块 (config/base/bridge/interfaces/__init__)
 
 ### 按脑区
 
@@ -332,7 +334,7 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 
 ---
 
-## 技术参数 (v6.0 当前)
+## 技术参数 (v7.0 当前)
 
 | 参数 | 值 |
 |------|-----|
@@ -340,14 +342,15 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 | 隐状态 H | 16 |
 | 最大簇数 K | 256 (情景) / 1024 (语义) |
 | 行动数 A | 5 (grid) / 3 (dialogue) |
-| Theta 参数 | **56** (v6.3: +circa_tau, circa_light_sensitivity, sleep_pressure_threshold, nrem_duration_ratio, synaptic_downscale_rate, alpha_gating_strength, glymphatic_clear_rate, rem_emotional_processing) |
+| Theta 参数 | **59** (L0:6 + L1:11 + L2:5 + L3:4 + L4:6 + L5:8 + L6:8 + L7:8 + L8:3) |
 | 身体维度 M | 5 (grid) / 9 (text) |
 | 记忆系统 | **6** (情景+语义+程序性+情感+自我+工作记忆) |
 | 独立 ClusterNetwork 实例 | **8** (agent.net, self_model.net, AF.ventral, AF.dorsal, AG.grapheme_to_phoneme, TPJ.speaker_net, TPJ.intent_net, semantic_memory.net) |
-| 模块总数 | **88** |
-| 已实现核心模块 | **62 (70%)** — v6.3: +scn.py +vlpo.py 新增; hippocampus/fpn/LC/agent重大升级 |
+| 模块总数 | **98** (+5 `cns/nn/` Phase A) |
+| 已实现核心模块 | **67 (68%)** |
+| NN 参数 (v7.0) | **10** (device/dtype/training/lr/grad_clip + 4×module_lr + log) |
 | 语料规模 | 0 (纯净模式, 零预训练) |
-| v6.1 新增/修改代码 | ~600 行 (1 new + 2 major upgrades + 5 modified) |
+| 测试通过 | **83/83 (100%)** |
 
 ---
 
@@ -565,14 +568,16 @@ Process S 清除到 < threshold−hysteresis → VLPO 失活 → 觉醒
 ## v7.0 机器学习嵌入 — 下一优先级
 
 ### P0 — 已完成 (v7.0-dev)
-1. ✅ 全面代码审计 — 93 模块全部检查
-2. ✅ 所有测试修复 — 44/44 (100%)
+1. ✅ 全面代码审计 — 93→98 模块全部检查
+2. ✅ 所有测试修复 — 83/83 (100%)
 3. ✅ ML 改造蓝图 — 6阶段路线 (Phase A→F)
 
-### Phase A: 基础架构 (v7.0)
-- ⬜ PyTorch 神经网络支撑层搭建
-- ⬜ NeuralModule 基类 + 模型持久化
-- ⬜ 与现有 Agent.step() 接口兼容
+### Phase A: 基础架构 (v7.0) ✅ 已完成
+- ✅ PyTorch 神经网络支撑层搭建 (`cns/nn/`)
+- ✅ NeuralModule 基类 + config + bridge + interfaces
+- ✅ 模型持久化 (save/load .pt + pickle 双格式)
+- ✅ 与现有 Agent.step() 接口兼容 (无修改)
+- ✅ 39 个单元测试全部通过
 
 ### Phase B: 感知层替换 (v7.1)
 - ⬜ 可训练文本编码器 (替换MiniLM→PCA)
@@ -917,4 +922,4 @@ v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量
 
 ---
 
-*由 v7.0-dev 更新 · v7.0 将引入机器学习 (PyTorch 神经网络) 增强感知/记忆/语言系统，同时保留 FEP + 身体稳态 + 睡眠节律核心框架*
+*由 v7.0-dev Phase A 更新 · 83/83 测试通过 · Phase B (感知层替换) 为下一里程碑*
