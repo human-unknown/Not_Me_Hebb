@@ -351,6 +351,12 @@ class LocusCoeruleus:
             0.95 * self._explore_exploit_ema + 0.05 * explore_bias,
             -1.0, 1.0))
 
+        # v7.5 Phase F: NN explore/exploit parameters
+        nn_temperature = float(np.clip(
+            0.5 + 0.8 * (1.0 - abs(explore_bias)), 0.3, 1.5))
+        nn_dropout = float(np.clip(
+            0.1 + 0.3 * (1.0 - yd_performance), 0.05, 0.5))
+
         # ---- 5. 构建结果 ----
         result = {
             'tonic_ne': ne_result['tonic_ne'],
@@ -365,6 +371,8 @@ class LocusCoeruleus:
             'explore_exploit_ema': self._explore_exploit_ema,
             'is_exploring': explore_bias < -0.3,
             'is_exploiting': explore_bias > 0.3,
+            'nn_temperature': nn_temperature,   # v7.5: NN generator temperature
+            'nn_dropout': nn_dropout,           # v7.5: NN comprehender dropout
         }
 
         if sensory is not None:

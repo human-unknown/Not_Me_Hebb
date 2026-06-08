@@ -296,6 +296,29 @@ class Agent:
         self.telemetry = None                         # Telemetry (Phase 4 填充)
         self.reader = None                            # Reader (Phase 4 填充)
 
+        # v7.5 Phase F: NN bridge (optional — created via enable_nn())
+        self.nn_bridge = None
+        self._nn_config = None
+
+    def enable_nn(self, config=None):
+        """Enable neural network integration (v7.5 Phase F).
+
+        Creates NNBridge which lazily initializes all NN modules
+        (text/visual/audio encoders, generator, comprehender, etc.)
+        and wires them into the Agent's lifecycle hooks.
+
+        Args:
+            config: NNConfig (None = default with nn_enabled=True)
+        """
+        from cns.nn.config import NNConfig
+        from cns.nn.integrator import NNBridge
+        if config is None:
+            config = NNConfig(nn_enabled=True)
+        else:
+            config.nn_enabled = True
+        self._nn_config = config
+        self.nn_bridge = NNBridge(config, agent=self)
+
     def step(self, sensory: np.ndarray, step_count: int,
              my_pos: np.ndarray = None,
              social_ctx = None) -> Action:
@@ -667,6 +690,16 @@ class Agent:
                 # VTA RPE → 海马学习率调制
                 self.net.learn_rate_modifier = vta_result['learn_rate_multiplier']
                 self._vta_result = vta_result
+
+                # v7.5 Phase F: VTA → NN learning rate modulation
+                if self.nn_bridge is not None and self.nn_bridge.is_enabled:
+                    try:
+                        nn_lr_mult = self.nn_bridge.get_nn_lr_modulation(
+                            rpe=vta_result['rpe'],
+                            da=vta_result['total_da'])
+                        self.nn_bridge._current_lr_mult = nn_lr_mult
+                    except Exception:
+                        _debug_trace("NN VTA modulation")
             except Exception:
                 _debug_trace("VTA")
                 self.net.learn_rate_modifier = 1.0
@@ -701,6 +734,18 @@ class Agent:
                     self.nociception_hierarchy.rvm._norepinephrine_tone = float(
                         lc_result['tonic_ne'])
                 self._lc_result = lc_result
+
+                # v7.5 Phase F: LC → NN explore/exploit (temperature, dropout)
+                if self.nn_bridge is not None and self.nn_bridge.is_enabled:
+                    try:
+                        self.nn_bridge.get_nn_explore_params(
+                            tonic_ne=lc_result['tonic_ne'],
+                            total_ne=lc_result['total_ne'],
+                            exploration_bias=lc_result['exploration_bias'],
+                        )
+                    except Exception:
+                        _debug_trace("NN LC modulation")
+
             except Exception:
                 _debug_trace("LC")
                 self._lc_result = {'tonic_ne': 0.2, 'phasic_ne': 0.0,
@@ -727,6 +772,13 @@ class Agent:
                     'plasticity_factor': 1.0, 'ltp_bias': 1.0,
                     'developmental_factor': 1.0,
                 }
+
+        # ---- v7.5 Phase F: NN sensory enhancement (before L0 learn) ----
+        if self.nn_bridge is not None and self.nn_bridge.is_enabled:
+            try:
+                sensory = self.nn_bridge.enhance_sensory(sensory)
+            except Exception:
+                _debug_trace("NN enhance_sensory")
 
         # ---- L0: 学习感知 + 周期性睡眠 ----
         self.net.learn(sensory)
@@ -793,6 +845,23 @@ class Agent:
                                    key=lambda c: c.activation, reverse=True)
                 if len(sorted_sc) > max_self:
                     self.self_model.net.clusters = sorted_sc[:max_self]
+
+            # v7.5 Phase F: NN sleep consolidation (NREM → gradient update)
+            if self.nn_bridge is not None and self.nn_bridge.is_enabled:
+                try:
+                    self.nn_bridge.sleep_nrem_consolidation()
+                except Exception:
+                    _debug_trace("NN sleep nrem")
+
+        elif (self.vlpo.is_asleep and
+              self._sleep_state.state == 'rem' and
+              self._sleep_state.time_in_state == 1):
+            # REM entry → NN emotional decay
+            if self.nn_bridge is not None and self.nn_bridge.is_enabled:
+                try:
+                    self.nn_bridge.sleep_rem_consolidation()
+                except Exception:
+                    _debug_trace("NN sleep rem")
         else:
             self.consolidation_counter += 1
 
@@ -824,6 +893,18 @@ class Agent:
         self.valence_history.append(F.valence)
         self.arousal_history.append(F.arousal)
         self.attention_history.append(F.attention_precision)
+
+        # ---- v7.5 Phase F: record metrics to ExperienceTracker ----
+        if self.nn_bridge is not None and self.nn_bridge.is_enabled:
+            try:
+                self.nn_bridge.record_step(
+                    F_total=F.total, F_body=F.body, F_social=F.social,
+                    F_cognitive=F.cognitive, F_accuracy=F.accuracy,
+                    valence=F.valence, arousal=F.arousal,
+                    step_count=step_count,
+                )
+            except Exception:
+                _debug_trace("NN record_step")
 
         # ---- v6.1: PNN 消化 (高唤醒+高新颖性 → MMP-9 降解 PNN) ----
         novelty_now = float(np.tanh(

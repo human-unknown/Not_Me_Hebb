@@ -1,5 +1,64 @@
 # NotMe Changelog
 
+## v7.5-dev (2026-06) — Phase F: 整合与打磨 (NN ↔ Agent 全系统集成)
+
+### Phase F: 整合与打磨 (2026-06-08)
+- 新增 `cns/nn/integrator.py` — NNBridge
+  - Agent ↔ NN 模块单一集成点: Agent 通过 5 个钩子调用委托 NN 关注
+  - 懒初始化: NN 模块仅在首次使用时创建 (快速启动)
+  - `enhance_sensory(s)` — 可选的 NN 编码器增强感知 (混合比从 0.1 开始增长)
+  - `record_step(F, valence, ...)` — 每步记录指标到 ExperienceTracker
+  - `record_dialogue(user, resp)` — 对话轮次追踪 (词汇 + 个性化)
+  - `get_nn_lr_modulation(rpe, da)` — VTA RPE → NN 学习率调制 (阻尼 0.7×)
+  - `get_nn_explore_params(tonic_ne, ...)` — LC NE → temperature/dropout 调制
+  - `sleep_nrem_consolidation()` — NREM 深睡 → NN 梯度更新 (Hebb 集群回放)
+  - `sleep_rem_consolidation()` — REM → 生成器情感偏置衰减 (情感去毒)
+  - `save_checkpoint(dir)` / `load_checkpoint(dir)` — 统一 checkpoint
+  - `get_status()` / `get_training_summary()` — Web UI 数据
+  - 零崩溃保证: 所有 NN 操作包裹在 try/except 中
+- 更新 `cns/agent.py` — +NNBridge 集成
+  - `Agent.__init__`: +`nn_bridge=None` + `_nn_config=None` (默认禁用, 零开销)
+  - `Agent.enable_nn(config)`: 创建 NNBridge 并开启集成
+  - `Agent.step()`: 5 个钩子调用 (感官增强 → 指标记录 → VTA 调制 → LC 调制 → 睡眠巩固)
+  - 睡眠整合: NREM N3 → NN 梯度更新, REM → 情感衰减
+  - 所有钩子失败静默 — NN 故障永不崩溃 Agent
+- 更新 `brainstem_cerebellum/midbrain/vta.py` — +`nn_lr_multiplier`
+  - VTA.process() 返回新增 `nn_lr_multiplier` 键 (Hebb LR 的阻尼 0.7× 版本)
+  - 范围 [0.2, 2.0] — 比 Hebb 保守, 防止灾难性遗忘
+- 更新 `brainstem_cerebellum/pons/locus_coeruleus.py` — +`nn_temperature` + `nn_dropout`
+  - LC.process() 返回新增 `nn_temperature` [0.3, 1.5] 和 `nn_dropout` [0.05, 0.5]
+  - 探索模式 → 高温 (多样生成), 利用模式 → 低温 (确定生成)
+  - 低 Yerkes-Dodson → 高 dropout (不确定性)
+- 更新 `cns/nn/trainer.py` — +`get_training_history()`
+  - 返回 Web UI 的逐模块损失历史 (用于前端 sparkline 图表)
+- 更新 `cns/nn/config.py` — +2 集成标志
+  - `nn_enabled: bool = False` — NN 集成主开关
+  - `nn_sensory_enhance: bool = False` — NN 编码器增强感官 (昂贵)
+- 更新 `cns/persistence.py` — NN 持久化集成
+  - `save_agent()` 自动保存 NN 模块 (pickle + .pt 双格式)
+  - `restore_agent()` 自动加载 NN checkpoint
+  - `save_nn_modules()` / `load_nn_modules()` 委托给 NNBridge
+- 更新 `web/server.py` — +NN 状态
+  - `_build_status()` 新增 `nn` 字段 (NNBridge 状态 + 训练摘要)
+  - SSE 实时推送包含 NN 训练数据 (每 500ms)
+- 更新 `web/static/index.html` — +NN 训练面板
+  - 运行状态面板新增 "◈ NN 训练 ◈" 迷你面板
+  - `updateNNPanel()` 函数渲染融合比/LR/温度/模块数
+  - 版本号 v6.5 → v7.5
+- 更新 `cns/nn/__init__.py` — +NNBridge 导出, v7.4 → v7.5
+- 新增 43 个集成测试 (`tests/test_nn_integration.py`)
+  - TestNNBridge: 12 (init/ensure/感官增强/指标/VTA调制/LC调制/状态)
+  - TestVTANNModulation: 3 (nn_lr_multiplier/范围/正RPE)
+  - TestLCNNModulation: 3 (nn_temperature/nn_dropout/范围)
+  - TestAgentIntegration: 8 (默认禁用/enable_nn/步进无崩溃/指标/VTA接线/LC接线/桥接)
+  - TestWebIntegration: 5 (NN状态/训练历史/摘要/键/禁用状态)
+  - TestEmotionalConsistency: 5 (valence范围/arousal范围/F有限/Hebb集群/动作有效)
+  - TestSleepNNIntegration: 3 (NREM不崩溃/REM不崩溃/无agent)
+  - TestPersistenceIntegration: 3 (保存创建目录/加载无崩溃/往返)
+  - TestConfigIntegration: 2 (nn_enabled标志/自定义配置)
+- 保持 FEP / 身体稳态 / Hebb 模块 / D=516 布局 零修改
+- 保持双系统架构 — Hebb 情景记忆 + NN 语义学习 互补共存
+
 ## v7.4-dev (2026-06) — Phase E: 训练与体验闭环 (训练编排器 + 可观察指标)
 
 ### Phase E: 训练与体验闭环 (2026-06-08)

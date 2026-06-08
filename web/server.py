@@ -182,6 +182,15 @@ def _build_status(agent) -> dict:
     if hasattr(agent, '_last_monologue') and agent._last_monologue:
         last_monologue = agent._last_monologue
 
+    # v7.5 Phase F: NN training status
+    nn_status = {}
+    if agent.nn_bridge is not None and agent.nn_bridge.is_enabled:
+        try:
+            nn_status = agent.nn_bridge.get_status()
+            nn_status['training'] = agent.nn_bridge.get_training_summary()
+        except Exception:
+            nn_status = {'enabled': True, 'error': 'status_fetch_failed'}
+
     return {
         'valence': float(v),
         'arousal': float(a),
@@ -191,6 +200,7 @@ def _build_status(agent) -> dict:
         'memory': memory,
         'neuro': neuro,
         'F': F,
+        'nn': nn_status,  # v7.5: NN bridge status
         'activity': activity,
         'reader': reader,
         'activity_log': activity_log,

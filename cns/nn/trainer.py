@@ -520,6 +520,35 @@ class Trainer:
         """Check if a module is registered."""
         return module_name in self._modules
 
+    def get_training_history(self) -> Dict[str, Any]:
+        """Return training history for Web UI (v7.5 Phase F).
+
+        Returns per-module loss history and summary suitable for
+        frontend sparkline charts and status panels.
+
+        Returns:
+            {module_name: {
+                'latest_loss': float,
+                'best_loss': float,
+                'total_epochs': int,
+                'total_steps': int,
+                'loss_history': [float, ...] (last 100),
+            }}
+        """
+        result = {}
+        for name, records in self.history.items():
+            if not records:
+                continue
+            losses = [r.get('loss', 0.0) for r in records if 'loss' in r]
+            result[name] = {
+                'latest_loss': losses[-1] if losses else 0.0,
+                'best_loss': min(losses) if losses else 0.0,
+                'total_epochs': len(records),
+                'total_steps': sum(r.get('batches', 0) for r in records),
+                'loss_history': losses[-100:],
+            }
+        return result
+
     # ================================================================
     # Internal Helpers
     # ================================================================

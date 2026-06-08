@@ -331,6 +331,9 @@ class VTA:
             self._da_history = self._da_history[-100:]
             self._lr_mult_history = self._lr_mult_history[-100:]
 
+        # v7.5 Phase F: NN learning rate multiplier (damped vs Hebb)
+        nn_lr_mult = float(np.clip(lr_mult * 0.7, 0.2, 2.0))
+
         return {
             'rpe': rpe,
             'predicted_reward': predicted,
@@ -338,6 +341,7 @@ class VTA:
             'phasic_da': da_result['phasic_da'],
             'total_da': da_result['total_da'],
             'learn_rate_multiplier': lr_mult,
+            'nn_lr_multiplier': nn_lr_mult,  # v7.5: NN-specific LR modulation
             'motivation': self._motivation_ema,
             'is_rewarding': rpe > 0.2,
             'is_punishing': rpe < -0.2,

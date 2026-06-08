@@ -509,6 +509,17 @@ def save_agent(agent, path: str = None, name: str = None,
             '_habit_ema': float(st._habit_ema),
         }
 
+    # ---- v7.5 Phase F: save NN modules alongside pickle ----
+    nn_saved = False
+    if agent.nn_bridge is not None and agent.nn_bridge.is_enabled:
+        try:
+            nn_dir = os.path.join(os.path.dirname(path), "nn")
+            agent.nn_bridge.save_checkpoint(nn_dir)
+            nn_saved = True
+        except Exception:
+            pass  # NN save failure is non-fatal
+    data['nn_saved'] = nn_saved
+
     # ---- 写入磁盘 ----
     with open(path, 'wb') as f:
         pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
@@ -811,6 +822,18 @@ def restore_agent(agent, data: dict, verbose: bool = True):
         agent.dialogue_since_consolidation = data['consolidation'].get(
             'dialogue_since', 0)
 
+    # ---- v7.5 Phase F: restore NN modules if saved ----
+    if data.get('nn_saved') and agent.nn_bridge is not None:
+        try:
+            nn_dir = data.get('nn_dir', '.notme/sessions/nn')
+            if os.path.exists(nn_dir):
+                agent.nn_bridge.load_checkpoint(nn_dir)
+                if verbose:
+                    print(f"  NN: bridge restored from {nn_dir}")
+        except Exception:
+            if verbose:
+                print(f"  NN: restore skipped (no checkpoint found)")
+
     # Total steps/turns from meta
     total_steps = data.get('total_steps', 0)
     total_turns = data.get('total_turns', 0)
@@ -850,13 +873,13 @@ def auto_save(agent, n_turns: int, n_sessions: int = 1,
 # ================================================================
 
 def save_nn_modules(agent, path: Optional[str] = None) -> str:
-    """保存所有 NeuralModule 的权重到 .pt 文件.
+    """保存所有 NeuralModule 的权重到 .pt 文件 (v7.5: via NNBridge).
 
     与 save_agent() 的 pickle 方案并行 — pickle 存 Hebb 状态,
     .pt 存神经网络权重. 两者独立, 不互相依赖.
 
     Args:
-        agent: Agent 实例 (需有 agent.nn_modules dict)
+        agent: Agent 实例 (需有 agent.nn_bridge)
         path: 保存目录路径 (None = .notme/models/)
 
     Returns:
@@ -866,32 +889,27 @@ def save_nn_modules(agent, path: Optional[str] = None) -> str:
     nn_dir = path or '.notme/models'
     _os.makedirs(nn_dir, exist_ok=True)
 
-    saved = []
-    for name, module in getattr(agent, 'nn_modules', {}).items():
-        if hasattr(module, 'save'):
-            filepath = _os.path.join(nn_dir, f'{name}.pt')
-            module.save(filepath)
-            saved.append(filepath)
-
-    # 同时保存一个统一的 checkpoint 索引
-    if saved:
-        import json as _json
-        index_path = _os.path.join(nn_dir, '_checkpoint_index.json')
-        with open(index_path, 'w', encoding='utf-8') as f:
-            _json.dump({
-                'version': '7.0',
-                'modules': saved,
-            }, f, indent=2)
+    # v7.5: delegate to NNBridge for full checkpoint
+    if hasattr(agent, 'nn_bridge') and agent.nn_bridge is not None:
+        agent.nn_bridge.save_checkpoint(nn_dir)
+    else:
+        # Fallback: save individual modules if nn_modules exists (legacy)
+        saved = []
+        for name, module in getattr(agent, 'nn_modules', {}).items():
+            if hasattr(module, 'save'):
+                filepath = _os.path.join(nn_dir, f'{name}.pt')
+                module.save(filepath)
+                saved.append(filepath)
 
     return nn_dir
 
 
 def load_nn_modules(agent, path: Optional[str] = None,
                     verbose: bool = False) -> int:
-    """加载所有 NeuralModule 的权重.
+    """加载所有 NeuralModule 的权重 (v7.5: via NNBridge).
 
     Args:
-        agent: Agent 实例 (需有 agent.nn_modules dict)
+        agent: Agent 实例 (需有 agent.nn_bridge)
         path: 加载目录路径 (None = .notme/models/)
         verbose: 是否打印加载信息
 
@@ -901,6 +919,12 @@ def load_nn_modules(agent, path: Optional[str] = None,
     import os as _os
     nn_dir = path or '.notme/models'
 
+    # v7.5: delegate to NNBridge
+    if hasattr(agent, 'nn_bridge') and agent.nn_bridge is not None:
+        ok = agent.nn_bridge.load_checkpoint(nn_dir)
+        return 1 if ok else 0
+
+    # Fallback: load individual modules (legacy)
     loaded = 0
     for name, module in getattr(agent, 'nn_modules', {}).items():
         if hasattr(module, 'load'):

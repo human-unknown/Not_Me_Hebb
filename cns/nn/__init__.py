@@ -1,5 +1,5 @@
 """
-cns.nn — 神经网络支撑层 (v7.4 Phase E)
+cns.nn — 神经网络支撑层 (v7.5 Phase F)
 
 提供 PyTorch 基础设施，使感知层、记忆层和语言层可以运行神经网络。
 
@@ -55,6 +55,9 @@ from cns.nn.angular_gyrus_nn import NeuralAngularGyrus
 from cns.nn.trainer import Trainer
 from cns.nn.metrics import ExperienceTracker, TrainingMetrics
 
+# Phase F: integration layer
+from cns.nn.integrator import NNBridge
+
 __all__ = [
     # Config
     "NNConfig",
@@ -88,4 +91,6 @@ __all__ = [
     "Trainer",
     "ExperienceTracker",
     "TrainingMetrics",
+    # Phase F: integration layer
+    "NNBridge",
 ]

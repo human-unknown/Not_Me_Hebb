@@ -46,6 +46,10 @@ class NNConfig:
     lr_scheduler: str = "none"          # "none", "cosine", "step"
     checkpoint_interval: int = 5        # save checkpoint every N epochs (0 = only final)
 
+    # Phase F: integration flags
+    nn_enabled: bool = False             # master switch for NN integration
+    nn_sensory_enhance: bool = False     # use NN encoders to enhance sensory (expensive)
+
     def effective_lr(self, module_lr: Optional[float] = None) -> float:
         """返回模块的有效学习率, 模块级 > 全局."""
         return module_lr if module_lr is not None else self.learning_rate

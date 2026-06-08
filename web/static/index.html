@@ -887,9 +887,14 @@ body::after {
           自主循环运行中
         </div>
         <div style="font-family:var(--font-mono);font-size:8px;color:var(--text-muted);text-align:center" id="infoSub">
-          NotMe v6.5 — Neo-Futurist
+          NotMe v7.5 — Phase F
         </div>
-      </div>
+        <!-- v7.5: NN training status mini-panel -->
+        <div id="nnTrainingPanel" style="display:none;width:100%;margin-top:4px;padding-top:4px;border-top:1px solid rgba(60,80,160,0.2);">
+          <div style="font-size:9px;color:var(--accent-cyan);text-align:center;margin-bottom:3px;">◈ NN 训练 ◈</div>
+          <div id="nnTrainingContent" style="font-family:var(--font-mono);font-size:8px;color:var(--text-secondary);text-align:center;"></div>
+        </div>
+</div>
     </div>
 
   </div>
@@ -1016,6 +1021,7 @@ function updateAll() {
   updateReading();
   updateChatPlaceholder();
   updateInfoPanel();
+  updateNNPanel();   // v7.5 Phase F
 }
 
 // ============================================================
@@ -1839,6 +1845,33 @@ function updateInfoPanel() {
   };
   document.getElementById('infoSub').textContent =
     `S${dev.stage || 1} · ${stageFactors[dev.stage || 1] || '--'}`;
+}
+
+// v7.5 Phase F: NN training status mini-panel
+function updateNNPanel() {
+  const nn = state.nn || {};
+  const panel = document.getElementById('nnTrainingPanel');
+  const content = document.getElementById('nnTrainingContent');
+  if (!panel || !content) return;
+
+  if (nn.enabled) {
+    panel.style.display = 'block';
+    let parts = [];
+    if (nn.blend_ratio !== undefined) {
+      parts.push('blend: ' + (nn.blend_ratio * 100).toFixed(0) + '%');
+    }
+    parts.push('lr: ' + (nn.current_lr_mult || 1.0).toFixed(2) + 'x');
+    parts.push('T: ' + (nn.current_temperature || 0.8).toFixed(2));
+    if (nn.tracker) {
+      parts.push('recs: ' + (nn.tracker.n_records || 0));
+    }
+    if (nn.modules) {
+      parts.push('mods: ' + nn.modules.length);
+    }
+    content.textContent = parts.join(' | ');
+  } else {
+    panel.style.display = 'none';
+  }
 }
 
 // ============================================================
