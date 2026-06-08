@@ -47,3 +47,25 @@ images/
 
 # Claude Code plugin (superpowers)
 .claude/superpowers/
+
+# Secrets
+.env
+*.pem
+*.key
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Pyenv
+.python-version
+
+# Pytest
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+
+# VS Code workspace
+*.code-workspace

@@ -67,16 +67,6 @@ F_accuracy:  集群预测精度 → 驱动感知与记忆
 - 一切从数学公式和机制中自然生长
 - Valence/Arousal 是 F_body 的数学函数，不是手工规则
 
-### 5. 无 LLM (No Large Language Models)
-
-**不依赖任何大语言模型。**
-
-- 语言能力来自 Hebb 网络对语料的统计学习
-- 整句检索 + Hebb 词序链逐词生成
-- 嵌入使用轻量级 sentence-transformer (all-MiniLM-L6-v2)，仅用于语义编码，不参与认知加工
-- 说话 = 从集群记忆中检索与当前信念状态最相似的听过的话，或用词序 Hebb 链"用自己的话说"
-- 认知核心（L0-L3）完全不依赖 transformer
-
 ---
 
 ## 项目结构

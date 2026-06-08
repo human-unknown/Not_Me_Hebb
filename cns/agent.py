@@ -17,6 +17,8 @@ v5.6 语言全管线 (comprehend → speak):
   PhonologicalLoop(self-hearing) → self-monitoring
 """
 
+import os
+import traceback
 import numpy as np
 from cns.data_types import Theta, Action, FreeEnergy, AgentBelief, BodyVector
 from cerebrum.limbic_system.hippocampus import (
@@ -89,6 +91,18 @@ def _estimate_azimuth_from_stereo(left_spectrum, right_spectrum) -> float:
     ild_ratio = (right_energy - left_energy) / total  # [-1, +1]
     azimuth = float(np.degrees(np.arcsin(np.clip(ild_ratio, -1.0, 1.0))))
     return azimuth
+
+
+def _debug_trace(msg: str = ""):
+    """v6.6: 调试用 — 受控环境打印异常栈.
+
+    仅在 NOTME_DEBUG 环境变量设置时输出，避免生产环境噪音。
+    """
+    if os.environ.get('NOTME_DEBUG'):
+        if msg:
+            import sys as _sys
+            print(f"[NOTME_DEBUG] {msg}", file=_sys.stderr)
+        traceback.print_exc()
 
 
 class Agent:
@@ -349,6 +363,10 @@ class Agent:
             self._asleep_steps = 0
             self._wake_steps += 1
 
+        # v6.6: 同步 meta.step_count — 持久化用
+        if hasattr(self, 'meta') and self.meta is not None:
+            self.meta.step_count = max(self.meta.step_count, step_count)
+
         # ---- v5.1 Phase 0: 视觉层级处理 (全管线前馈+反馈+PE+绑定) ----
         from cns.data_types import (M_V1_START, BINDING_END, D_VISUAL_V5)
         VIS_START, VIS_END = M_V1_START, BINDING_END  # s[64:372]
@@ -394,10 +412,16 @@ class Agent:
                         # 用 Hebb 网络跨模态补全: text → vision
                         # 简单实现: text_vec → 网络检索 → 最佳匹配质心的视觉段
                         vis_proxy = np.zeros(D_VISUAL_V5, dtype=np.float32)
+                        vis_reason = 'empty_network'
                         if self.net.n_clusters > 0:
                             c = self.net.recall(text_vec[:48])
                             if c is not None:
                                 vis_proxy = c.centroid[VIS_START:VIS_END].copy()
+                                vis_reason = (
+                                    'ok' if np.any(np.abs(vis_proxy) > 0.01)
+                                    else 'no_visual_in_cluster')
+                            else:
+                                vis_reason = 'recall_none'
                         # 即使质心全零也没关系 — 至少结果已填充
                         sensory[VIS_START:VIS_END] = vis_proxy
                         self._current_visual_result = {
@@ -408,6 +432,7 @@ class Agent:
                                 'V4_mean_norm': float(np.mean(np.abs(vis_proxy[128:192]))),
                                 'IT_mean_norm': float(np.mean(np.abs(vis_proxy[240:]))),
                                 'mode': 'semantic_proxy',
+                                'reason': vis_reason,
                             },
                         }
                     else:
@@ -420,6 +445,7 @@ class Agent:
                             },
                         }
             except Exception:
+                _debug_trace("visual_hierarchy")
                 self._current_visual_result = {
                     'F_accuracy': 0.0, 'PE_total': 0.0,
                     'diagnostics': {
@@ -482,6 +508,7 @@ class Agent:
                 sensory[AUD_START:AUD_END] = aud_result['sensory'][:AUD_END-AUD_START]
                 self._current_auditory_result = aud_result
             except Exception:
+                _debug_trace("auditory_hierarchy")
                 self._current_auditory_result = {
                     'F_accuracy': 0.0, 'PE_total': 0.0,
                     'diagnostics': {
@@ -572,6 +599,7 @@ class Agent:
                             self.body.b[8] - 0.001 * pain_result['descending_signal'])
 
             except Exception:
+                _debug_trace("nociception_hierarchy")
                 self._current_pain_result = {
                     'F_accuracy': 0.0, 'PE_total': 0.0,
                     'pain_intensity': 0.0, 'diagnostics': {
@@ -603,6 +631,7 @@ class Agent:
                         self.body.b[1] + 0.001 * abs(hypo_result['autonomic_balance']))
                 self._hypo_result = hypo_result
             except Exception:
+                _debug_trace("hypothalamus")
                 self._hypo_result = {'total_drive': 0.0, 'hpa_activation': 0.0,
                                     'autonomic_balance': 0.0, 'regulatory_urgency': 0.0}
 
@@ -639,6 +668,7 @@ class Agent:
                 self.net.learn_rate_modifier = vta_result['learn_rate_multiplier']
                 self._vta_result = vta_result
             except Exception:
+                _debug_trace("VTA")
                 self.net.learn_rate_modifier = 1.0
                 self._vta_result = {'rpe': 0.0, 'learn_rate_multiplier': 1.0,
                                    'total_da': 0.3, 'motivation': 0.5}
@@ -672,6 +702,7 @@ class Agent:
                         lc_result['tonic_ne'])
                 self._lc_result = lc_result
             except Exception:
+                _debug_trace("LC")
                 self._lc_result = {'tonic_ne': 0.2, 'phasic_ne': 0.0,
                                   'total_ne': 0.2, 'snr_gain': 1.0,
                                   'yd_performance': 0.5, 'exploration_bias': 0.0}
@@ -801,6 +832,7 @@ class Agent:
             try:
                 self.net.digest_pnn(F.arousal, novelty_now)
             except Exception:
+                _debug_trace("digest_pnn")
                 pass
 
         # ---- v6.2: 突触标签捕获 (STC 假说) ----
@@ -811,6 +843,7 @@ class Agent:
         try:
             self.net.capture_tags(arousal=F.arousal, F_body_delta=F_body_delta)
         except Exception:
+            _debug_trace("capture_tags")
             pass
 
         # ---- 社会信念更新 (M3) ----
@@ -1795,6 +1828,10 @@ class Agent:
             self._asleep_steps = 0
             self._wake_steps += 1
 
+        # v6.6: 同步 meta.step_count — 持久化用
+        if hasattr(self, 'meta') and self.meta is not None:
+            self.meta.step_count = max(self.meta.step_count, step_count)
+
         # ---- Phase 0 (简化): 视觉/听觉语义代理 ----
         # 视觉语义代理 (已有模式C — 从 text 段检索 Hebb 质心)
         if hasattr(self, 'visual_hierarchy') and hasattr(self, 'fpn'):
@@ -1818,9 +1855,8 @@ class Agent:
                         },
                     }
             except Exception:
+                _debug_trace("light_step visual proxy")
                 pass
-
-        # 听觉语义代理
         if hasattr(self, 'auditory_hierarchy'):
             try:
                 text_vec = sensory[0:64].copy()

@@ -74,15 +74,27 @@ def render_header(agent, meta: dict = None, broca=None, age: int = 0) -> Panel:
     age_names = {0: '·', 1: '∘', 2: '◎', 3: '●'}
     age_emoji = age_names.get(age, '🧠')
 
+    # v6.6: Step count + SCN time
+    step_count = agent.meta.step_count
+    scn_hour = 0.0
+    if hasattr(agent, 'scn') and agent.scn is not None:
+        try:
+            scn_hour = agent.scn.get_hour()
+        except Exception:
+            pass
+    scn_icon = '🌙' if (scn_hour < 6 or scn_hour >= 22) else (
+        '🌅' if scn_hour < 9 else ('☀' if scn_hour < 18 else '🌆'))
+
     parts = [
-        f"[bold cyan]NotMe v5.7[/bold cyan]",
+        f"[bold cyan]NotMe v6.6[/bold cyan]",
         f"Age:{age}{age_emoji}",
-        f"Session #{n_sessions}",
-        f"{n_turns} turns",
+        f"Step:{step_count}",
+        f"SCN {scn_hour:.0f}h{scn_icon}",
+        f"#{n_sessions}/{n_turns}turns",
         f"F={F:.2f}",
         f"V={fmt_val(v)} {valence_sign(v)}",
         f"A={a:.2f}",
-        f"Mem: {n_clusters} clusters",
+        f"Mem:{n_clusters}",
     ]
     # v5.7: 显示 trigram 网络在线生长状态
     if broca is not None:
@@ -181,10 +193,23 @@ def render_perception_panel(agent) -> Panel:
         v4_norm = diag.get('V4_mean_norm', 0)
         it_norm = diag.get('IT_mean_norm', 0)
         mode = diag.get('mode', 'real')
+        vis_reason = diag.get('reason', '')
         mode_tag = {'real': '', 'crossmodal_fill': '[dim](cross)[/dim]',
                     'semantic_proxy': '[dim](proxy)[/dim]',
                     'no_input': '[dim](idle)[/dim]',
                     'error': '[red](err)[/red]'}.get(mode, '')
+        # v6.6: 零值解释
+        if v1_norm == 0.0 and v2_norm == 0.0 and v4_norm == 0.0 and it_norm == 0.0:
+            if mode == 'semantic_proxy':
+                if vis_reason == 'empty_network':
+                    mode_tag += (' [dim](空网络 — 先对话建立记忆,'
+                                ' 或拖入图片)[/dim]')
+                elif vis_reason == 'no_visual_in_cluster':
+                    mode_tag += (' [dim](记忆无视觉特征 —'
+                                ' 拖入图片建立视觉经验)[/dim]')
+                else:
+                    mode_tag += (' [dim](无视觉经验 —'
+                                ' 拖入 .jpg/.png 图片文件)[/dim]')
         table.add_row("Vision",
                       f"V1={v1_norm:.2f} V2={v2_norm:.2f} "
                       f"V4={v4_norm:.2f} IT={it_norm:.2f} PE={pe:.3f} "
@@ -414,7 +439,7 @@ def render_diag(agent) -> Panel:
 # ================================================================
 
 def render_help() -> Panel:
-    """帮助面板."""
+    """帮助面板 (v6.6: +文件拖入说明 +SCN时间说明)."""
     commands = [
         ("/status", "展开完整状态面板"),
         ("/diag", "系统连接性诊断"),
@@ -423,7 +448,7 @@ def render_help() -> Panel:
         ("/pain <0-1>", "施加痛觉刺激"),
         ("/touch <0-1>", "Aβ触觉输入 (闸门控制)"),
         ("/speaker <name>", "设置说话人 (激活 TPJ)"),
-        ("/read <text>", "纯角回阅读 (跳过 MiniLM)"),
+        ("/read <text|file>", "阅读: 文本→角回, 文件路径→自动识别并处理"),
         ("/stream start|stop|status", "摄像头+麦克风实时流"),
         ("/age [0-3]", "发育年龄 (0=婴儿 1=儿童 2=青少年 3=成人)"),
         ("/save [name]", "手动存档"),
@@ -432,8 +457,25 @@ def render_help() -> Panel:
         ("/help", "显示此帮助"),
     ]
     table = Table(show_header=False, box=None, padding=(0, 1))
-    table.add_column("cmd", style="bold cyan", width=22)
+    table.add_column("cmd", style="bold cyan", width=28)
     table.add_column("desc")
     for cmd, desc in commands:
         table.add_row(cmd, desc)
+
+    # v6.6: 文件拖入说明
+    table.add_row("", "")
+    table.add_row("[bold]📂 拖入文件[/bold]",
+                  "[dim]直接将 .txt .md .jpg .png .wav 拖进终端[/dim]")
+    table.add_row("",
+                  "[dim]Windows Terminal / Cursor 均支持拖入=粘贴路径[/dim]")
+
+    # v6.6: SCN 时间说明
+    table.add_row("", "")
+    table.add_row("[bold]🕐 SCN 时间[/bold]",
+                  "视交叉上核 — Agent 的生物钟 (昼夜节律)")
+    table.add_row("",
+                  "[dim]2880步=24h, 控制褪黑素/皮质醇/睡眠倾向[/dim]")
+    table.add_row("",
+                  "[dim]🌙 22-6h=夜间  🌅 6-9h=清晨  ☀ 9-18h=白天  🌆 18-22h=傍晚[/dim]")
+
     return Panel(table, title="[bold]Commands[/bold]", border_style="cyan")

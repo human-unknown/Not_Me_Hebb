@@ -1,5 +1,5 @@
 """
-server.py — NotMe v6.5 Web 界面 (Flask REST API + SSE 实时推送)
+server.py — NotMe v6.6 Web 界面 (Flask REST API + SSE 实时推送)
 
 提供:
   - REST API: Agent 状态查询、对话、阅读控制
@@ -37,6 +37,7 @@ _broca = None
 _loop = None
 _loop_thread = None
 _text_env = None
+_save_path = None  # v6.6: auto-save path for persistence
 
 
 # ============================================================
@@ -57,6 +58,14 @@ def _build_status(agent) -> dict:
     a = agent.arousal_history[-1] if agent.arousal_history else 0.0
     body_b = agent.body.b.tolist() if agent.body else [0]*9
 
+    # v6.6: SCN time hour — use reliable step-based clock (not TTFL phase)
+    total_steps_v = agent.meta.step_count if hasattr(agent, 'meta') else 0
+    try:
+        from cerebrum.limbic_system.scn import SCN
+        scn_hour = SCN.get_reliable_hour(total_steps_v)
+    except Exception:
+        scn_hour = 0.0
+
     # SCN/VLPO
     circa = {
         'phase': float(getattr(agent._circadian_state, 'circadian_phase', 0.0)),
@@ -64,6 +73,8 @@ def _build_status(agent) -> dict:
         'cortisol': float(getattr(agent._circadian_state, 'cortisol', 0.0)),
         'sleep_pressure': float(getattr(agent._circadian_state, 'sleep_pressure', 0.0)),
         'sleep_propensity': float(getattr(agent._circadian_state, 'sleep_propensity', 0.0)),
+        # v6.6: SCN hour from reliable step-based clock
+        'scn_hour': scn_hour,
     }
     sleep = {
         'is_asleep': agent.vlpo.is_asleep if hasattr(agent, 'vlpo') else False,
@@ -158,10 +169,18 @@ def _build_status(agent) -> dict:
             'is_adult': dev_factors.get('is_adult', False),
         }
 
-    # Session info
+    # Session info (v6.6: +total_steps from meta)
     session_info = {}
     if hasattr(agent, 'telemetry') and agent.telemetry is not None:
         session_info = agent.telemetry.get_session_info()
+    # Always include authoritative step count from meta learner
+    session_info['total_steps'] = (
+        agent.meta.step_count if hasattr(agent, 'meta') else 0)
+
+    # v6.6: Last monologue/proactive speech
+    last_monologue = ''
+    if hasattr(agent, '_last_monologue') and agent._last_monologue:
+        last_monologue = agent._last_monologue
 
     return {
         'valence': float(v),
@@ -177,6 +196,8 @@ def _build_status(agent) -> dict:
         'activity_log': activity_log,
         'development': development,
         'session': session_info,
+        'scn_hour': scn_hour,
+        'last_monologue': last_monologue,
         'timestamp': time.time(),
     }
 
@@ -210,7 +231,9 @@ def _build_visual(agent) -> dict | None:
         except Exception:
             pass
 
-    # 视觉通道强度
+    # 视觉通道强度 (v6.6: +reason)
+    v1_mean = v2_mean = v4_mean = it_mean = 0.0
+    vis_reason = ''
     vis_result = getattr(agent, '_current_visual_result', {})
     diag = vis_result.get('diagnostics', {})
     if diag:
@@ -218,6 +241,7 @@ def _build_visual(agent) -> dict | None:
         v2_mean = float(diag.get('V2_mean_norm', 0.0))
         v4_mean = float(diag.get('V4_mean_norm', 0.0))
         it_mean = float(diag.get('IT_mean_norm', 0.0))
+        vis_reason = diag.get('reason', '')
 
     return {
         'has_frame': has_frame,
@@ -226,6 +250,7 @@ def _build_visual(agent) -> dict | None:
         'v2_mean': v2_mean,
         'v4_mean': v4_mean,
         'it_mean': it_mean,
+        'vis_reason': vis_reason,
     }
 
 
@@ -412,11 +437,28 @@ def api_reading_list():
     """列出指定目录下的文本文件."""
     data = request.get_json() or {}
     directory = data.get('directory', '.').strip()
+
+    # v6.6: 安全 — 解析真实路径并限制在允许目录内
+    try:
+        real_dir = os.path.realpath(directory)
+    except (ValueError, OSError):
+        return jsonify({'error': 'Invalid directory path'}), 400
+
+    # 允许的目录前缀列表
+    _allowed_prefixes = [
+        os.path.realpath(_PROJECT_ROOT),
+        os.path.realpath(os.path.expanduser('~')),
+        os.path.realpath(os.getcwd()),
+    ]
+
+    if not any(real_dir.startswith(prefix) for prefix in _allowed_prefixes):
+        return jsonify({'error': 'Directory not allowed (outside safe paths)'}), 403
+
     try:
         files = []
-        for f in os.listdir(directory):
+        for f in os.listdir(real_dir):
             if f.endswith(('.txt', '.md', '.csv')):
-                fpath = os.path.join(directory, f)
+                fpath = os.path.join(real_dir, f)
                 if os.path.isfile(fpath):
                     files.append({
                         'name': f,
@@ -424,6 +466,94 @@ def api_reading_list():
                         'size': os.path.getsize(fpath),
                     })
         return jsonify({'files': files})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/api/reading/upload', methods=['POST'])
+def api_reading_upload():
+    """v6.6: 上传文件 (拖入) → 自动识别并处理.
+
+    支持: .txt/.md/.csv → 文本阅读管道
+          .jpg/.png → 视觉管道
+          .wav/.mp3 → 听觉管道
+    """
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Empty filename'}), 400
+
+    filename = file.filename
+    ext = os.path.splitext(filename)[1].lower()
+
+    try:
+        if ext in ('.txt', '.md', '.csv', '.json', '.log', '.py',
+                   '.yaml', '.yml', '.toml', '.cfg', '.ini'):
+            # 文本文件 → 阅读管道
+            content = file.read().decode('utf-8')
+            # 截断过长内容
+            max_chars = 4000
+            if len(content) > max_chars:
+                content = content[:max_chars]
+
+            from tools.reader import Reader
+            global _agent, _loop
+            if _agent is not None:
+                if not hasattr(_agent, 'reader') or _agent.reader is None:
+                    _agent.reader = Reader()
+                # 将内容写入临时文件供 Reader 使用
+                import tempfile
+                tmp_path = os.path.join(tempfile.mkdtemp(), filename)
+                with open(tmp_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                _agent.reader.load(tmp_path)
+                if _loop is not None:
+                    _loop.reader = _agent.reader
+                return jsonify({
+                    'status': 'loaded',
+                    'filename': filename,
+                    'chars': len(content),
+                    **(_agent.reader.get_progress() if _agent.reader else {}),
+                })
+            return jsonify({'error': 'Agent not initialized'}), 503
+
+        elif ext in ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'):
+            # 图像文件 → 视觉管道
+            from PIL import Image
+            img = Image.open(file.stream).convert('RGB')
+            img = img.resize((128, 128))
+            frame = np.array(img, dtype=np.float32) / 255.0
+            if _agent is not None:
+                _agent.set_current_image(frame)
+                return jsonify({'status': 'loaded', 'filename': filename,
+                               'type': 'image'})
+            return jsonify({'error': 'Agent not initialized'}), 503
+
+        elif ext in ('.wav', '.mp3', '.flac', '.ogg', '.m4a'):
+            # 音频文件 → 听觉管道
+            import tempfile as tmp_mod
+            tmp_path = os.path.join(tmp_mod.mkdtemp(), filename)
+            file.save(tmp_path)
+            try:
+                from tools.audio_io import load_audio_file
+                audio_data = load_audio_file(tmp_path)
+                if audio_data is not None and _agent is not None:
+                    _agent.set_audio_input(audio_data)
+                    return jsonify({'status': 'loaded', 'filename': filename,
+                                   'type': 'audio',
+                                   'duration': audio_data.get('duration', 0)})
+            except ImportError:
+                return jsonify({'error': 'audio_io not available'}), 500
+            except Exception as e:
+                return jsonify({'error': str(e)}), 400
+
+            return jsonify({'error': 'Audio load failed'}), 400
+
+        else:
+            return jsonify({'error': f'Unsupported file type: {ext}'}), 400
+
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
@@ -477,8 +607,11 @@ def api_stream_visual():
 # ============================================================
 
 def init_agent(fresh: bool = False):
-    """初始化 Agent + 自主循环."""
-    global _agent, _broca, _loop, _loop_thread
+    """初始化 Agent + 自主循环.
+
+    v6.6: 默认从最新存档恢复 (持久化). --fresh 跳过存档.
+    """
+    global _agent, _broca, _loop, _loop_thread, _save_path
 
     from cns.agent import Agent
     from cns.data_types import BodyVector
@@ -486,6 +619,24 @@ def init_agent(fresh: bool = False):
     from environments.text_interface import TextEnvironment
     from cns.innate import apply_innate_config
     from cns.data_types import ACTION_DIRECTIONS
+    from cns.persistence import load_agent_state, restore_agent
+
+    # v6.6: 尝试从 web 专用存档恢复
+    loaded_from_save = False
+    if not fresh:
+        from cns.persistence import _make_path
+        _save_path = _make_path('web_autosave')
+        if os.path.exists(_save_path):
+            print(f"  [Load] Found save: {os.path.basename(_save_path)}", flush=True)
+            try:
+                save_data = load_agent_state(_save_path)
+                loaded_from_save = True
+                print(f"  [Load] v{save_data.get('version', '?')}, "
+                      f"{save_data.get('meta_learner', {}).get('step_count', 0)} steps, "
+                      f"{save_data.get('total_turns', 0)} turns", flush=True)
+            except Exception as e:
+                print(f"  [Load] Failed: {e} — creating fresh agent", flush=True)
+                loaded_from_save = False
 
     # Agent
     rng = np.random.default_rng(42)
@@ -495,6 +646,14 @@ def init_agent(fresh: bool = False):
     _agent.record_action_consequence = lambda s: None
     ACTION_DIRECTIONS[3] = [0.0, 0.0]
     ACTION_DIRECTIONS[4] = [0.0, 0.0]
+
+    # v6.6: 从存档恢复 Agent 状态
+    if loaded_from_save:
+        try:
+            restore_agent(_agent, save_data, verbose=True)
+        except Exception as e:
+            print(f"  [Load] Restore failed: {e}", flush=True)
+            loaded_from_save = False
 
     # Broca (纯净模式)
     te = TextEnvironment(load_corpus=False)
@@ -513,9 +672,12 @@ def init_agent(fresh: bool = False):
     _agent._current_image = None
     _agent._current_audio_data = None
     _agent._streaming = False
+    _agent._last_monologue = ''  # v6.6: 最近独白文本
 
-    print(f"  Agent initialized: {_agent.net.n_clusters} clusters, "
-          f"clean mode, 0 trigrams", flush=True)
+    n_clusters = _agent.net.n_clusters
+    steps_info = f"{_agent.meta.step_count} steps" if loaded_from_save else "0 steps"
+    print(f"  Agent initialized: {n_clusters} clusters, "
+          f"clean mode, {steps_info}", flush=True)
 
     # Autonomous loop
     from entry.autonomous import AutonomousLoop
@@ -523,6 +685,17 @@ def init_agent(fresh: bool = False):
     _loop.reader = _agent.reader
     _loop.telemetry = _agent.telemetry
     _loop.internal_life = _agent.internal_life
+
+    # v6.6: 恢复 loop 状态 (step_counter + social_ctx)
+    if loaded_from_save and 'loop_state' in save_data:
+        try:
+            _loop.restore_from_save(save_data['loop_state'])
+            print(f"  Loop: step_counter={_loop._step_counter} restored", flush=True)
+        except Exception as e:
+            print(f"  Loop restore: {e}", flush=True)
+    # v6.6: 同步 loop._step_counter ← agent.meta.step_count (以 agent 为准)
+    if _agent is not None and hasattr(_agent, 'meta') and _agent.meta is not None:
+        _loop._step_counter = max(_loop._step_counter, _agent.meta.step_count)
 
     print("  AutonomousLoop ready", flush=True)
 
@@ -540,6 +713,29 @@ def start_autonomous_loop():
     _loop_thread = threading.Thread(target=run_loop, daemon=True)
     _loop_thread.start()
     print("  Autonomous loop started (background thread)", flush=True)
+
+
+# ---- v6.6: Auto-save ----
+
+def save_web_state():
+    """保存当前 Agent + Loop 状态到磁盘 (自动调用)."""
+    global _agent, _loop, _save_path
+    if _agent is None:
+        return
+    try:
+        from cns.persistence import save_agent
+        extra = {}
+        if _loop is not None:
+            extra['loop_state'] = _loop.get_state_for_save()
+        if _save_path is None:
+            from cns.persistence import _make_path
+            _save_path = _make_path('web_autosave')
+        path = save_agent(_agent, path=_save_path, extra=extra)
+        print(f"  [Save] Agent state -> {os.path.basename(path)} "
+              f"({_agent.meta.step_count} steps, "
+              f"{_agent.net.n_clusters} clusters)", flush=True)
+    except Exception as e:
+        print(f"  [Save] Failed: {e}", flush=True)
 
 
 # ---- Sensor Capture (摄像头 + 麦克风) ----
@@ -774,7 +970,7 @@ def _kill_existing_on_port(port: int):
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description='NotMe v6.5 Web Interface')
+    parser = argparse.ArgumentParser(description='NotMe v6.6 Web Interface')
     parser.add_argument('--port', type=int, default=8080, help='HTTP port')
     parser.add_argument('--host', default='0.0.0.0', help='Bind address')
     parser.add_argument('--fresh', action='store_true', help='Force fresh agent')
@@ -790,7 +986,7 @@ def main():
     _kill_existing_on_port(args.port)
 
     print("=" * 50)
-    print("  NotMe v6.5 — Web Interface")
+    print("  NotMe v6.6 — Web Interface")
     print("=" * 50)
 
     # Init
@@ -831,6 +1027,8 @@ def main():
     def _cleanup():
         """退出前清理所有资源."""
         stop_sensors()
+        # v6.6: 保存状态到磁盘
+        save_web_state()
         if _loop:
             try:
                 _loop.stop()

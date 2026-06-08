@@ -420,6 +420,8 @@ def analyze_sentiment(text: str,
         learned_valence = lexicon.predict_valence(words)
         learned = abs(learned_valence) > 0.05
     else:
+        # 冷启动: 无 Hebb 情感记忆 → 效价为 0
+        # Agent 尚未学习词→情感关联, 这符合纯净模式原则
         learned_valence = 0.0
         learned = False
 

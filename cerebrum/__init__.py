@@ -15,10 +15,9 @@ cerebrum — 大脑 (Cerebrum)  [Level 2a]
 ├── thalamus/        丘脑 — 感觉中继/门控、注意力调制 (v4.1 独立)
 └── association/     联合皮层 — DMN、跨模态整合
 
-设计原则 (CLAUE.md 五条核心原则):
+设计原则 (CLAUDE.md 四条核心原则):
 1. 自由能原理 — 一切行为统一在最小化自由能框架下
 2. Hebb 网络 — fire together, wire together
 3. 仿脑区结构 — 按进化形成的脑区功能分化组织计算
 4. 无现象学 — 情感是 F_body 的数值动力学产物
-5. 无 LLM — 认知核心不依赖 transformer
 """

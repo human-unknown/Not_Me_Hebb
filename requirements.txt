@@ -1,4 +1,4 @@
-# NotMe v6.4 Dependencies
+# NotMe v6.6 Dependencies
 # Core (required)
 numpy>=1.21.0
 scipy>=1.7.0
@@ -12,11 +12,12 @@ sounddevice>=0.4.0
 
 # Image (required for camera/visual)
 Pillow>=9.0.0
+opencv-python>=4.8.0     # camera capture (tools/sensor_io.py)
 
 # Web UI (required for web interface)
 flask>=2.0.0
-waitress>=2.0.0        # production WSGI server (recommended)
+waitress>=2.0.0          # production WSGI server (recommended)
 
-# Optional
-rich>=10.0.0          # terminal UI (interactive.py)
-prompt-toolkit>=3.0.0  # terminal input (interactive.py)
+# Terminal UI (required for interactive.py)
+rich>=10.0.0             # terminal UI rendering
+prompt-toolkit>=3.0.0    # terminal input with autocomplete/history

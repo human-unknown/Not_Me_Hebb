@@ -86,6 +86,9 @@ class AutonomousLoop:
         self._last_human_time: float = 0.0
         self._rest_counter: int = 0  # 疲劳休息倒计时
 
+        # v6.6: 持久 SocialContext — 跨轮次保留社会预测模型
+        self._social_ctx = None
+
         # 追踪
         self.activity_history: list[str] = []
         self._rumination_check_counter: int = 0
@@ -396,8 +399,14 @@ class AutonomousLoop:
             thought_result = agent.internal_thought('monologue', broca=self.broca)
             result.update(thought_result)
 
-        # 轻量 step
+        # v6.6: 存储独白文本 → Web 前端可显示
         text = result.get('text', '')
+        if text:
+            agent._last_monologue = text
+            if hasattr(agent, '_log_activity'):
+                agent._log_activity('monologue', f"💬 {text[:120]}")
+
+        # 轻量 step
         stats = agent.light_step(self._step_counter, activity='monologue',
                                  text_input=text if text else None)
         result['stats'] = stats
@@ -474,7 +483,7 @@ class AutonomousLoop:
         Args:
             human_text: 人类输入文本
             text_env: TextEnvironment 实例 (可选)
-            social_ctx: SocialContext 实例 (可选)
+            social_ctx: SocialContext 实例 (可选, 持久跨轮次)
 
         Returns:
             dict with agent_response, comprehension, etc.
@@ -510,12 +519,21 @@ class AutonomousLoop:
 
             if text_env is None:
                 text_env = TextEnvironment(load_corpus=False)
+
+            # v6.6: 持久 social_ctx — 跨轮次保留社会预测模型
             if social_ctx is None:
-                social_ctx = SocialContext(tau=25.0)
+                if not hasattr(self, '_social_ctx') or self._social_ctx is None:
+                    self._social_ctx = SocialContext(tau=25.0)
+                social_ctx = self._social_ctx
 
             # 编码
             human_vec = text_env.encode_text(human_text)[:64].astype(np.float32)
-            sentiment = analyze_sentiment(human_text)
+
+            # v6.6: 使用全局 Hebb 情感词典 (v5.7 seed_basic_lexicon 冷启动)
+            # 效价从 Hebb 学习中涌现: 词↔ΔF_body 关联 → 正/负效价
+            from cerebrum.limbic_system.amygdala import get_emotional_lexicon
+            lexicon = get_emotional_lexicon()
+            sentiment = analyze_sentiment(human_text, lexicon=lexicon)
             social_signal = sentiment_to_social_signal(sentiment)[:8].astype(np.float32)
             social_ctx.update(sentiment.get('valence', 0.0),
                             sentiment.get('arousal', 0.0))
@@ -670,13 +688,22 @@ class AutonomousLoop:
 
     def get_state_for_save(self) -> dict:
         """可序列化状态 (用于持久化)。"""
-        return {
+        data = {
             'mode': self.mode,
             'step_counter': self._step_counter,
             'is_paused': self._paused,
             'rest_counter': self._rest_counter,
             'activity_history': self.activity_history[-50:],
         }
+        # v6.6: social_ctx 序列化
+        if self._social_ctx is not None:
+            data['social_ctx'] = {
+                'expected_valence': self._social_ctx.expected_valence,
+                'expected_arousal': self._social_ctx.expected_arousal,
+                'trust_level': self._social_ctx.trust_level,
+                'n_interactions': self._social_ctx.n_interactions,
+            }
+        return data
 
     def restore_from_save(self, data: dict):
         """从持久化数据恢复。"""
@@ -687,3 +714,13 @@ class AutonomousLoop:
         self._paused = data.get('is_paused', False)
         self._rest_counter = data.get('rest_counter', 0)
         self.activity_history = data.get('activity_history', [])
+        # v6.6: social_ctx 恢复
+        if 'social_ctx' in data and data['social_ctx']:
+            from cerebrum.limbic_system.cingulate import SocialContext
+            if self._social_ctx is None:
+                self._social_ctx = SocialContext(tau=25.0)
+            sc_data = data['social_ctx']
+            self._social_ctx.expected_valence = sc_data.get('expected_valence', 0.0)
+            self._social_ctx.expected_arousal = sc_data.get('expected_arousal', 0.2)
+            self._social_ctx.trust_level = sc_data.get('trust_level', 0.5)
+            self._social_ctx.n_interactions = sc_data.get('n_interactions', 0)

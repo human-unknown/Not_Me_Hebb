@@ -5,13 +5,6 @@ text_interface.py —— 文本环境 (Stage 2)
 替换 GridWorld。每步输出一句文本的嵌入作为 s。
 嵌入用 sentence-transformer (384d → PCA 64d)。
 
-!!! 原则边界 (No LLM): all-MiniLM-L6-v2 仅用于将原始文本转为固定维度的向量。
-    它不参与认知加工 (L0-L3 全链路不含 transformer)，不生成 token，
-    不决策。它是"视网膜"——将外界物理信号(文字)转化为神经脉冲(向量)，
-    正如生物视网膜将光转为电信号。认知核心 (ClusterNetwork, FEP, Hebb)
-    完全独立于 transformer。
-    如果未来有纯统计的替代方案 (如 fastText / 纯 SVD)，可以无缝替换。
-
 Agent 的行动决定下一步读哪段文本。
 每种行动产生可预测的不同程度 s 变化。
 """

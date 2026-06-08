@@ -30,7 +30,7 @@ from typing import Optional
 # 版本管理
 # ================================================================
 
-SAVE_VERSION = "6.4"  # v6.4: +autonomous mode/reading/telemetry/internal_life
+SAVE_VERSION = "6.6"  # v6.6: +step persistence +file drag-drop +proactive speech +visual reason +SCN doc
 SAVE_DIR = ".notme/sessions"
 
 

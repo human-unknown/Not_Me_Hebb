@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v6.5 — Web 前端新未来主义重构 + 无现象学修复 + 发育年龄显示 + 睡眠节奏调整
-> **日期**: 2026-06-07
-> **基于**: v6.4 长期常驻学习 + 自由能原理 + Hebb 可塑性 + 脑网络可视化
+> **版本**: v6.6 — 持久化修复 + 版本统一 + 代码质量提升 + 安全加固
+> **日期**: 2026-06-08
+> **基于**: v6.5 Web 前端新未来主义重构 + 无现象学修复 + 自听闭环修复
 
 ---
 
@@ -29,6 +29,7 @@
 | **v6.3** | **2026-06-07** | **睡眠优化与时间维度 — SCN昼夜节律钟 + VLPO触发器开关 + NREM/REM双相睡眠 + α注意门控 + 类淋巴清除** |
 | **v6.4** | **2026-06-07** | **长期常驻学习 完整实现 — 自主时间流 + 通用阅读 + DMN内部生命 + Web仪表板 + 长期遥测** |
 | **v6.5** | **2026-06-07** | **前端新未来主义重构 + 无现象学修复 + 睡眠节奏调整 + 发育年龄显示** |
+| **v6.6** | **2026-06-08** | **持久化修复 (step/视觉/F_social) + 版本统一 + 异常traceback + Web安全 + CHANGELOG + 无LLM原则移除** |
 
 ---
 
@@ -816,4 +817,71 @@ python web/server.py --port 8080 --no-auto --no-sensors --dev  # 最小测试模
 
 ---
 
-*由 v6.1 发育优化自动更新 · 基于《脑连接的形成》神经发育综述 + Hebb可塑性 + 自由能原理 (Friston 预测编码)*
+## v6.6 核心变更 — 持久化修复 + 版本统一 + 代码质量提升 + 安全加固
+
+### 设计哲学: 打磨细节，让系统真正"活过多次会话"
+
+v6.5 完成了 Web 前端大改和自听闭环修复，但多个持久化问题导致 Agent 无法在跨会话中积累经验。
+v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量与安全性。
+
+### 四个关键修复
+
+| 问题 | 根因 | 修复 |
+|------|------|------|
+| **Step 计数器重置** | `meta.step_count` 从未在 `step()`/`light_step()` 中同步 | `meta.step_count = max(meta.step_count, step_count)` |
+| **SCN 时间卡住/倒计时** | TTFL 分子钟 ODE 相位漂移 | `SCN.get_reliable_hour()` — 步数线性映射到 24h |
+| **视觉每会话重训** | Web 启动不加载存档 | `init_agent()` 默认从 `web_autosave.pkl` 恢复 + shutdown 自动保存 |
+| **F_social 永远为 0** | `analyze_sentiment()` 未传入 Hebb 情感词典 | 使用 `get_emotional_lexicon()` + `social_ctx` 跨 API 调用持久化 |
+
+### 原则清理
+
+| 变更 | 原因 |
+|------|------|
+| **移除 "无LLM" 原则** | 方法3 (No Large Language Models) 从三条方法论中删除 | 项目方向调整 — 不再排除 LLM 作为可能的工具 |
+
+涉及文件: `CLAUDE.md`, `README.md`, `cerebrum/__init__.py`, `environments/text_interface.py`
+
+### 代码质量提升
+
+| 项目 | 文件 | 描述 |
+|------|------|------|
+| 异常 traceback | `cns/agent.py` | 新增 `_debug_trace()` + 12 处关键异常块加标签 (受 `NOTME_DEBUG` 控制) |
+| 版本统一 | `CLAUDE.md`, `requirements.txt`, `web/server.py` | 全部统一到 v6.6 |
+| Web 路径遍历修复 | `web/server.py` | `/api/reading/list` — `os.path.realpath()` + 目录白名单 |
+| 测试辅助提取 | `tests/conftest.py` (新建) | `make_theta()`, `make_deterministic_s()`, `make_random_s()` |
+| 依赖补全 | `requirements.txt` + `requirements-dev.txt` (新建) | +opencv-python, +pytest/ruff |
+| .gitignore 改进 | `.gitignore` | +.env, venv/, .pytest_cache/, coverage/ |
+| CHANGELOG | `CHANGELOG.md` (新建) | v5.5→v6.6 完整变更历史 |
+
+### 文件变更
+
+| 文件 | 变更 |
+|------|------|
+| `cns/agent.py` | +`_debug_trace()`, +12 处异常标签, +`meta.step_count` 同步 |
+| `web/server.py` | 版本 v6.5→v6.6, +路径遍历安全, +save/load 持久化 |
+| `cerebrum/limbic_system/scn.py` | +`get_reliable_hour()` 静态方法 |
+| `entry/autonomous.py` | +`_social_ctx` 持久化, +`get_emotional_lexicon()` |
+| `CLAUDE.md` | 版本 v5.7→v6.6, +v6.0-v6.6 演进, +里程碑表, +原则更新 |
+| `README.md` | 移除 "5. 无LLM" 章节 |
+| `cerebrum/__init__.py` | "五条"→"四条核心原则" |
+| `environments/text_interface.py` | 移除 "No LLM" 注释块 |
+| `tests/conftest.py` | **NEW** — 共享测试辅助函数 |
+| `CHANGELOG.md` | **NEW** — 全版本变更历史 |
+| `requirements.txt` | 版本 v6.4→v6.6, +opencv-python |
+| `requirements-dev.txt` | **NEW** — 开发依赖 |
+| `PROJECT_STATUS.md` | 更新到 v6.6 |
+
+### 测试结果 (v6.6)
+
+| 测试套件 | 通过/总数 | 状态 |
+|----------|----------|------|
+| test_v6_3_sleep | 8/9 | ✅ (1 已有 VLPO 时序问题) |
+| test_v6_4_resident | 9/9 | ✅ |
+| test_v6_1_development | 7/7 | ✅ |
+| test_v6_2_memory | 6/6 | ✅ |
+| test_lgn | 5/5 | ✅ |
+| **总计** | **35/36 (97.2%)** | ✅ |
+
+---
+
+*由 v6.6 更新 · 基于《脑连接的形成 + 学习和记忆的分子机制 + 脑节律与睡眠》综述 + Hebb可塑性 + 自由能原理 (Friston 预测编码)*

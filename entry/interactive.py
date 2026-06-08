@@ -194,13 +194,126 @@ class CommandHandler:
             console.print(f"  Current speaker: '{self.interactive.speaker_name}'")
 
     def _read(self, arg):
-        if not arg.strip():
-            console.print("  [red]Usage: /read <text>[/red]")
+        """阅读: 文本→角回通路, 文件路径→自动识别类型并处理.
+
+        支持拖入文件 (Windows终端/Cursor均支持拖入文件=粘贴路径):
+          /read story.txt       → 读取文本文件内容, 走全理解管线
+          /read photo.jpg       → 加载图像, 走视觉管线
+          /read recording.wav   → 加载音频, 走听觉管线
+          /read 你好世界        → 纯角回阅读通路 (文本)
+        """
+        arg = arg.strip()
+        if not arg:
+            console.print("  [red]Usage: /read <text|file_path>[/red]")
+            console.print("  [dim]TIP: 可直接将文件拖入终端 (自动粘贴路径)[/dim]")
             return
+
+        # v6.6: 检测是否为文件路径
+        import os as _os
+        clean_path = arg.strip('"').strip("'")  # 处理引号包裹的路径
+        is_file = _os.path.isfile(arg) or _os.path.isfile(clean_path)
+        file_path = clean_path if _os.path.isfile(clean_path) else (
+            arg if _os.path.isfile(arg) else None)
+
+        if file_path:
+            # ---- 文件输入 ----
+            ext = _os.path.splitext(file_path)[1].lower()
+            if ext in ('.txt', '.md', '.csv', '.json', '.log', '.py',
+                       '.yaml', '.yml', '.toml', '.cfg', '.ini'):
+                # 文本文件: 读取内容 → 全管线处理
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                except UnicodeDecodeError:
+                    try:
+                        with open(file_path, 'r', encoding='gbk') as f:
+                            content = f.read()
+                    except Exception as e:
+                        console.print(f"  [red]Read error: {e}[/red]")
+                        return
+                except Exception as e:
+                    console.print(f"  [red]Read error: {e}[/red]")
+                    return
+
+                # 截断过长内容
+                max_chars = 4000
+                if len(content) > max_chars:
+                    content = content[:max_chars] + "\n... (truncated)"
+                console.print(
+                    f"  [dim]📄 {_os.path.basename(file_path)} "
+                    f"({len(content)} chars)[/dim]")
+
+                # 路由到对话处理: 模拟为人类输入文本
+                self.interactive._pending_text = content
+                self.interactive._pending_type = 'file'
+                console.print(
+                    "  [green]File loaded — processing...[/green]")
+                return
+
+            elif ext in ('.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'):
+                # 图像文件: 走视觉管线
+                console.print(
+                    f"  [dim]🖼 {_os.path.basename(file_path)}[/dim]")
+                try:
+                    from PIL import Image
+                    img = Image.open(file_path).convert('RGB')
+                    img = img.resize((128, 128))
+                    frame = np.array(img, dtype=np.float32) / 255.0
+                    self.interactive.agent.set_current_image(frame)
+                    console.print(
+                        "  [green]Image loaded → visual pipeline[/green]")
+                except ImportError:
+                    console.print(
+                        "  [red]Pillow not installed "
+                        "(pip install Pillow)[/red]")
+                except Exception as e:
+                    console.print(f"  [red]Image error: {e}[/red]")
+                return
+
+            elif ext in ('.wav', '.mp3', '.flac', '.ogg', '.m4a'):
+                # 音频文件: 走听觉管线
+                console.print(
+                    f"  [dim]🎵 {_os.path.basename(file_path)}[/dim]")
+                try:
+                    from tools.audio_io import load_audio_file
+                    audio_data = load_audio_file(file_path)
+                    if audio_data is not None:
+                        self.interactive.agent.set_audio_input(audio_data)
+                        console.print(
+                            "  [green]Audio loaded → auditory pipeline[/green]")
+                    else:
+                        console.print(
+                            "  [yellow]Audio loading returned None[/yellow]")
+                except ImportError:
+                    console.print(
+                        "  [red]audio_io not available "
+                        "(pip install soundfile)[/red]")
+                except Exception as e:
+                    console.print(f"  [red]Audio error: {e}[/red]")
+                return
+
+            else:
+                console.print(
+                    f"  [yellow]Unknown file type: {ext}"
+                    f" — treating as text[/yellow]")
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read(max_chars)
+                    self.interactive._pending_text = content
+                    self.interactive._pending_type = 'file'
+                    console.print(
+                        "  [green]File loaded (fallback, treating as text)"
+                        " — processing...[/green]")
+                except Exception:
+                    console.print(
+                        f"  [red]Cannot read as text: {file_path}[/red]")
+                return
+
+        # 纯文本 → 角回阅读通路 (保持原有行为)
         agent = self.interactive.agent
         if hasattr(agent, 'angular_gyrus'):
-            ag_phon, ag_conf = agent.angular_gyrus.read(arg.strip())
-            console.print(f"  AG read '{arg.strip()}': "
+            ag_phon, ag_conf = agent.angular_gyrus.read(arg)
+            console.print(f"  AG read '{arg[:60]}': "
                          f"ph_norm={np.linalg.norm(ag_phon):.2f} "
                          f"conf={ag_conf:.2f}")
         else:
@@ -372,6 +485,13 @@ class InteractiveSession:
         self._stream_session = None  # StreamSession instance (lazy init)
         self._streaming = False
 
+        # v6.6: 空闲步数追踪 (主动说话概率)
+        self._idle_steps: int = 0
+
+        # v6.6: 文件拖入处理 (pending text queue)
+        self._pending_text: str = None
+        self._pending_type: str = None
+
         # 检查存档
         auto_path = None
         if not fresh:
@@ -507,7 +627,8 @@ class InteractiveSession:
         last_human_vec = np.zeros(64)
         last_self_semantic = np.zeros(64, dtype=np.float32)
         last_self_sentiment = np.zeros(8, dtype=np.float32)
-        t = 0
+        # v6.6: 从存档恢复 step 计数 (持久化)
+        t = agent.meta.step_count
         expr_cooldown = 0
         inner_cooldown = 0
         VIS_END_V5 = M_V1_START + D_VISUAL_V5
@@ -523,7 +644,7 @@ class InteractiveSession:
         # ---- 启动信息 ----
         console.print()
         console.print(Panel(
-            "[bold cyan]NotMe v5.7[/bold cyan] — "
+            "[bold cyan]NotMe v6.6[/bold cyan] — "
             "自由能原理情感智能体\n"
             "[bold green]纯净模式[/bold green] — "
             "零预训练, 网络从互动中生长\n"
@@ -532,6 +653,7 @@ class InteractiveSession:
             "  发育年龄: 👶 婴儿 (纯模仿, 只学人类输入)\n"
             "  所有知识从与你的对话中在线学习\n"
             "  trigram网络 · 句记忆 · 概念词映射 全部从零开始\n"
+            "  📂 拖入 .txt/.jpg/.png/.wav 文件到终端 → Agent 自动处理\n"
             "  输入 /age 查看年龄, /help 查看命令, /status 查看状态[/dim]",
             border_style="cyan"))
         console.print()
@@ -544,32 +666,138 @@ class InteractiveSession:
                        'total_turns': self.n_turns}
                 console.print(render_header(agent, meta, broca=broca, age=self.age))
 
-                # ---- Input ----
-                try:
-                    if self._use_prompt_toolkit:
-                        human_text = self.session.prompt(
-                            [('class:prompt', '> ')],
-                        )
-                    else:
-                        console.print(Text("> ", style="bold cyan"), end="")
-                        human_text = input()
-                except (EOFError, KeyboardInterrupt):
-                    console.print("\n  [yellow]Goodbye![/yellow]")
-                    # v6.0: 退出前跨会话巩固
+                # ---- v6.6: 检查待处理的文件输入 ----
+                if self._pending_text is not None:
+                    human_text = self._pending_text
+                    self._pending_text = None
+                    # 文件输入跳过 prompt, 直接进入处理
+                    if self._pending_type == 'file':
+                        console.print(
+                            f"  [dim]Processing file input "
+                            f"({len(human_text)} chars)...[/dim]")
+                    self._pending_type = None
+                else:
+                    # ---- Input ----
                     try:
-                        result = agent.consolidate_across_sessions()
-                        console.print(f"  [dim]Consolidated: "
-                                     f"{result['n_extracted']} processed, "
-                                     f"{result['n_new_facts']} new facts[/dim]")
-                        agent.save(name=None, n_sessions=self.n_sessions,
-                                  n_turns=self.n_turns)
-                    except Exception:
-                        pass
-                    break
+                        if self._use_prompt_toolkit:
+                            human_text = self.session.prompt(
+                                [('class:prompt', '> ')],
+                            )
+                        else:
+                            console.print(Text("> ", style="bold cyan"), end="")
+                            human_text = input()
+                    except (EOFError, KeyboardInterrupt):
+                        console.print("\n  [yellow]Goodbye![/yellow]")
+                        # v6.0: 退出前跨会话巩固
+                        try:
+                            result = agent.consolidate_across_sessions()
+                            console.print(f"  [dim]Consolidated: "
+                                         f"{result['n_extracted']} processed, "
+                                         f"{result['n_new_facts']} new facts[/dim]")
+                            agent.save(name=None, n_sessions=self.n_sessions,
+                                      n_turns=self.n_turns)
+                        except Exception:
+                            pass
+                        break
 
                 human_text = human_text.strip()
                 if not human_text:
+                    # ---- v6.6: 被动步 (空输入) — 内部处理 + 主动说话 ----
+                    self._idle_steps += 1
+
+                    # 构建最小感知向量 (无外部输入, 保留上次上下文)
+                    s = np.zeros(516, dtype=np.float32)
+                    s[0:64] = last_human_vec.copy()
+                    # 视觉语义代理 (从记忆补全)
+                    if agent.net.n_clusters > 0:
+                        c = agent.net.recall(last_human_vec[:48])
+                        if c is not None:
+                            s[VIS_START:VIS_END] = c.centroid[
+                                VIS_START:VIS_END].copy()
+
+                    # Agent step + 内部处理
+                    agent.set_self_audio(last_self_semantic, last_self_sentiment)
+                    action = agent.step(s, t, social_ctx=social_ctx)
+
+                    # 空闲冷却更新 (v6.6: 被动步专用)
+                    inner_cooldown = max(0, inner_cooldown - 1)
+
+                    # 内部言语 + 主动说话
+                    if inner_cooldown <= 0 and agent.net.n_clusters > 0:
+                        top = max(agent.net.clusters,
+                                  key=lambda c: c.activation)
+                        if top.activation > 0.01:
+                            v = agent.valence_history[-1] if agent.valence_history else 0
+                            a = agent.arousal_history[-1] if agent.arousal_history else 0
+                            words, _, _ = agent.speak(
+                                broca=broca,
+                                query_vec=s[:64].astype(np.float32),
+                                belief_vec=top.centroid,
+                                valence=v, arousal=a,
+                                temperature=0.7 + a * 0.4,
+                                max_words=10,
+                                use_phrase_structure=False)
+                            if words:
+                                inner_text = "".join(words)
+                                # 主动说话概率: 唤醒 × 社交需求 × 空闲因子
+                                social_need = max(
+                                    0.0, agent.body.setpoints[0] - agent.body.b[0])
+                                novelty_need = max(0.0, 0.5 - agent.body.b[3])
+                                idle_factor = min(1.0, self._idle_steps / 20.0)
+                                proactive_prob = (
+                                    a * 0.4 + social_need * 0.6
+                                    + novelty_need * 0.3) * idle_factor
+
+                                if proactive_prob > 0.45:
+                                    # 主动发起对话!
+                                    console.print(
+                                        f"  [Agent] 💬: {inner_text}")
+                                    try:
+                                        last_self_semantic = text_env.encode_text(
+                                            inner_text).astype(np.float32)
+                                    except Exception:
+                                        pass
+                                    inner_sent = analyze_sentiment(inner_text)
+                                    last_self_sentiment = (
+                                        sentiment_to_social_signal(
+                                            inner_sent)[:8].astype(np.float32))
+                                    # 更新对话上下文
+                                    try:
+                                        resp_vec = text_env.encode_text(
+                                            inner_text).astype(np.float32)
+                                    except Exception:
+                                        resp_vec = np.zeros(
+                                            64, dtype=np.float32)
+                                    agent.dialogue_ctx.add_turn(
+                                        last_human_vec, resp_vec,
+                                        understanding={
+                                            'n_triggered_memories': 1},
+                                        note='proactive')
+                                    # 重置空闲 (主动发言后不立即再发)
+                                    self._idle_steps = 0
+                                else:
+                                    # 仅内部言语 (不对外输出)
+                                    console.print(
+                                        f"  [dim][inner] {inner_text}[/dim]")
+                                    try:
+                                        last_self_semantic = text_env.encode_text(
+                                            inner_text).astype(np.float32)
+                                    except Exception:
+                                        pass
+                                    inner_sent = analyze_sentiment(inner_text)
+                                    last_self_sentiment = (
+                                        sentiment_to_social_signal(
+                                            inner_sent)[:8].astype(np.float32))
+                                # 冷却: 概率越低冷却越久
+                                inner_cooldown = max(
+                                    3, int(10 * (1.0 - proactive_prob)))
+
+                    t += 1
+                    self.n_turns += 1
                     continue
+
+                # v6.6: 有输入时重置空闲计数
+                self._idle_steps = 0
 
                 if human_text.lower() == 'exit':
                     # v6.0: 退出前跨会话巩固 + 保存

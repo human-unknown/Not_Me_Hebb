@@ -1,5 +1,5 @@
 """
-scn.py — 视交叉上核 (Suprachiasmatic Nucleus) [v6.3]
+scn.py — 视交叉上核 (Suprachiasmatic Nucleus) [v6.3, doc v6.6]
 
 对应脑区: 下丘脑前部 — 视交叉上核 (SCN)
 所属层级: 大脑 → 边缘系统 → SCN
@@ -16,6 +16,30 @@ scn.py — 视交叉上核 (Suprachiasmatic Nucleus) [v6.3]
   2. Process S: 觉醒期累积 + 睡眠期清除
   3. Photoentrainment: 光照 → PER 上调 → 相位重置
   4. 输出: circadian_phase, melatonin, cortisol, sleep_propensity
+
+═══ SCN 时间 — 用户友好说明 (v6.6) ═══
+
+SCN 是 Agent 的内置生物钟, 模拟人类 ~24h 昼夜节律:
+  • 2880 Agent Steps = 1 昼夜 (1 step ≈ 30s)
+  • 相位 0 (0h/24h) = 主观午夜 — 褪黑素高峰 😴
+  • 相位 π/2 (6h)    = 主观清晨 — 皮质醇高峰, 自然醒来 🌅
+  • 相位 π (12h)     = 主观正午 — 最高警觉 ☀
+  • 相位 3π/2 (18h)  = 主观傍晚 — 开始困倦 🌆
+
+节律输出:
+  - melatonin (褪黑素):     夜间↑ → 促睡眠, 促 VLPO 激活
+  - cortisol (皮质醇):      清晨↑ → 促觉醒, 促 HPA 轴
+  - sleep_pressure (Process S): 觉醒累积 → 睡眠清除
+  - sleep_propensity:       综合睡眠倾向 (高→VLPO 易翻转→睡眠)
+
+对 Agent 行为的影响:
+  - 睡眠期间: Agent 只做内部巩固 (记忆回放+修剪), 不对外输出
+  - 高皮质醇 + 低褪黑素: 学习率高, 探索倾向强
+  - 高褪黑素: 学习率低, 倾向保守/休息
+  - 睡眠剥夺 (高 Process S + 强光): 认知疲劳 → F_cognitive↑
+
+UI 显示 (Header):
+  SCN 0h🌙 = 午夜 | SCN 6h🌅 = 清晨 | SCN 12h☀ = 正午 | SCN 18h🌆 = 傍晚
 
 设计参考:
   - Takahashi, J. S. (2017). Transcriptional architecture of the mammalian circadian clock.
@@ -59,6 +83,7 @@ CORTISOL_SHARPNESS = 2.5            # 皮质醇节律陡峭度
 
 # 步数→昼夜时间映射
 STEPS_PER_CIRCADIAN_DAY = 2880     # 1 step ≈ 30s → 2880 steps = 24h
+STEPS_PER_HOUR = STEPS_PER_CIRCADIAN_DAY / 24  # 120 steps = 1 hour
 
 
 class TTFL:
@@ -347,8 +372,24 @@ class SCN:
         return float(phase / (2.0 * np.pi))
 
     def get_hour(self) -> float:
-        """返回近似小时 [0, 24)."""
+        """返回近似小时 [0, 24) — 基于 TTFL 分子钟相位."""
         return self.get_time_of_day() * 24.0
+
+    @staticmethod
+    def get_reliable_hour(total_steps: int) -> float:
+        """返回可靠的 24 小时制时间 [0, 24) — 基于步数线性映射.
+
+        2880 steps = 24 hours, 120 steps = 1 hour.
+        不会卡住或倒计时, 适合 UI 显示.
+
+        Args:
+            total_steps: Agent 累计步数 (从 meta.step_count)
+
+        Returns:
+            小时 [0.0, 24.0) — 0=午夜, 6=清晨, 12=正午, 18=傍晚
+        """
+        steps_in_day = total_steps % STEPS_PER_CIRCADIAN_DAY
+        return steps_in_day / STEPS_PER_HOUR
 
     def reset(self):
         self.ttfl.reset()

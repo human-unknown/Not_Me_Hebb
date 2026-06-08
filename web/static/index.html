@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NOTME v6.5 — 自由能原理情感智能体</title>
+<title>NOTME v6.6 — 自由能原理情感智能体</title>
 <style>
 /* ============================================================
    Design System — Neo-Futurist Cyber-Bio CSS Variables
@@ -682,7 +682,7 @@ body::after {
 <div class="header">
   <div class="header-brand">
     <span class="header-dot awake-pulse" id="hdrDot"></span>
-    NOTME v6.5
+    NOTME v6.6
   </div>
 
   <!-- Developmental Age -->
@@ -694,8 +694,8 @@ body::after {
   <span class="header-tag idle" id="hdrTag">IDLE</span>
 
   <div class="header-info">
-    <span><span class="hi-dot" style="background:var(--accent-yellow)"></span><span id="hdrTime">--:--</span></span>
-    <span><span class="hi-dot" style="background:var(--accent-cyan)"></span><span id="hdrUptime">0</span> steps</span>
+    <span title="SCN时间 — Agent生物钟 (视交叉上核): 🌙0-6h夜间 🌅6-9h清晨 ☀9-18h白天 🌆18-22h傍晚"><span class="hi-dot" style="background:var(--accent-yellow)"></span><span id="hdrTime">--:--</span></span>
+    <span title="Step计数 — Agent已运行的内部步数, 从存档恢复"><span class="hi-dot" style="background:var(--accent-cyan)"></span><span id="hdrUptime">0</span> steps</span>
     <span><span class="hi-dot" style="background:var(--accent-purple)"></span><span id="hdrSleepLabel">AWAKE</span></span>
   </div>
 </div>
@@ -727,8 +727,16 @@ body::after {
     <div class="chat-input-area">
       <input id="chatInput" placeholder="输入消息，Enter 发送..." autofocus>
       <button class="btn btn-send" onclick="sendChat()">发送</button>
-      <button class="btn btn-read" onclick="startReading()" title="开始阅读">▸</button>
+      <button class="btn btn-read" onclick="startReading()" title="拖入或选择文件 (.txt .md .jpg .png .wav)">📂</button>
       <button class="btn btn-stop" onclick="stopReading()" title="停止阅读">■</button>
+      <!-- v6.6: 隐藏文件输入, 支持拖入 -->
+      <input type="file" id="fileInput" style="display:none"
+             accept=".txt,.md,.csv,.json,.log,.py,.yaml,.yml,.jpg,.jpeg,.png,.bmp,.gif,.wav,.mp3,.flac,.ogg"
+             onchange="handleFileDrop(this.files)">
+      <div id="dropZone"
+           style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,180,255,0.15);border:3px dashed var(--accent-cyan);display:none;align-items:center;justify-content:center;font-size:24px;color:var(--accent-cyan);pointer-events:none">
+        📂 释放文件以加载
+      </div>
     </div>
   </div>
 
@@ -1045,17 +1053,17 @@ function updateHeader() {
   const alpha = 0.15 + stage * 0.05;
   document.getElementById('hdrAge').style.background = `rgba(153,102,255,${alpha})`;
 
-  // SCN time
-  const phase = state.circadian?.phase || 0;
-  const hours = ((phase / (Math.PI*2) * 24 + 6) % 24);
-  const h = Math.floor(hours);
-  const m = Math.floor((hours - h) * 60);
+  // SCN time (v6.6: use scn_hour directly)
+  const scnHour = state.scn_hour ?? (state.circadian?.scn_hour || 0);
+  const h = Math.floor(scnHour);
+  const m = Math.floor((scnHour - h) * 60);
+  const icon = (scnHour < 6 || scnHour >= 22) ? '🌙' : (scnHour < 9 ? '🌅' : (scnHour < 18 ? '☀' : '🌆'));
   document.getElementById('hdrTime').textContent =
-    `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}${icon}`;
 
-  // Steps
+  // Steps (v6.6: from agent.meta.step_count via session.total_steps)
   const steps = state.session?.total_steps || 0;
-  document.getElementById('hdrUptime').textContent = `${steps} steps`;
+  document.getElementById('hdrUptime').textContent = `${steps.toLocaleString()} steps`;
 
   // Sleep state label
   let slLabel = 'AWAKE', slColor = 'var(--accent-green)';
@@ -1364,7 +1372,18 @@ function drawNeuroGauge(canvasId, gauge) {
 // Visual Panel
 // ============================================================
 function updateVisChannels(vis) {
-  document.getElementById('visBadge').textContent = vis.has_frame ? '摄像头' : '语义代理';
+  // v6.6: 更新badge包含视觉模式说明
+  const reason = vis.vis_reason || '';
+  if (vis.has_frame) {
+    document.getElementById('visBadge').textContent = '摄像头';
+  } else if (reason === 'empty_network') {
+    document.getElementById('visBadge').textContent = '空网络';
+  } else if (reason === 'no_visual_in_cluster') {
+    document.getElementById('visBadge').textContent = '无视觉特征';
+  } else {
+    document.getElementById('visBadge').textContent = '语义代理';
+  }
+
   const channels = [
     { k: 'v1', label: 'V1', color: '#4488ff' },
     { k: 'v2', label: 'V2', color: '#00e676' },
@@ -1372,8 +1391,10 @@ function updateVisChannels(vis) {
     { k: 'it', label: 'IT', color: '#9966ff' },
   ];
   let html = '';
+  let allZero = true;
   channels.forEach(ch => {
     const val = vis[ch.k + '_mean'] || 0;
+    if (val > 0.001) allZero = false;
     const pct = Math.min(100, val * 100);
     html += `<div class="vis-ch-row">
       <span class="ch-label">${ch.label}</span>
@@ -1381,6 +1402,13 @@ function updateVisChannels(vis) {
       <span class="ch-val">${val.toFixed(2)}</span>
     </div>`;
   });
+  // v6.6: 全零时显示解释
+  if (allZero && !vis.has_frame) {
+    let tip = '拖入图片建立视觉经验';
+    if (reason === 'empty_network') tip = '先对话建立网络, 或拖入图片';
+    else if (reason === 'no_visual_in_cluster') tip = '记忆无视觉特征 — 拖入图片';
+    html += `<div style="font-size:8px;color:var(--text-muted);margin-top:2px;text-align:center;opacity:0.6">💡 ${tip}</div>`;
+  }
   document.getElementById('visChannels').innerHTML = html;
 }
 
@@ -1594,10 +1622,13 @@ function updateCircadian() {
   const c = state.circadian || {};
   const s = state.sleep || {};
 
+  // v6.6: Add SCN hour label
+  const scnH = state.scn_hour ?? (c.scn_hour || 0);
+  const scnIcon = (scnH < 6 || scnH >= 22) ? '🌙' : (scnH < 9 ? '🌅' : (scnH < 18 ? '☀' : '🌆'));
   document.getElementById('melVal').textContent = (c.melatonin||0).toFixed(2);
   document.getElementById('corVal').textContent = (c.cortisol||0).toFixed(2);
   document.getElementById('spVal').textContent = (c.sleep_pressure||0).toFixed(2);
-  document.getElementById('spropVal').textContent = (c.sleep_propensity||0).toFixed(2);
+  document.getElementById('spropVal').textContent = `SCN ${scnH.toFixed(0)}h${scnIcon}`;
 
   const badge = document.getElementById('sleepBadge');
   if (s.is_rem) { badge.textContent = 'REM'; badge.style.color = 'var(--rem)'; }
@@ -1858,12 +1889,28 @@ function updateReading() {
 // ============================================================
 // Chat
 // ============================================================
+// v6.6: 追踪独白消息避免重复显示
+let _lastMonologueText = '';
 function updateChatPlaceholder() {
   const input = document.getElementById('chatInput');
   if (!input.value && document.activeElement !== input) {
     const idx = Math.floor(Date.now() / 4000) % PLACEHOLDERS.length;
     input.placeholder = PLACEHOLDERS[idx];
   }
+  // v6.6: 检测新独白/主动发言 (Agent 自主产生的言语)
+  const mono = state.last_monologue || '';
+  if (mono && mono !== _lastMonologueText && mono.trim()) {
+    _lastMonologueText = mono;
+    // 只显示情感显著或足够长的独白
+    const v = state.valence || 0;
+    const a = state.arousal || 0;
+    if (mono.length > 3 && (Math.abs(v) > 0.15 || a > 0.4 || mono.length > 15)) {
+      const icon = v > 0.1 ? '😊' : (v < -0.1 ? '😟' : '💭');
+      addChatMsg('agent', icon + ' ' + mono);
+    }
+  }
+  // 周期性重置检测 (如果 agent 清空了独白)
+  if (!mono) _lastMonologueText = '';
 }
 
 async function sendChat() {
@@ -1906,22 +1953,63 @@ document.getElementById('chatInput').addEventListener('keydown', (e) => {
 // Reading Controls
 // ============================================================
 async function startReading() {
-  const path = prompt('Input text file path:', '');
-  if (!path) return;
+  // v6.6: 打开文件选择器 (支持拖入的文件)
+  document.getElementById('fileInput').click();
+}
+
+// v6.6: 处理文件拖入
+async function handleFileDrop(files) {
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+
+  addChatMsg('agent', '📂 加载中: ' + file.name + '...');
   try {
-    const resp = await fetch('/api/reading/start', {
+    const resp = await fetch('/api/reading/upload', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_path: path }),
+      body: formData,
     });
     const data = await resp.json();
-    if (data.error) alert(data.error);
-    else addChatMsg('agent', '[READ] ' + (data.file_name || '') +
-      ' (' + data.total_sentences + ' sentences)');
+    if (data.error) {
+      addChatMsg('agent', '❌ 错误: ' + data.error);
+    } else if (data.type === 'image') {
+      addChatMsg('agent', '🖼 图像已加载: ' + data.filename + ' → 视觉管线');
+    } else if (data.type === 'audio') {
+      addChatMsg('agent', '🎵 音频已加载: ' + data.filename + ' (' + (data.duration || 0).toFixed(1) + 's) → 听觉管线');
+    } else {
+      addChatMsg('agent', '📄 已加载: ' + data.filename + ' (' + data.chars + ' chars, ' + (data.total_sentences || '?') + ' sentences)');
+    }
   } catch (e) {
-    alert('Error: ' + e);
+    addChatMsg('agent', '❌ 网络错误: ' + e);
   }
 }
+
+// v6.6: 全局拖放事件 (允许拖入文件到页面任意位置)
+let _dragCounter = 0;
+document.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  _dragCounter++;
+  if (_dragCounter === 1) {
+    document.getElementById('dropZone').style.display = 'flex';
+  }
+});
+document.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  _dragCounter--;
+  if (_dragCounter === 0) {
+    document.getElementById('dropZone').style.display = 'none';
+  }
+});
+document.addEventListener('dragover', (e) => { e.preventDefault(); });
+document.addEventListener('drop', (e) => {
+  e.preventDefault();
+  _dragCounter = 0;
+  document.getElementById('dropZone').style.display = 'none';
+  if (e.dataTransfer.files.length > 0) {
+    handleFileDrop(e.dataTransfer.files);
+  }
+});
 
 async function stopReading() {
   await fetch('/api/reading/stop', { method: 'POST' });
