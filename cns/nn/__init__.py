@@ -27,6 +27,11 @@ from cns.nn.interfaces import (
     PerceptionEncoder,
 )
 
+# Phase B: concrete encoder implementations
+from cns.nn.text_encoder import TrainableTextEncoder
+from cns.nn.visual_encoder import TrainableVisualEncoder
+from cns.nn.audio_encoder import TrainableAudioEncoder
+
 __all__ = [
     # Config
     "NNConfig",
@@ -45,4 +50,8 @@ __all__ = [
     "VisualEncoder",
     "AudioEncoder",
     "PerceptionEncoder",
+    # Phase B: concrete encoders
+    "TrainableTextEncoder",
+    "TrainableVisualEncoder",
+    "TrainableAudioEncoder",
 ]

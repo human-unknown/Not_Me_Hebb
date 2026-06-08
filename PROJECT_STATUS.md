@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v7.0-dev — Phase A: 神经网络支撑层
+> **版本**: v7.1-dev — Phase B: 感知层替换 (学习特征提取)
 > **日期**: 2026-06-08
-> **基于**: v6.6 全面代码审计 + Phase A 完成
+> **基于**: v6.6 全面代码审计 + Phase A 基础架构 + Phase B 感知编码器
 
 ---
 
@@ -31,6 +31,7 @@
 | **v6.5** | **2026-06-07** | **前端新未来主义重构 + 无现象学修复 + 睡眠节奏调整 + 发育年龄显示** |
 | **v6.6** | **2026-06-08** | **持久化修复 (step/视觉/F_social) + 版本统一 + 异常traceback + Web安全 + CHANGELOG + 无LLM原则移除** |
 | **v7.0-dev** | **2026-06-08** | **Phase A: NN支撑层 (PyTorch 基础设施) + ML改造蓝图** |
+| **v7.1-dev** | **2026-06-08** | **Phase B: 感知层替换 — TrainableTextEncoder + TrainableVisualEncoder + TrainableAudioEncoder** |
 
 ---
 
@@ -40,12 +41,13 @@
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ★ 已实现 (含 v6.6 新增) | **67** | 68% |
+| ★ 已实现 (含 v7.1 新增) | **70** | 69% |
 | ○ 占位 (接口设计完成, 待实现代码) | 10 | 10% |
 | — 配置/工具/入口/基础设施 | 21 | 21% |
-| **合计** | **98** | **100%** |
+| **合计** | **101** | **100%** |
 
 > v7.0 Phase A: +5 个 `cns/nn/` 基础设施模块 (config/base/bridge/interfaces/__init__)
+> v7.1 Phase B: +3 个 `cns/nn/` 感知编码器 (text_encoder/visual_encoder/audio_encoder)
 
 ### 按脑区
 
@@ -334,7 +336,7 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 
 ---
 
-## 技术参数 (v7.0 当前)
+## 技术参数 (v7.1 当前)
 
 | 参数 | 值 |
 |------|-----|
@@ -349,8 +351,9 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 | 模块总数 | **98** (+5 `cns/nn/` Phase A) |
 | 已实现核心模块 | **67 (68%)** |
 | NN 参数 (v7.0) | **10** (device/dtype/training/lr/grad_clip + 4×module_lr + log) |
+| NN 编码器 (v7.1) | **3** (Text: 2层Transformer ~2M / Visual: 4层CNN ~1M / Audio: 3层CNN ~0.6M) |
 | 语料规模 | 0 (纯净模式, 零预训练) |
-| 测试通过 | **83/83 (100%)** |
+| 测试通过 | **123/123 (100%)** |
 
 ---
 
@@ -580,9 +583,9 @@ Process S 清除到 < threshold−hysteresis → VLPO 失活 → 觉醒
 - ✅ 39 个单元测试全部通过
 
 ### Phase B: 感知层替换 (v7.1)
-- ⬜ 可训练文本编码器 (替换MiniLM→PCA)
-- ⬜ 可训练视觉编码器 (替换Gabor滤波)
-- ⬜ 可训练听觉编码器 (替换Mel管线)
+- ✅ 可训练文本编码器 (替换MiniLM→PCA) — TrainableTextEncoder: 2层Transformer, char-level, MLM预训练, 64d
+- ✅ 可训练视觉编码器 (替换Gabor滤波) — TrainableVisualEncoder: 4层CNN + 7头子通路, 308d
+- ✅ 可训练听觉编码器 (替换Mel管线) — TrainableAudioEncoder: 3层CNN on Mel + 4头子模块, 96d
 
 ### Phase C: 记忆层升级 (v7.2)
 - ⬜ 神经语义记忆 (向量DB + embedding)
@@ -882,7 +885,7 @@ v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量
 | `requirements-dev.txt` | **NEW** — 开发依赖 |
 | `PROJECT_STATUS.md` | 更新到 v6.6 |
 
-### 测试结果 (v7.0-dev Phase A)
+### 测试结果 (v7.1-dev Phase B)
 
 | 测试套件 | 通过/总数 | 状态 |
 |----------|----------|------|
@@ -891,9 +894,9 @@ v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量
 | test_v6_1_development | 7/7 | ✅ |
 | test_v6_2_memory | 6/6 | ✅ |
 | test_lgn | 5/5 | ✅ |
-| test_nn_base | 39/39 | ✅ ★ NEW (Phase A) |
-| v6_acceptance | 8/8 | ✅ |
-| **总计** | **83/83 (100%)** | ✅ |
+| test_nn_base | 39/39 | ✅ (Phase A) |
+| test_nn_encoders | 48/48 | ✅ ★ NEW (Phase B) |
+| **总计** | **123/123 (100%)** | ✅ |
 
 ### Phase A 交付物
 
@@ -922,4 +925,4 @@ v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量
 
 ---
 
-*由 v7.0-dev Phase A 更新 · 83/83 测试通过 · Phase B (感知层替换) 为下一里程碑*
+*由 v7.1-dev Phase B 更新 · 123/123 测试通过 · Phase C (记忆层升级) 为下一里程碑*

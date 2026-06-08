@@ -1,5 +1,27 @@
 # NotMe Changelog
 
+## v7.1-dev (2026-06) — Phase B: 感知层替换 (学习特征提取)
+
+### Phase B: 感知编码器 (2026-06-08)
+- 新增 `cns/nn/text_encoder.py` — TrainableTextEncoder
+  - 2层 char-level Transformer (d_model=128, nhead=4, max_len=128)
+  - MLM 预训练 on corpus.txt → 64-dim L2-normalized 输出
+  - 字符级 tokenization (~5000 字表, 4 特殊 token)
+  - 替换: MiniLM-L6-v2 (384d) → PCA (64d) 外部模型
+- 新增 `cns/nn/visual_encoder.py` — TrainableVisualEncoder
+  - 4层 CNN backbone (3→32→64→128→256) + 7 头子通路投影
+  - 子通路: M(96), P(112), K(48), IT(16), SC(16), Pulvinar(12), Binding(8) = 308d
+  - 自动编码器训练 (reconstruction MSE)
+  - 替换: Gabor 滤波 V1→V2→V4→IT 手写管线
+- 新增 `cns/nn/audio_encoder.py` — TrainableAudioEncoder
+  - 3层 CNN on Mel spectrogram (1→32→64→128) + 4 头子模块投影
+  - 子模块: CN(32), SOC(24), IC(24), AC(16) = 96d
+  - scipy Mel 计算 (torchaudio 备选)
+  - 替换: Mel→耳蜗核→SOC→IC→AC 手写管线
+- 更新 `cns/nn/__init__.py` — +TrainableTextEncoder / +TrainableVisualEncoder / +TrainableAudioEncoder
+- 新增 48 个编码器测试 (`tests/test_nn_encoders.py`)
+- 保持 Agent.step() / FEP / 身体稳态 / 睡眠系统 零修改
+
 ## v7.0-dev (2026-06) — Phase A: 神经网络支撑层
 
 ### Phase A: 基础架构 (2026-06-08)
