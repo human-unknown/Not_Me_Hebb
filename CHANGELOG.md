@@ -1,5 +1,27 @@
 # NotMe Changelog
 
+## v7.2-dev (2026-06) — Phase C: 记忆层升级 (神经记忆 + 跨模态对比学习)
+
+### Phase C: 记忆层 (2026-06-08)
+- 新增 `cns/nn/semantic_store.py` — NeuralSemanticStore
+  - FAISS/numpy 向量数据库, 支持 ANN 检索 (cosine similarity)
+  - 使用 TrainableTextEncoder 编码文本 → 64d L2-normalized embedding
+  - 元数据管理: {text, valence, arousal, timestamp, source, count}
+  - 重复检测 (自动合并), 容量驱逐, 年龄遗忘
+  - 批量插入, 索引重建, save/load 持久化
+  - 补充 (非替换) Hebb SemanticMemory — 双系统架构
+- 新增 `cns/nn/crossmodal_nn.py` — CrossModalNN
+  - CLIP 式对比学习: Text(64d)→Linear→128d 与 Visual(308d)→Linear→128d 共享空间
+  - InfoNCE 对称损失 (温度 τ=0.07), 精度追踪
+  - freeze_encoders 模式 (默认冻结, 仅训练投影头 ~50K 参数)
+  - Text→Image 和 Image→Text 检索
+  - 余弦相似度矩阵计算
+  - 补充 (非替换) Hebb crossmodal.py — 双系统架构
+- 更新 `cns/nn/__init__.py` — +NeuralSemanticStore / +CrossModalNN
+- 新增 37 个记忆层测试 (`tests/test_nn_memory.py`)
+- 纹状体 RL 保留为简单 D1/D2 (per 蓝图: "保留为简单RL")
+- 保持 Agent.step() / FEP / 身体稳态 / 睡眠系统 零修改
+
 ## v7.1-dev (2026-06) — Phase B: 感知层替换 (学习特征提取)
 
 ### Phase B: 感知编码器 (2026-06-08)

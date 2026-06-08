@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v7.1-dev — Phase B: 感知层替换 (学习特征提取)
+> **版本**: v7.2-dev — Phase C: 记忆层升级 (神经记忆 + 跨模态对比学习)
 > **日期**: 2026-06-08
-> **基于**: v6.6 全面代码审计 + Phase A 基础架构 + Phase B 感知编码器
+> **基于**: v6.6 全面代码审计 + Phase A 基础架构 + Phase B 感知编码器 + Phase C 记忆层
 
 ---
 
@@ -32,6 +32,7 @@
 | **v6.6** | **2026-06-08** | **持久化修复 (step/视觉/F_social) + 版本统一 + 异常traceback + Web安全 + CHANGELOG + 无LLM原则移除** |
 | **v7.0-dev** | **2026-06-08** | **Phase A: NN支撑层 (PyTorch 基础设施) + ML改造蓝图** |
 | **v7.1-dev** | **2026-06-08** | **Phase B: 感知层替换 — TrainableTextEncoder + TrainableVisualEncoder + TrainableAudioEncoder** |
+| **v7.2-dev** | **2026-06-08** | **Phase C: 记忆层升级 — NeuralSemanticStore (向量DB) + CrossModalNN (对比学习)** |
 
 ---
 
@@ -41,13 +42,14 @@
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ★ 已实现 (含 v7.1 新增) | **70** | 69% |
+| ★ 已实现 (含 v7.2 新增) | **72** | 70% |
 | ○ 占位 (接口设计完成, 待实现代码) | 10 | 10% |
-| — 配置/工具/入口/基础设施 | 21 | 21% |
-| **合计** | **101** | **100%** |
+| — 配置/工具/入口/基础设施 | 21 | 20% |
+| **合计** | **103** | **100%** |
 
 > v7.0 Phase A: +5 个 `cns/nn/` 基础设施模块 (config/base/bridge/interfaces/__init__)
 > v7.1 Phase B: +3 个 `cns/nn/` 感知编码器 (text_encoder/visual_encoder/audio_encoder)
+> v7.2 Phase C: +2 个 `cns/nn/` 记忆层模块 (semantic_store/crossmodal_nn)
 
 ### 按脑区
 
@@ -349,11 +351,12 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 | 记忆系统 | **6** (情景+语义+程序性+情感+自我+工作记忆) |
 | 独立 ClusterNetwork 实例 | **8** (agent.net, self_model.net, AF.ventral, AF.dorsal, AG.grapheme_to_phoneme, TPJ.speaker_net, TPJ.intent_net, semantic_memory.net) |
 | 模块总数 | **98** (+5 `cns/nn/` Phase A) |
-| 已实现核心模块 | **67 (68%)** |
+| 已实现核心模块 | **69 (68%)** |
 | NN 参数 (v7.0) | **10** (device/dtype/training/lr/grad_clip + 4×module_lr + log) |
 | NN 编码器 (v7.1) | **3** (Text: 2层Transformer ~2M / Visual: 4层CNN ~1M / Audio: 3层CNN ~0.6M) |
+| NN 记忆层 (v7.2) | **2** (SemanticStore: FAISS/numpy向量DB / CrossModalNN: 共享投影+InfoNCE ~50K) |
 | 语料规模 | 0 (纯净模式, 零预训练) |
-| 测试通过 | **123/123 (100%)** |
+| 测试通过 | **160/160 (100%)** |
 
 ---
 
@@ -588,9 +591,9 @@ Process S 清除到 < threshold−hysteresis → VLPO 失活 → 觉醒
 - ✅ 可训练听觉编码器 (替换Mel管线) — TrainableAudioEncoder: 3层CNN on Mel + 4头子模块, 96d
 
 ### Phase C: 记忆层升级 (v7.2)
-- ⬜ 神经语义记忆 (向量DB + embedding)
-- ⬜ 跨模态对比学习 (CLIP式)
-- ⬜ 纹状体RL升级
+- ✅ 神经语义记忆 (NeuralSemanticStore — FAISS/numpy向量DB)
+- ✅ 跨模态对比学习 (CrossModalNN — CLIP式 InfoNCE)
+- — 纹状体RL (保留简单RL per 蓝图)
 
 ### Phase D: 语言系统重铸 (v7.3)
 - ⬜ 神经Wernicke理解模块
@@ -895,8 +898,9 @@ v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量
 | test_v6_2_memory | 6/6 | ✅ |
 | test_lgn | 5/5 | ✅ |
 | test_nn_base | 39/39 | ✅ (Phase A) |
-| test_nn_encoders | 48/48 | ✅ ★ NEW (Phase B) |
-| **总计** | **123/123 (100%)** | ✅ |
+| test_nn_encoders | 48/48 | ✅ (Phase B) |
+| test_nn_memory | 37/37 | ✅ ★ NEW (Phase C) |
+| **总计** | **160/160 (100%)** | ✅ |
 
 ### Phase A 交付物
 
@@ -925,4 +929,4 @@ v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量
 
 ---
 
-*由 v7.1-dev Phase B 更新 · 123/123 测试通过 · Phase C (记忆层升级) 为下一里程碑*
+*由 v7.2-dev Phase C 更新 · 160/160 测试通过 · Phase D (语言系统重铸) 为下一里程碑*
