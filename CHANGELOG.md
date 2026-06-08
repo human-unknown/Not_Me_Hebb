@@ -1,5 +1,31 @@
 # NotMe Changelog
 
+## v7.3-dev (2026-06) — Phase D: 语言系统重铸 (神经语言模型)
+
+### Phase D: 语言层 (2026-06-08)
+- 新增 `cns/nn/language_model.py` — NeuralGenerator
+  - Char-level 自回归 Transformer 解码器 (GPT 式, d_model=256, 4层, 8头, ~5M参数)
+  - 因果自注意力 + 输出投影 (weight tying with input embedding)
+  - Valence/Arousal 情感条件生成 (特殊 token: [V_POS]/[V_NEG]/[A_HIGH]/[A_LOW])
+  - Temperature + top-k 采样解码, 确定性种子
+  - 语料预训练 (next-char CE loss + perplexity)
+  - 替换: Broca trigram Hebb 链 — 补充 (非替换) 双系统架构
+- 新增 `cns/nn/comprehender.py` — NeuralComprehender
+  - 记忆增强文本理解: text encoder + memory cross-attention
+  - N400 = 1-cosine_sim(input, predicted) — 语义预测误差
+  - P600 = char 熵 + 长度因子 — 句法处理成本 (占位)
+  - 上下文窗口 (EMA + 时间衰减) + 记忆融合 (加权混合)
+  - 替换: Wernicke 记忆检索理解 — 补充 (非替换) 双系统架构
+- 新增 `cns/nn/angular_gyrus_nn.py` — NeuralAngularGyrus
+  - 2×Conv1d seq2vec 模型 (64→128→256 + GlobalAvgPool, ~200K参数)
+  - 字符序列 → 音素/发音特征向量 (64-dim)
+  - 配对训练 MSE (char_seqs, phoneme_vecs)
+  - 替换: Hebb AngularGyrus (grapheme_to_phoneme) — 补充 (非替换) 双系统架构
+- 更新 `cns/nn/__init__.py` — +NeuralGenerator / +NeuralComprehender / +NeuralAngularGyrus
+- 新增 40 个语言层测试 (`tests/test_nn_language.py`)
+- PhraseStructure / PhonologicalLoop / ArcuateFasciculus 保留不变
+- 保持 Agent.step() / FEP / 身体稳态 / 睡眠系统 零修改
+
 ## v7.2-dev (2026-06) — Phase C: 记忆层升级 (神经记忆 + 跨模态对比学习)
 
 ### Phase C: 记忆层 (2026-06-08)

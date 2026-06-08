@@ -1,18 +1,21 @@
 """
-cns.nn — 神经网络支撑层 (v7.2 Phase C)
+cns.nn — 神经网络支撑层 (v7.3 Phase D)
 
-提供 PyTorch 基础设施，使感知层和记忆层可以运行神经网络。
+提供 PyTorch 基础设施，使感知层、记忆层和语言层可以运行神经网络。
 
 模块:
-  - config.py:         NNConfig — 全局配置 (device, dtype, model_dir, training开关)
-  - base.py:           NeuralModule — 所有ML模块的抽象基类
-  - bridge.py:         numpy↔tensor 桥接 + 自动设备检测
-  - interfaces.py:     TextEncoder / VisualEncoder / AudioEncoder 抽象接口
-  - text_encoder.py:   TrainableTextEncoder (Phase B)
-  - visual_encoder.py: TrainableVisualEncoder (Phase B)
-  - audio_encoder.py:  TrainableAudioEncoder (Phase B)
-  - semantic_store.py: NeuralSemanticStore (Phase C)
-  - crossmodal_nn.py:  CrossModalNN (Phase C)
+  - config.py:           NNConfig — 全局配置 (device, dtype, model_dir, training开关)
+  - base.py:             NeuralModule — 所有ML模块的抽象基类
+  - bridge.py:           numpy↔tensor 桥接 + 自动设备检测
+  - interfaces.py:       TextEncoder / VisualEncoder / AudioEncoder 抽象接口
+  - text_encoder.py:     TrainableTextEncoder (Phase B)
+  - visual_encoder.py:   TrainableVisualEncoder (Phase B)
+  - audio_encoder.py:    TrainableAudioEncoder (Phase B)
+  - semantic_store.py:   NeuralSemanticStore (Phase C)
+  - crossmodal_nn.py:    CrossModalNN (Phase C)
+  - language_model.py:   NeuralGenerator (Phase D)
+  - comprehender.py:     NeuralComprehender (Phase D)
+  - angular_gyrus_nn.py: NeuralAngularGyrus (Phase D)
 """
 
 from cns.nn.config import NNConfig, DEFAULT_NN_CONFIG
@@ -41,6 +44,11 @@ from cns.nn.audio_encoder import TrainableAudioEncoder
 from cns.nn.semantic_store import NeuralSemanticStore
 from cns.nn.crossmodal_nn import CrossModalNN
 
+# Phase D: language system
+from cns.nn.language_model import NeuralGenerator
+from cns.nn.comprehender import NeuralComprehender
+from cns.nn.angular_gyrus_nn import NeuralAngularGyrus
+
 __all__ = [
     # Config
     "NNConfig",
@@ -66,4 +74,8 @@ __all__ = [
     # Phase C: memory layer
     "NeuralSemanticStore",
     "CrossModalNN",
+    # Phase D: language system
+    "NeuralGenerator",
+    "NeuralComprehender",
+    "NeuralAngularGyrus",
 ]
