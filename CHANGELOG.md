@@ -1,5 +1,48 @@
 # NotMe Changelog
 
+## v7.4-dev (2026-06) — Phase E: 训练与体验闭环 (训练编排器 + 可观察指标)
+
+### Phase E: 训练与体验闭环 (2026-06-08)
+- 新增 `cns/nn/trainer.py` — Trainer
+  - 统一训练编排器, 替代各模块重复的 pretrain() boilerplate
+  - `register(module)` — 注册 NeuralModule 进行训练
+  - `pretrain(module_name, corpus)` — 多 epoch 预训练 (shuffle + batch + progress + LR调度)
+  - `pretrain_all(corpus, configs)` — 顺序预训练所有已注册模块
+  - `online_finetune(module_name, batch)` — 对话中单步低 LR 微调 (独立优化器)
+  - `save_checkpoint(dir)` / `load_checkpoint(dir)` — 统一 checkpoint 管理 (所有模块 + trainer 状态)
+  - `get_summary()` — 跨所有模块的训练摘要
+  - LR 调度支持: cosine annealing / step decay / none
+  - 回调模式: `callback(epoch, batch_idx, losses)` 供 UI 进度报告
+  - 不替代模块自带的 pretrain() — 双向兼容
+- 新增 `cns/nn/metrics.py` — ExperienceTracker + TrainingMetrics
+  - **ExperienceTracker**: 可观察指标追踪
+    - `record_step(**metrics)` — 灵活记录任意步指标 (F_body/valence/arousal/...)
+    - `record_dialogue_turn(user, response, metrics)` — 完整对话轮次记录
+    - `get_summary(window)` — 最近 N 步摘要 (avg F/valence/arousal/response)
+    - `get_trends(window)` — 趋势分析 (improving/stable/declining, 线性回归斜率)
+    - `to_csv(path)` / `to_json(path)` — CSV/JSON 导出 (兼容 telemetry.py)
+    - `from_json(path)` — 从 JSON 恢复
+    - 字符级词汇追踪 (中文适配) + 用户词频统计 (个性化)
+    - `get_user_profile()` — 个性化偏好分析
+  - **TrainingMetrics**: 轻量训练进度追踪
+    - loss/ppl/LR 历史 + EMA 平滑
+    - `is_improving()` / `is_converged()` — 改进/收敛检测
+    - `get_best()` — 最佳 loss + epoch
+    - `reset()` — 全部指标重置
+- 更新 `cns/nn/config.py` — +4 训练配置字段
+  - `pretrain_epochs: int = 10` — 默认预训练 epoch 数
+  - `online_lr: float = 1e-4` — 在线微调学习率 (远低于预训练)
+  - `lr_scheduler: str = "none"` — LR 调度策略 ("cosine"/"step"/"none")
+  - `checkpoint_interval: int = 5` — 每 N 个 epoch 保存 checkpoint
+- 更新 `cns/nn/__init__.py` — +Trainer / +ExperienceTracker / +TrainingMetrics
+- 新增 54 个训练层测试 (`tests/test_nn_training.py`)
+  - TestTrainer: 20 测试 (init/register/pretrain/callback/online/checkpoint/summary/pretrain_all/...)
+  - TestExperienceTracker: 16 测试 (init/record/summary/trends/vocab/profile/export/roundtrip/...)
+  - TestTrainingMetrics: 11 测试 (init/record/is_improving/is_converged/get_best/reset/...)
+  - TestIntegration: 7 测试 (trainer+tracker/full_pretrain/online_flow/persistence/trainable/version/config)
+- 保持 Agent.step() / FEP / 身体稳态 / 睡眠系统 零修改
+- 保持已有模块 pretrain() 方法不变 — Trainer 调用 module.train_step() 内部
+
 ## v7.3-dev (2026-06) — Phase D: 语言系统重铸 (神经语言模型)
 
 ### Phase D: 语言层 (2026-06-08)

@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v7.3-dev — Phase D: 语言系统重铸 (神经语言模型)
+> **版本**: v7.4-dev — Phase E: 训练与体验闭环 (训练编排器 + 可观察指标)
 > **日期**: 2026-06-08
-> **基于**: v6.6 全面代码审计 + Phase A 基础架构 + Phase B 感知编码器 + Phase C 记忆层 + Phase D 语言层
+> **基于**: v6.6 全面代码审计 + Phase A 基础架构 + Phase B 感知编码器 + Phase C 记忆层 + Phase D 语言层 + Phase E 训练闭环
 
 ---
 
@@ -34,6 +34,7 @@
 | **v7.1-dev** | **2026-06-08** | **Phase B: 感知层替换 — TrainableTextEncoder + TrainableVisualEncoder + TrainableAudioEncoder** |
 | **v7.2-dev** | **2026-06-08** | **Phase C: 记忆层升级 — NeuralSemanticStore (向量DB) + CrossModalNN (对比学习)** |
 | **v7.3-dev** | **2026-06-08** | **Phase D: 语言系统重铸 — NeuralGenerator (自回归LM) + NeuralComprehender + NeuralAngularGyrus** |
+| **v7.4-dev** | **2026-06-08** | **Phase E: 训练与体验闭环 — Trainer (统一训练编排) + ExperienceTracker (可观察指标) + TrainingMetrics** |
 
 ---
 
@@ -46,12 +47,13 @@
 | ★ 已实现 (含 v7.3 新增) | **75** | 71% |
 | ○ 占位 (接口设计完成, 待实现代码) | 10 | 9% |
 | — 配置/工具/入口/基础设施 | 21 | 20% |
-| **合计** | **106** | **100%** |
+| **合计** | **108** | **100%** |
 
 > v7.0 Phase A: +5 个 `cns/nn/` 基础设施模块 (config/base/bridge/interfaces/__init__)
 > v7.1 Phase B: +3 个 `cns/nn/` 感知编码器 (text_encoder/visual_encoder/audio_encoder)
 > v7.2 Phase C: +2 个 `cns/nn/` 记忆层模块 (semantic_store/crossmodal_nn)
 > v7.3 Phase D: +3 个 `cns/nn/` 语言层模块 (language_model/comprehender/angular_gyrus_nn)
+> v7.4 Phase E: +2 个 `cns/nn/` 训练与指标模块 (trainer/metrics)
 
 ### 按脑区
 
@@ -358,8 +360,9 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 | NN 编码器 (v7.1) | **3** (Text: 2层Transformer ~2M / Visual: 4层CNN ~1M / Audio: 3层CNN ~0.6M) |
 | NN 记忆层 (v7.2) | **2** (SemanticStore: FAISS/numpy向量DB / CrossModalNN: 共享投影+InfoNCE ~50K) |
 | NN 语言层 (v7.3) | **3** (Generator: char Transformer ~5M / Comprehender: 记忆注意力+N400 / AngularGyrus: CNN seq2vec ~200K) |
+| NN 训练与指标 (v7.4) | **2** (Trainer: 统一训练编排器 / ExperienceTracker + TrainingMetrics: 可观察指标) |
 | 语料规模 | 0 (纯净模式, 零预训练) |
-| 测试通过 | **200/200 (100%)** |
+| 测试通过 | **254/254 (100%)** |
 
 ---
 
@@ -604,10 +607,23 @@ Process S 清除到 < threshold−hysteresis → VLPO 失活 → 觉醒
 - ✅ 神经角回阅读通路 (NeuralAngularGyrus — CNN seq2vec 字形→音素)
 - — PhraseStructure / PhonologicalLoop / ArcuateFasciculus (保留)
 
-### Phase E-F: 训练体验与整合 (v7.4-v7.5)
-- ⬜ 语料预训练 + 在线微调
-- ⬜ 情感信号注入语言生成
+### Phase E: 训练与体验闭环 (v7.4)
+- ✅ 统一训练编排器 (Trainer — pretrain + online_finetune + checkpoint + LR调度)
+- ✅ 可观察指标追踪 (ExperienceTracker — F/valence/arousal/vocab/趋势分析/CSV+JSON导出)
+- ✅ 训练进度追踪 (TrainingMetrics — loss/ppl/LR历史 + 收敛检测)
+- ✅ 个性化基础 (用户词频追踪 + 偏好分析)
+- ⬜ 情感信号注入语言生成 (已部分完成 — Phase D emotion tokens)
+- ⬜ 在线学习集成到 Agent 对话循环 (Phase F 整合)
 - ⬜ FEP兼容性验证 + 全系统调优
+
+### Phase F: 整合与打磨 (v7.5)
+- ⬜ NN模块集成到 Agent.__init__ 和 step()
+- ⬜ FEP兼容性验证 (sensory 输出 → 合理 F 值)
+- ⬜ 睡眠巩固适配 (NREM → NN梯度更新, REM → 情感衰减)
+- ⬜ VTA RPE → NN学习率调制
+- ⬜ LC NE → NN探索/利用 (dropout/温度)
+- ⬜ Web UI 训练进度/损失曲线面板
+- ⬜ 端到端集成测试 + 情感一致性测试
 
 ---
 
@@ -934,4 +950,4 @@ v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量
 
 ---
 
-*由 v7.3-dev Phase D 更新 · 200/200 测试通过 · Phase E (训练与体验闭环) 为下一里程碑*
+*由 v7.4-dev Phase E 更新 · 254/254 测试通过 · Phase F (整合与打磨) 为下一里程碑*

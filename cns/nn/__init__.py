@@ -1,5 +1,5 @@
 """
-cns.nn — 神经网络支撑层 (v7.3 Phase D)
+cns.nn — 神经网络支撑层 (v7.4 Phase E)
 
 提供 PyTorch 基础设施，使感知层、记忆层和语言层可以运行神经网络。
 
@@ -16,6 +16,8 @@ cns.nn — 神经网络支撑层 (v7.3 Phase D)
   - language_model.py:   NeuralGenerator (Phase D)
   - comprehender.py:     NeuralComprehender (Phase D)
   - angular_gyrus_nn.py: NeuralAngularGyrus (Phase D)
+  - trainer.py:          Trainer — 统一训练编排器 (Phase E)
+  - metrics.py:          ExperienceTracker + TrainingMetrics (Phase E)
 """
 
 from cns.nn.config import NNConfig, DEFAULT_NN_CONFIG
@@ -49,6 +51,10 @@ from cns.nn.language_model import NeuralGenerator
 from cns.nn.comprehender import NeuralComprehender
 from cns.nn.angular_gyrus_nn import NeuralAngularGyrus
 
+# Phase E: training & experience loop
+from cns.nn.trainer import Trainer
+from cns.nn.metrics import ExperienceTracker, TrainingMetrics
+
 __all__ = [
     # Config
     "NNConfig",
@@ -78,4 +84,8 @@ __all__ = [
     "NeuralGenerator",
     "NeuralComprehender",
     "NeuralAngularGyrus",
+    # Phase E: training & experience loop
+    "Trainer",
+    "ExperienceTracker",
+    "TrainingMetrics",
 ]

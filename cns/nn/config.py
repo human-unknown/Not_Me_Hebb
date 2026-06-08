@@ -40,6 +40,12 @@ class NNConfig:
     audio_lr: Optional[float] = None
     lm_lr: Optional[float] = None
 
+    # Phase E: training orchestration
+    pretrain_epochs: int = 10           # default pretraining epochs
+    online_lr: float = 1e-4             # online fine-tuning learning rate
+    lr_scheduler: str = "none"          # "none", "cosine", "step"
+    checkpoint_interval: int = 5        # save checkpoint every N epochs (0 = only final)
+
     def effective_lr(self, module_lr: Optional[float] = None) -> float:
         """返回模块的有效学习率, 模块级 > 全局."""
         return module_lr if module_lr is not None else self.learning_rate
