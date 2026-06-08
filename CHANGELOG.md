@@ -1,12 +1,26 @@
 # NotMe Changelog
 
-## v7.0-dev (2026-06) — 机器学习嵌入阶段前准备
+## v7.0-dev (2026-06) — Phase A: 神经网络支撑层
+
+### Phase A: 基础架构 (2026-06-08)
+- 新增 `cns/nn/` 包 — PyTorch 基础设施
+  - `config.py`: NNConfig dataclass (device/dtype/training开关/学习率)
+  - `base.py`: NeuralModule 抽象基类 (forward/train_step/save/load)
+  - `bridge.py`: numpy↔tensor 桥接 + 自动设备检测 (CPU/CUDA/MPS)
+  - `interfaces.py`: TextEncoder(64d) / VisualEncoder(308d) / AudioEncoder(96d) 抽象接口
+- 更新 `cns/params.py` — +DEFAULT_NN_PARAMS (10个NN超参数)
+- 更新 `cns/persistence.py` — +save_nn_modules / load_nn_modules / has_nn_checkpoint
+- 更新 `requirements.txt` — +torch>=2.0.0
+- 新增 39 个 NN 模块测试 (`tests/test_nn_base.py`)
+- 保持 Agent.step() / FEP / 身体稳态 / 睡眠系统 无修改
+
+### v7.0 前准备 (2026-06-08)
 - 全面代码审计 — 93 模块, 59 Theta 参数, D=516
 - VLPO 测试修复 — min_stable 适配 v6.5 的 150步 (15→150)
 - LGN 测试修复 — 添加 sys.path 设置
 - v6 验收测试修复 — Theta 参数数量 32→59
 - v7.0 ML 改造蓝图: `docs/superpowers/plans/2026-06-08-v7-ml-transformation-blueprint.md`
-- 测试覆盖率: 44/44 (100%) — 所有套件通过
+- 测试覆盖率: 76/76 (100%) — 所有套件通过
 - 版本号: v6.6 → v7.0-dev
 
 ## v6.6 (2026-06) — 持久化优化 + 代码质量提升

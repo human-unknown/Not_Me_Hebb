@@ -1,6 +1,8 @@
 """
-data_types.py —— 全部 struct/dataclass，20 个 Theta 参数
+data_types.py —— 全部 struct/dataclass，59 个 Theta 参数
 自由能原理智能体 — M1 单智能体生存
+
+v7.0: 神经网络配置移至 cns/nn/config.py (Phase A)
 """
 
 from dataclasses import dataclass, field

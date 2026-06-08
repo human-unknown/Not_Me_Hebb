@@ -1,9 +1,11 @@
 """
 params.py —— 默认参数常量
 自由能原理智能体 — M1 单智能体生存
+
+v7.0: +神经网络超参数 (Phase A)
 """
 
-# 默认 Theta 参数字典（56 个 — v6.3: 48 + 8 睡眠/节律/注意）
+# 默认 Theta 参数字典（59 个 — v6.6: 56 + 3 长期常驻学习）
 DEFAULT_THETA_DICT = {
     # L0 (6): 生成模型
     'sigma_z': 0.1,
@@ -138,3 +140,27 @@ PARAM_BOUNDS = {
     'mind_wander_frequency': (0.02, 0.6),
     'autonomous_step_interval': (0.1, 5.0),
 }
+
+# ============================================================
+# v7.0: 神经网络超参数 (Phase A)
+# ============================================================
+
+DEFAULT_NN_PARAMS = {
+    # 设备与精度
+    'nn_device': 'auto',              # 'auto', 'cpu', 'cuda', 'mps'
+    'nn_dtype': 'float32',            # 'float32', 'float16'
+    # 模型存储
+    'nn_model_dir': '.notme/models',  # 模型权重存档目录
+    # 训练控制
+    'nn_training_enabled': True,      # 全局在线学习开关
+    'nn_learning_rate': 1e-3,         # 默认学习率
+    'nn_grad_clip': 1.0,              # 梯度裁剪阈值 (0=不裁剪)
+    # 子模块学习率 (Phase B-D, Phase A 预留)
+    'nn_text_lr': None,               # 文本编码器学习率 (None=用全局)
+    'nn_visual_lr': None,             # 视觉编码器学习率
+    'nn_audio_lr': None,              # 听觉编码器学习率
+    'nn_lm_lr': None,                 # 语言模型学习率
+    # 日志
+    'nn_log_verbose': False,          # 是否打印训练调试信息
+}
+

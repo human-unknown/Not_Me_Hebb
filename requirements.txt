@@ -1,10 +1,13 @@
-# NotMe v6.6 Dependencies
+# NotMe v7.0 Dependencies
 # Core (required)
 numpy>=1.21.0
 scipy>=1.7.0
 scikit-learn>=1.0.0
 sentence-transformers>=2.2.0
 jieba>=0.42.0
+
+# Neural Network (v7.0 Phase A)
+torch>=2.0.0
 
 # Audio (required for microphone/speaker)
 soundfile>=0.10.0

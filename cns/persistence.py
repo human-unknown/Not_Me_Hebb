@@ -843,3 +843,90 @@ def auto_save(agent, n_turns: int, n_sessions: int = 1,
             print(f"  [auto-saved] {path}")
         return path
     return None
+
+
+# ================================================================
+# v7.0: PyTorch 模型持久化 (Phase A)
+# ================================================================
+
+def save_nn_modules(agent, path: Optional[str] = None) -> str:
+    """保存所有 NeuralModule 的权重到 .pt 文件.
+
+    与 save_agent() 的 pickle 方案并行 — pickle 存 Hebb 状态,
+    .pt 存神经网络权重. 两者独立, 不互相依赖.
+
+    Args:
+        agent: Agent 实例 (需有 agent.nn_modules dict)
+        path: 保存目录路径 (None = .notme/models/)
+
+    Returns:
+        保存目录路径
+    """
+    import os as _os
+    nn_dir = path or '.notme/models'
+    _os.makedirs(nn_dir, exist_ok=True)
+
+    saved = []
+    for name, module in getattr(agent, 'nn_modules', {}).items():
+        if hasattr(module, 'save'):
+            filepath = _os.path.join(nn_dir, f'{name}.pt')
+            module.save(filepath)
+            saved.append(filepath)
+
+    # 同时保存一个统一的 checkpoint 索引
+    if saved:
+        import json as _json
+        index_path = _os.path.join(nn_dir, '_checkpoint_index.json')
+        with open(index_path, 'w', encoding='utf-8') as f:
+            _json.dump({
+                'version': '7.0',
+                'modules': saved,
+            }, f, indent=2)
+
+    return nn_dir
+
+
+def load_nn_modules(agent, path: Optional[str] = None,
+                    verbose: bool = False) -> int:
+    """加载所有 NeuralModule 的权重.
+
+    Args:
+        agent: Agent 实例 (需有 agent.nn_modules dict)
+        path: 加载目录路径 (None = .notme/models/)
+        verbose: 是否打印加载信息
+
+    Returns:
+        成功加载的模块数
+    """
+    import os as _os
+    nn_dir = path or '.notme/models'
+
+    loaded = 0
+    for name, module in getattr(agent, 'nn_modules', {}).items():
+        if hasattr(module, 'load'):
+            filepath = _os.path.join(nn_dir, f'{name}.pt')
+            if _os.path.exists(filepath):
+                ok = module.load(filepath)
+                if ok:
+                    loaded += 1
+                    if verbose:
+                        print(f"  [nn] Loaded {name} from {filepath}")
+            elif verbose:
+                print(f"  [nn] No checkpoint for {name} (fresh init)")
+
+    return loaded
+
+
+def has_nn_checkpoint(path: Optional[str] = None) -> bool:
+    """检查是否存在神经网络 checkpoint.
+
+    Args:
+        path: 检查路径 (None = .notme/models/)
+
+    Returns:
+        是否存在 checkpoint 索引文件
+    """
+    import os as _os
+    nn_dir = path or '.notme/models'
+    index_path = _os.path.join(nn_dir, '_checkpoint_index.json')
+    return _os.path.exists(index_path)

@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v7.0-dev — 机器学习嵌入阶段前准备
+> **版本**: v7.0-dev — Phase A: 神经网络支撑层
 > **日期**: 2026-06-08
-> **基于**: v6.6 全面代码审计 + 蓝图规划
+> **基于**: v6.6 全面代码审计 + Phase A 完成
 
 ---
 
@@ -30,7 +30,7 @@
 | **v6.4** | **2026-06-07** | **长期常驻学习 完整实现 — 自主时间流 + 通用阅读 + DMN内部生命 + Web仪表板 + 长期遥测** |
 | **v6.5** | **2026-06-07** | **前端新未来主义重构 + 无现象学修复 + 睡眠节奏调整 + 发育年龄显示** |
 | **v6.6** | **2026-06-08** | **持久化修复 (step/视觉/F_social) + 版本统一 + 异常traceback + Web安全 + CHANGELOG + 无LLM原则移除** |
-| **v7.0-dev** | **2026-06-08** | **机器学习嵌入阶段前准备 — 全面代码审计 + 测试修复(44/44) + ML改造蓝图** |
+| **v7.0-dev** | **2026-06-08** | **Phase A: NN支撑层 (PyTorch 基础设施) + ML改造蓝图** |
 
 ---
 
@@ -877,17 +877,32 @@ v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量
 | `requirements-dev.txt` | **NEW** — 开发依赖 |
 | `PROJECT_STATUS.md` | 更新到 v6.6 |
 
-### 测试结果 (v7.0-dev)
+### 测试结果 (v7.0-dev Phase A)
 
 | 测试套件 | 通过/总数 | 状态 |
 |----------|----------|------|
-| test_v6_3_sleep | 9/9 | ✅ (VLPO min_stable 适配修复) |
+| test_v6_3_sleep | 9/9 | ✅ |
 | test_v6_4_resident | 9/9 | ✅ |
 | test_v6_1_development | 7/7 | ✅ |
 | test_v6_2_memory | 6/6 | ✅ |
-| test_lgn | 5/5 | ✅ (导入路径修复) |
-| v6_acceptance | 8/8 | ✅ (参数数量修复) |
-| **总计** | **44/44 (100%)** | ✅ |
+| test_lgn | 5/5 | ✅ |
+| test_nn_base | 39/39 | ✅ ★ NEW (Phase A) |
+| v6_acceptance | 8/8 | ✅ |
+| **总计** | **83/83 (100%)** | ✅ |
+
+### Phase A 交付物
+
+| 文件 | 状态 | 描述 |
+|------|------|------|
+| `cns/nn/__init__.py` | ★ NEW | 包入口, 全部导出 |
+| `cns/nn/config.py` | ★ NEW | NNConfig — device/dtype/training开关/学习率 |
+| `cns/nn/bridge.py` | ★ NEW | numpy↔tensor 桥接 + 自动设备检测 |
+| `cns/nn/base.py` | ★ NEW | NeuralModule 抽象基类 (forward/train_step/save/load) |
+| `cns/nn/interfaces.py` | ★ NEW | TextEncoder(64d)/VisualEncoder(308d)/AudioEncoder(96d) |
+| `cns/params.py` | 修改 | +DEFAULT_NN_PARAMS (10个NN超参数) |
+| `cns/persistence.py` | 修改 | +save_nn_modules / load_nn_modules / has_nn_checkpoint |
+| `cns/data_types.py` | 修改 | 文档更新 (NN配置移至cns/nn/) |
+| `requirements.txt` | 修改 | +torch>=2.0.0 |
 
 ### v7.0 蓝图
 
