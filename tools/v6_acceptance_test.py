@@ -61,8 +61,10 @@ def test_all():
 
     # Test 7: Theta params
     print("7. Theta params...")
-    assert len(agent.theta.to_dict()) == 32, "Should have 32 params"
-    print(f"   PASS: {len(agent.theta.to_dict())} params")
+    n_params = len(agent.theta.to_dict())
+    # v6.6: 59 params (L0-L8)
+    assert n_params == 59, f"Should have 59 params, got {n_params}"
+    print(f"   PASS: {n_params} params")
 
     # Test 8: Persistence round-trip
     print("8. Persistence round-trip...")

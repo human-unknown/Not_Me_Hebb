@@ -1,5 +1,14 @@
 # NotMe Changelog
 
+## v7.0-dev (2026-06) — 机器学习嵌入阶段前准备
+- 全面代码审计 — 93 模块, 59 Theta 参数, D=516
+- VLPO 测试修复 — min_stable 适配 v6.5 的 150步 (15→150)
+- LGN 测试修复 — 添加 sys.path 设置
+- v6 验收测试修复 — Theta 参数数量 32→59
+- v7.0 ML 改造蓝图: `docs/superpowers/plans/2026-06-08-v7-ml-transformation-blueprint.md`
+- 测试覆盖率: 44/44 (100%) — 所有套件通过
+- 版本号: v6.6 → v7.0-dev
+
 ## v6.6 (2026-06) — 持久化优化 + 代码质量提升
 - Step counter 持久化修复 (agent.meta.step_count 同步)
 - SCN 时间改用步数线性映射 (不再倒计时/卡住)

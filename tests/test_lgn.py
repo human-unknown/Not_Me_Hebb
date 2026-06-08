@@ -1,4 +1,9 @@
 """Test LGN V1 feedback gain modulation and tonic/burst gating."""
+import sys
+import os
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _project_root)
+
 import numpy as np
 from cerebrum.thalamus.lgn import LGN
 
