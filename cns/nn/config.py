@@ -50,6 +50,10 @@ class NNConfig:
     nn_enabled: bool = False             # master switch for NN integration
     nn_sensory_enhance: bool = False     # use NN encoders to enhance sensory (expensive)
 
+    # Phase G (v7.7): dual-system speak path
+    nn_generate_enabled: bool = False    # enable NN generator in speak() pipeline
+    nn_generate_weight: float = 0.3      # NN blend weight [0,1] (0=Hebb, 0.5=mix, 1=NN)
+
     def effective_lr(self, module_lr: Optional[float] = None) -> float:
         """返回模块的有效学习率, 模块级 > 全局."""
         return module_lr if module_lr is not None else self.learning_rate

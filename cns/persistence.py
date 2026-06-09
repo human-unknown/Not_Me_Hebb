@@ -22,8 +22,11 @@ import os
 import pickle
 import time
 import glob
+import logging
 import numpy as np
 from typing import Optional
+
+_log = logging.getLogger("cns.persistence")
 
 
 # ================================================================
@@ -537,8 +540,7 @@ def load_agent_state(path: str) -> dict:
 
     version = data.get('version', 'unknown')
     if version != SAVE_VERSION:
-        print(f"  [Persistence] Warning: save version {version} != "
-              f"current {SAVE_VERSION}, attempting migration...")
+        _log.warning("Save version %s != current %s, attempting migration...", version, SAVE_VERSION)
 
     return data
 
@@ -557,7 +559,7 @@ def restore_agent(agent, data: dict, verbose: bool = True):
     if 'net' in data:
         _restore_cluster_network(agent.net, data['net'])
         if verbose:
-            print(f"  L0: {agent.net.n_clusters} clusters restored")
+            _log.info("L0: %s clusters restored", agent.net.n_clusters)
 
     # L1: HabituationTracker
     if 'hab' in data:
@@ -587,7 +589,7 @@ def restore_agent(agent, data: dict, verbose: bool = True):
             agent.self_model.tpn_suppression = float(
                 data['self_model_meta'].get('tpn_suppression', 0.5))
         if verbose:
-            print(f"  SelfModel: {agent.self_model.net.n_clusters} clusters restored")
+            _log.info("SelfModel: %s clusters restored", agent.self_model.net.n_clusters)
 
     # DialogueContext
     if 'dialogue_ctx' in data and hasattr(agent, 'dialogue_ctx'):
@@ -601,7 +603,7 @@ def restore_agent(agent, data: dict, verbose: bool = True):
             if hasattr(agent.theta, k):
                 setattr(agent.theta, k, v)
         if verbose:
-            print(f"  Theta: {len(data['theta'])} params restored")
+            _log.info("Theta: %s params restored", len(data['theta']))
 
     # MetaLearner
     if 'meta_learner' in data and hasattr(agent, 'meta'):
@@ -663,8 +665,7 @@ def restore_agent(agent, data: dict, verbose: bool = True):
             _restore_cluster_network(af.ventral_net, af_data.get('ventral', {}))
             _restore_cluster_network(af.dorsal_net, af_data.get('dorsal', {}))
             if verbose:
-                print(f"  AF: {af.n_ventral_clusters}v/{af.n_dorsal_clusters}d "
-                      f"clusters restored")
+                _log.info("AF: %sv/%sd clusters restored", af.n_ventral_clusters, af.n_dorsal_clusters)
 
     if 'phonological_loop' in data and hasattr(agent, 'phonological_loop'):
         pl = agent.phonological_loop
@@ -698,8 +699,8 @@ def restore_agent(agent, data: dict, verbose: bool = True):
                 k: np.array(v, dtype=np.float32)
                 for k, v in ag_data.get('word_cache', {}).items()}
             if verbose:
-                print(f"  AngularGyrus: {ag.n_grapheme_clusters} glyphs, "
-                      f"{len(ag._word_to_phoneme)} cached words restored")
+                _log.info("AngularGyrus: %s glyphs, %s cached words restored",
+                         ag.n_grapheme_clusters, len(ag._word_to_phoneme))
 
     if 'motor_cortex' in data and hasattr(agent, 'motor_cortex'):
         # MotorCortex state is mostly stateless (Hebb mappings)
@@ -717,7 +718,7 @@ def restore_agent(agent, data: dict, verbose: bool = True):
                                          tpj_data['intent_clusters'])
             tpj._n_intents = tpj_data.get('_n_intents', 0)
             if verbose:
-                print(f"  TPJ: {tpj._n_intents} intents restored")
+                _log.info("TPJ: %s intents restored", tpj._n_intents)
 
     # ---- v6.0: Semantic Memory ----
     if 'semantic_memory' in data and hasattr(agent, 'semantic_memory'):
@@ -728,8 +729,8 @@ def restore_agent(agent, data: dict, verbose: bool = True):
             sm.n_facts = meta.get('n_facts', 0)
             sm.consolidation_count = meta.get('consolidation_count', 0)
             if verbose:
-                print(f"  Semantic: {sm.n_clusters} clusters, "
-                      f"{sm.n_facts} facts restored")
+                _log.info("Semantic: %s clusters, %s facts restored",
+                         sm.n_clusters, sm.n_facts)
 
     # ---- v6.0: Striatum ----
     if 'striatum' in data and hasattr(agent, 'striatum'):
@@ -751,8 +752,8 @@ def restore_agent(agent, data: dict, verbose: bool = True):
             st.n_learn_events = st_data.get('n_learn_events', 0)
             st._habit_ema = float(st_data.get('_habit_ema', 0.0))
             if verbose:
-                print(f"  Striatum: {st.get_state()['n_states_known']} states, "
-                      f"habit={st.global_habit_strength:.3f}")
+                _log.info("Striatum: %s states, habit=%.3f",
+                         st.get_state()['n_states_known'], st.global_habit_strength)
 
     # ---- v6.3: SCN + VLPO + Sleep ----
     if 'scn' in data and hasattr(agent, 'scn'):
@@ -765,7 +766,7 @@ def restore_agent(agent, data: dict, verbose: bool = True):
         agent.scn.process_s.pressure = float(scn_data.get('process_s_pressure', 0.0))
         agent.scn.process_s._wake_since = int(scn_data.get('process_s_wake_since', 0))
         if verbose:
-            print(f"  SCN: pressure={agent.scn.process_s.pressure:.2f} restored")
+            _log.info("SCN: pressure=%.2f restored", agent.scn.process_s.pressure)
 
     if 'vlpo' in data and hasattr(agent, 'vlpo'):
         vlpo_data = data['vlpo']
@@ -829,10 +830,10 @@ def restore_agent(agent, data: dict, verbose: bool = True):
             if os.path.exists(nn_dir):
                 agent.nn_bridge.load_checkpoint(nn_dir)
                 if verbose:
-                    print(f"  NN: bridge restored from {nn_dir}")
+                    _log.info("NN: bridge restored from %s", nn_dir)
         except Exception:
             if verbose:
-                print(f"  NN: restore skipped (no checkpoint found)")
+                _log.info("NN: restore skipped (no checkpoint found)")
 
     # Total steps/turns from meta
     total_steps = data.get('total_steps', 0)
@@ -840,8 +841,8 @@ def restore_agent(agent, data: dict, verbose: bool = True):
     n_sessions = data.get('n_sessions', 1)
 
     if verbose:
-        print(f"  Meta: {total_turns} turns, {total_steps} steps, "
-              f"session #{n_sessions}")
+        _log.info("Meta: %s turns, %s steps, session #%s",
+                 total_turns, total_steps, n_sessions)
 
 
 def auto_save(agent, n_turns: int, n_sessions: int = 1,
@@ -863,7 +864,7 @@ def auto_save(agent, n_turns: int, n_sessions: int = 1,
         save_agent(agent, path, n_sessions=n_sessions,
                    extra={'total_turns': n_turns})
         if verbose:
-            print(f"  [auto-saved] {path}")
+            _log.info("[auto-saved] %s", path)
         return path
     return None
 
@@ -934,9 +935,9 @@ def load_nn_modules(agent, path: Optional[str] = None,
                 if ok:
                     loaded += 1
                     if verbose:
-                        print(f"  [nn] Loaded {name} from {filepath}")
+                        _log.info("[nn] Loaded %s from %s", name, filepath)
             elif verbose:
-                print(f"  [nn] No checkpoint for {name} (fresh init)")
+                _log.info("[nn] No checkpoint for %s (fresh init)", name)
 
     return loaded
 

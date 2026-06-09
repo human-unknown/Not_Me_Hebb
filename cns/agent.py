@@ -1361,15 +1361,18 @@ class Agent:
               max_words: int = 18, temperature: float = 0.7,
               use_phrase_structure: bool = True,
               human_text: str = None,
+              use_nn_generate: bool = False,
+              nn_generate_weight: float = 0.3,
               ) -> tuple[list[str], np.ndarray | None, dict]:
-        """v5.6: 全语言产出管线 — AF → Broca → Motor Cortex.
+        """v7.7: 双系统语言产出 — Hebb链 + NN生成 (可选).
 
-        流程 (对应 Wernicke-Geschwind 模型 + 双流模型):
+        流程:
           1. AF腹侧: 理解 → 言语种子 (弓状束复述通路)
           2. Broca: 种子词 → Hebb词序链生成 (Broca区)
-          3. 短语结构: 调制词候选 (BA44层级句法)
-          4. Motor Cortex: 发音计划 + 运动指令副本 (M1/SMA)
-          5. AF背侧: 运动副本 → 预期听觉 (自我监控)
+          3. [可选] NN生成: Transformer生成补充 (v7.7双系统)
+          4. 短语结构: 调制词候选 (BA44层级句法)
+          5. Motor Cortex: 发音计划 (M1/SMA)
+          6. AF背侧: 运动副本 → 预期听觉 (自我监控)
 
         Args:
             broca: Broca实例
@@ -1381,6 +1384,8 @@ class Agent:
             temperature: 生成温度
             use_phrase_structure: 是否启用短语结构约束
             human_text: 原始人类输入文本 (v5.7: 用于婴儿模仿模式)
+            use_nn_generate: v7.7 — 启用NN生成器补充 (双系统模式)
+            nn_generate_weight: NN生成权重 [0,1] (0=Hebb only, 0.5=混合, 1=NN主导)
 
         Returns:
             (words, audio, speech_diagnostics)
@@ -1438,6 +1443,40 @@ class Agent:
             phrase_strength=0.25,
             human_text=human_text,
         )
+
+        # ---- v7.7 Step 3.5: NN 生成器补充 (双系统模式) ----
+        nn_generated_text = ''
+        if (use_nn_generate and self.nn_bridge is not None
+                and self.nn_bridge.is_enabled):
+            try:
+                prompt = ' '.join(words) if words else (
+                    human_text or '')
+                nn_temp = getattr(self.nn_bridge, '_current_temperature', temperature)
+                nn_gen = self.nn_bridge._modules.get('generator')
+                if nn_gen is not None and hasattr(nn_gen, 'generate'):
+                    nn_output = nn_gen.generate(
+                        prompt=prompt,
+                        valence=valence,
+                        arousal=arousal,
+                        max_new_tokens=max(8, max_words * 2),
+                        temperature=nn_temp,
+                    )
+                    if nn_output and len(nn_output) >= 2:
+                        nn_generated_text = nn_output
+                        # Tokenize NN output into words
+                        import jieba as _jieba
+                        nn_words = [_w for _w in _jieba.lcut(nn_output)
+                                   if len(_w) >= 1 and not _w.isspace()]
+                        if nn_words and nn_generate_weight >= 0.5:
+                            # Blend: replace some Hebb words with NN output
+                            blend_count = max(1, int(len(words) * nn_generate_weight))
+                            nn_slice = nn_words[:blend_count]
+                            # Take last N Hebb words + NN prefix
+                            words = words[:max(1, len(words) - blend_count)] + nn_slice
+                        diagnostics['nn_generated'] = nn_output[:120]
+                        diagnostics['nn_weight'] = nn_generate_weight
+            except Exception:
+                diagnostics['nn_generated'] = ''
 
         # ---- Step 4: 短语结构约束 (v5.6) ----
         if use_phrase_structure and hasattr(self, 'phrase_structure'):
@@ -1655,10 +1694,11 @@ class Agent:
         agent = cls(rng=rng, agent_id=agent_id, n_agents=n_agents)
 
         if verbose:
-            print(f"  [Persistence] Loading agent from: {path}")
-            print(f"    Version: {data.get('version', 'unknown')}")
-            print(f"    Sessions: {data.get('n_sessions', 1)}")
-            print(f"    Turns: {data.get('total_turns', 0)}")
+            import logging as _log
+            _l = _log.getLogger("cns.agent")
+            _l.info("Loading agent from: %s (v%s, %s sessions, %s turns)",
+                    path, data.get('version', 'unknown'),
+                    data.get('n_sessions', 1), data.get('total_turns', 0))
 
         restore_agent(agent, data, verbose=verbose)
 
