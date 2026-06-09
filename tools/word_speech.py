@@ -142,13 +142,20 @@ class WordSpeaker:
         else:
             # ---- 概念→语料句映射 (同一 PCA 空间) [LEGACY: O(N) 全局扫描] ----
             if not hasattr(self, '_corpus_sentences'):
-                corpus_path = os.path.join(os.path.dirname(__file__), 'corpus.txt')
-                with open(corpus_path, 'r', encoding='utf-8') as f: text = f.read()
-                self._corpus_sentences = [s.strip() for s in re.split(r'[。！？；\n]+', text)
-                                         if len(s.strip()) > 5]
-                from environments.text_interface import TextEnvironment
-                self._corpus_env = TextEnvironment()
-                self._corpus_embs = self._corpus_env.embeddings
+                import os as _os
+                corpus_path = _os.path.join(_os.path.dirname(__file__), 'corpus.txt')
+                try:
+                    with open(corpus_path, 'r', encoding='utf-8') as f:
+                        text = f.read()
+                    self._corpus_sentences = [s.strip() for s in re.split(r'[。！？；\n]+', text)
+                                             if len(s.strip()) > 5]
+                    from environments.text_interface import TextEnvironment
+                    self._corpus_env = TextEnvironment()
+                    self._corpus_embs = self._corpus_env.embeddings
+                except FileNotFoundError:
+                    # v7.6: pure mode — no corpus, skip sentence mapping
+                    self._corpus_sentences = []
+                    self._corpus_embs = None
 
             word_audios = []; word_labels = []
             for concept_vec in path_centroids:

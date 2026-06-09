@@ -1,8 +1,8 @@
 # NotMe 项目状态报告
 
-> **版本**: v7.5-dev — Phase F: 整合与打磨 (NN ↔ Agent 全系统集成)
-> **日期**: 2026-06-08
-> **基于**: v6.6 全面代码审计 + Phase A-E NN 基础设施 + Phase F 全系统集成
+> **版本**: v7.6-dev — OODA 审计修复 + NN训练激活 + 核心smoke test
+> **日期**: 2026-06-09
+> **基于**: v7.5 Phase F 集成 + OODA 全面审计
 
 ---
 
@@ -35,6 +35,7 @@
 | **v7.2-dev** | **2026-06-08** | **Phase C: 记忆层升级 — NeuralSemanticStore (向量DB) + CrossModalNN (对比学习)** |
 | **v7.3-dev** | **2026-06-08** | **Phase D: 语言系统重铸 — NeuralGenerator (自回归LM) + NeuralComprehender + NeuralAngularGyrus** |
 | **v7.5-dev** | **2026-06-08** | **Phase F: 整合与打磨 — NNBridge (Agent↔NN集成层) + VTA/LC NN调制 + Sleep NN巩固 + Web训练面板 + Persistence双格式** |
+| **v7.6-dev** | **2026-06-09** | **OODA 审计修复 — SAVE_VERSION 7.5 + dir()反模式移除 + Web路径安全 + 异常日志升级 + corpus.txt清理 + 24核心smoke test + NN训练首次激活** |
 | **v7.4-dev** | **2026-06-08** | **Phase E: 训练与体验闭环 — Trainer (统一训练编排) + ExperienceTracker (可观察指标) + TrainingMetrics** |
 
 ---
@@ -364,7 +365,7 @@ diffuse() 混合权重 = (1-stdp_weight)×cos_sim + stdp_weight×stdp_signal
 | NN 语言层 (v7.3) | **3** (Generator: char Transformer ~5M / Comprehender: 记忆注意力+N400 / AngularGyrus: CNN seq2vec ~200K) |
 | NN 训练与指标 (v7.4) | **2** (Trainer: 统一训练编排器 / ExperienceTracker + TrainingMetrics: 可观察指标) |
 | 语料规模 | 0 (纯净模式, 零预训练) |
-| 测试通过 | **297/297 (100%)** |
+| 测试通过 | **321/321 (100%)** |
 
 ---
 
@@ -951,4 +952,4 @@ v6.6 聚焦于修正这些阻碍长期成长的问题，同时提升代码质量
 
 ---
 
-*由 v7.5-dev Phase F 更新 · 297/297 测试通过 · 下一步: 长期运行验证 + 性能优化*
+*由 v7.6-dev OODA 审计修复更新 · 321/321 测试通过 · 下一步: 长期运行验证 + agent.py 重构*

@@ -94,14 +94,18 @@ def _estimate_azimuth_from_stereo(left_spectrum, right_spectrum) -> float:
 
 
 def _debug_trace(msg: str = ""):
-    """v6.6: 调试用 — 受控环境打印异常栈.
+    """v7.6: 异常追踪 — 始终记录 warning, debug 模式下打印完整栈.
 
-    仅在 NOTME_DEBUG 环境变量设置时输出，避免生产环境噪音。
+    - 始终: 通过 logging 模块输出 warning (可被应用层配置)
+    - NOTME_DEBUG=1: 额外打印完整 traceback 到 stderr
     """
+    import logging as _logging
+    _logger = _logging.getLogger("cns.agent")
+    if msg:
+        _logger.warning("[%s] Non-fatal module failure", msg)
+    else:
+        _logger.warning("Non-fatal module failure")
     if os.environ.get('NOTME_DEBUG'):
-        if msg:
-            import sys as _sys
-            print(f"[NOTME_DEBUG] {msg}", file=_sys.stderr)
         traceback.print_exc()
 
 
@@ -1506,6 +1510,17 @@ class Agent:
                         speech_seed_vec=speech_seed,
                         weight=0.3,
                     )
+            except Exception:
+                pass
+
+        # v7.6: NN training activation — feed dialogue turn after speech
+        if self.nn_bridge is not None and self.nn_bridge.is_enabled:
+            try:
+                response_text = ' '.join(words) if words else ''
+                self.nn_bridge.train_on_dialogue_turn(
+                    user_text=human_text or '',
+                    response=response_text,
+                )
             except Exception:
                 pass
 

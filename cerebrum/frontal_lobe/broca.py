@@ -71,6 +71,13 @@ class Broca:
         root_corpus = os.path.join(base, '..', '..', 'corpus.txt')
         if not os.path.exists(corpus_path) and os.path.exists(root_corpus):
             corpus_path = root_corpus
+        if not os.path.exists(corpus_path):
+            # v7.6: pure mode — no corpus file, skip pre-training
+            import logging
+            logging.getLogger(__name__).info(
+                "corpus.txt not found — skipping trigram pre-training (pure mode)")
+            self.sentences = []
+            return
         with open(corpus_path, 'r', encoding='utf-8') as f:
             text = f.read()
         raw_sentences = [s.strip() for s in re.split(r'[。！？；\n]+', text)

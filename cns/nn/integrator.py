@@ -236,6 +236,62 @@ class NNBridge:
         except Exception:
             pass
 
+    def train_on_dialogue_turn(self, user_text: str, response: str):
+        """v7.6: Feed a dialogue turn as NN training sample.
+
+        This is the FIRST actual NN training activation point —
+        called after each dialogue response. Uses low online LR (1e-4)
+        to gently adapt NN modules without catastrophic forgetting.
+
+        Args:
+            user_text: User's input text
+            response: Agent's response text
+        """
+        if not self._enabled:
+            return
+
+        self._ensure_init()
+        if not self._initialized:
+            return
+
+        try:
+            # 1. Train text encoder on combined dialogue text
+            combined = (user_text + " " + response).strip()
+            if len(combined) < 4:
+                return
+
+            text_mod = self._modules.get('text_encoder')
+            if text_mod is not None and text_mod.trainable:
+                try:
+                    text_mod.train_step({'text': combined})
+                except Exception:
+                    pass
+
+            # 2. Train generator on response (next-char prediction)
+            gen_mod = self._modules.get('generator')
+            if gen_mod is not None and gen_mod.trainable and len(response) >= 2:
+                try:
+                    gen_mod.train_step({'text': response})
+                except Exception:
+                    pass
+
+            # 3. Train comprehender on (user_input → response) pair
+            comp_mod = self._modules.get('comprehender')
+            if comp_mod is not None and comp_mod.trainable:
+                try:
+                    comp_mod.train_step({
+                        'input_text': user_text,
+                        'target_text': response,
+                    })
+                except Exception:
+                    pass
+
+            self._total_train_steps += 1
+            self._blend_ratio = min(0.5, 0.1 + 0.005 * self._total_train_steps)
+
+        except Exception:
+            pass  # NN training failure → silent, never block dialogue
+
     # ================================================================
     # Hook 3: VTA → NN Learning Rate Modulation
     # ================================================================
