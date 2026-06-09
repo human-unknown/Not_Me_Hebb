@@ -371,11 +371,25 @@ def api_reading_start():
     if not file_path:
         return jsonify({'error': 'file_path required'}), 400
 
+    # v7.6: Path traversal prevention — restrict to allowed directories
+    try:
+        real_path = os.path.realpath(file_path)
+        allowed_dirs = [
+            os.path.realpath(_PROJECT_ROOT),
+            os.path.realpath(os.path.join(_PROJECT_ROOT, 'corpora')),
+            os.path.realpath(os.path.join(_PROJECT_ROOT, 'data')),
+        ]
+        if not any(real_path.startswith(d + os.sep) or real_path == d
+                   for d in allowed_dirs):
+            return jsonify({'error': 'file_path outside allowed directories'}), 403
+    except (ValueError, OSError):
+        return jsonify({'error': 'invalid file_path'}), 400
+
     try:
         from tools.reader import Reader
         if not hasattr(_agent, 'reader') or _agent.reader is None:
             _agent.reader = Reader()
-        _agent.reader.load(file_path)
+        _agent.reader.load(real_path)
         if _loop is not None:
             _loop.reader = _agent.reader
         return jsonify(_agent.reader.get_progress())

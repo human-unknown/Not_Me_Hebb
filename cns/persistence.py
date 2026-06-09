@@ -30,7 +30,7 @@ from typing import Optional
 # 版本管理
 # ================================================================
 
-SAVE_VERSION = "6.6"  # v6.6: +step persistence +file drag-drop +proactive speech +visual reason +SCN doc
+SAVE_VERSION = "7.5"  # v7.5: +NNBridge integration +VTA/LC nn_modulation +NN sleep consolidation
 SAVE_DIR = ".notme/sessions"
 
 

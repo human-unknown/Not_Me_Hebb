@@ -333,6 +333,11 @@ class Agent:
         Returns:
             选定的 Action
         """
+        # ---- v7.6: 预初始化跨 try 块共享的局部变量 (防止 NameError) ----
+        latest_arousal = 0.5
+        stress_level = 0.0
+        novelty_est = 0.0
+
         # ---- v6.3 Phase -1: SCN 昼夜节律更新 (TTFL + Process S + 光同步) ----
         # 光输入: 从摄像头亮度或环境光照推导
         # 清醒期用 _light_level, 睡眠期光照=0 (模拟黑暗环境)
@@ -684,7 +689,7 @@ class Agent:
                     F_body=f_body, delta_F_body=delta_f,
                     social_reward=social_r,
                     novelty=novelty_est,
-                    arousal=latest_arousal if 'latest_arousal' in dir() else 0.5,
+                    arousal=latest_arousal,
                     base_learn_rate=self.theta.learn_rate_l0,
                 )
                 # VTA RPE → 海马学习率调制
@@ -711,8 +716,8 @@ class Agent:
             try:
                 latest_arousal_lc = self.arousal_history[-1] if self.arousal_history else 0.5
                 f_body_now_lc = self.F_body_history[-1] if self.F_body_history else 0.0
-                stress_lc = stress_level if 'stress_level' in dir() else 0.0
-                novelty_lc = novelty_est if 'novelty_est' in dir() else 0.0
+                stress_lc = stress_level
+                novelty_lc = novelty_est
                 task_eng = self.tpn.tpn_activation if hasattr(self, 'tpn') else 0.3
 
                 lc_result = self.locus_coeruleus.process(
@@ -760,7 +765,7 @@ class Agent:
                 pr_result = self.plasticity_regulator.process(
                     glun2b_ratio=self.theta.glun2b_ratio,
                     rpe=self._vta_result.get('rpe', 0.0) if self._vta_result else 0.0,
-                    novelty=novelty_est if 'novelty_est' in dir() else 0.0,
+                    novelty=novelty_est,
                     da_tonic=self._vta_result.get('tonic_da', 0.3) if self._vta_result else 0.3,
                     da_phasic=self._vta_result.get('phasic_da', 0.0) if self._vta_result else 0.0,
                     ne_tonic=self._lc_result.get('tonic_ne', 0.2) if self._lc_result else 0.2,
