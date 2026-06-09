@@ -77,6 +77,10 @@ class NNBridge:
         self._blend_ratio: float = 0.1
         self._total_train_steps: int = 0
 
+        # v7.7: Dialogue buffer for batch training
+        self._dialogue_buffer: list[tuple[str, str]] = []
+        self._batch_size: int = 8  # Trigger batch train every N turns
+
     # ================================================================
     # Initialization
     # ================================================================
@@ -255,11 +259,16 @@ class NNBridge:
             return
 
         try:
-            # 1. Train text encoder on combined dialogue text
             combined = (user_text + " " + response).strip()
             if len(combined) < 4:
                 return
 
+            # v7.7: Accumulate in buffer → batch train when full
+            self._dialogue_buffer.append((user_text, response))
+            if len(self._dialogue_buffer) >= self._batch_size:
+                self._train_on_buffer()
+
+            # Single-sample online train (always — supplements batch)
             text_mod = self._modules.get('text_encoder')
             if text_mod is not None and text_mod.trainable:
                 try:
@@ -267,7 +276,6 @@ class NNBridge:
                 except Exception:
                     pass
 
-            # 2. Train generator on response (next-char prediction)
             gen_mod = self._modules.get('generator')
             if gen_mod is not None and gen_mod.trainable and len(response) >= 2:
                 try:
@@ -275,7 +283,6 @@ class NNBridge:
                 except Exception:
                     pass
 
-            # 3. Train comprehender on (user_input → response) pair
             comp_mod = self._modules.get('comprehender')
             if comp_mod is not None and comp_mod.trainable:
                 try:
@@ -291,6 +298,45 @@ class NNBridge:
 
         except Exception:
             pass  # NN training failure → silent, never block dialogue
+
+    def _train_on_buffer(self):
+        """v7.7: Batch train on accumulated dialogue history.
+
+        Called automatically when _dialogue_buffer reaches _batch_size.
+        Runs 2-3 gradient steps on all samples — consolidates learning
+        from recent dialogue turns into NN weights.
+        """
+        if not self._trainer or len(self._dialogue_buffer) < 2:
+            return
+
+        try:
+            # Combine buffer text for text encoder
+            all_text = " ".join(
+                u + " " + r for u, r in self._dialogue_buffer)
+            text_mod = self._modules.get('text_encoder')
+            if text_mod is not None and text_mod.trainable:
+                for _ in range(2):  # 2 epochs on buffer
+                    try:
+                        text_mod.train_step({'text': all_text})
+                    except Exception:
+                        pass
+
+            # Train generator on each response in buffer
+            gen_mod = self._modules.get('generator')
+            if gen_mod is not None and gen_mod.trainable:
+                for _, resp in self._dialogue_buffer:
+                    if len(resp) >= 2:
+                        try:
+                            gen_mod.train_step({'text': resp})
+                        except Exception:
+                            pass
+
+            logger.info("[NNBridge] Batch trained on %d dialogue turns",
+                       len(self._dialogue_buffer))
+        except Exception:
+            pass
+        finally:
+            self._dialogue_buffer = []  # Clear buffer after training
 
     # ================================================================
     # Hook 3: VTA → NN Learning Rate Modulation

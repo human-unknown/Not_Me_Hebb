@@ -8,7 +8,9 @@ v3: 共享 PCA — 使用 TextEnvironment 的 encoder+PCA, 确保查询和检索
 v4: Hebb 记忆检索 — 句子存储为 ClusterNetwork 的集群, 说话 = recall() 回忆,
     不是全局余弦扫描。哈希定位 O(1) + 桶内竞争。
 """
-import numpy as np, re, os
+import numpy as np, re, os, logging
+
+_log = logging.getLogger("cerebrum.broca")
 
 
 class Broca:
@@ -27,7 +29,7 @@ class Broca:
         original_path = os.path.join(base, 'word_spectrum_dataset.npy')
         if os.path.exists(expanded_path):
             raw = np.load(expanded_path, allow_pickle=True)
-            print(f"  Using expanded vocabulary ({len(raw)} words)")
+            _log.info(f"  Using expanded vocabulary ({len(raw)} words)")
         else:
             raw = np.load(original_path, allow_pickle=True)
         self.word_list = [r[2] for r in raw]
@@ -60,7 +62,7 @@ class Broca:
         else:
             # v5.7 纯净模式: 网络从零开始, 从互动中在线学习
             self.sentences = []
-            print(f"Broca: clean mode — {len(self.word_list)} words, "
+            _log.info(f"Broca: clean mode — {len(self.word_list)} words, "
                   f"0 trigram clusters, 0 sentences "
                   f"(networks grow from interaction)")
 
@@ -89,10 +91,10 @@ class Broca:
                 self.sentences.append(s)
         dropped = len(raw_sentences) - len(self.sentences)
         if dropped > 0:
-            print(f"  Filtered {dropped} name-prefix-only sentences")
+            _log.info(f"  Filtered {dropped} name-prefix-only sentences")
 
         self._build_word_order()
-        print(f"Broca: {self.word_order_net.n_clusters} word-order clusters, "
+        _log.info(f"Broca: {self.word_order_net.n_clusters} word-order clusters, "
               f"{len(self.word_list)} words, {len(self.sentences)} sentences")
 
     def _word_to_vec(self, w):
@@ -127,7 +129,7 @@ class Broca:
         n_sents = len(self.sentences)
         for si, sent in enumerate(self.sentences):
             if (si + 1) % 50000 == 0:
-                print(f"  Word-order: processing sentence {si+1}/{n_sents} "
+                _log.info(f"  Word-order: processing sentence {si+1}/{n_sents} "
                       f"({len(tri_counts)} unique trigrams so far)")
             words = [w for w in jieba.lcut(sent) if len(w.strip()) >= 1]
             for i in range(len(words) - 2):
@@ -144,11 +146,11 @@ class Broca:
         filtered.sort(key=lambda x: -x[1])  # 按频率降序
 
         if len(filtered) > max_clusters:
-            print(f"  Word-order: truncating {len(filtered)} → {max_clusters} "
+            _log.info(f"  Word-order: truncating {len(filtered)} → {max_clusters} "
                   f"(min freq threshold: {filtered[max_clusters-1][1]})")
             filtered = filtered[:max_clusters]
 
-        print(f"  Word-order: {total_unique} unique → {len(filtered)} filtered "
+        _log.info(f"  Word-order: {total_unique} unique → {len(filtered)} filtered "
               f"(from {total_raw} total trigrams, min_freq={min_trigram_freq})")
 
         # ---- 构建 vecs 并插入集群 ----
@@ -177,10 +179,10 @@ class Broca:
             n_inserted += 1
 
         if n_skipped_words > 0:
-            print(f"  Word-order: skipped {n_skipped_words} trigrams "
+            _log.info(f"  Word-order: skipped {n_skipped_words} trigrams "
                   f"(words not in vocabulary)")
 
-        print(f"  Word-order: {n_inserted} trigram clusters inserted")
+        _log.info(f"  Word-order: {n_inserted} trigram clusters inserted")
 
     def _learn_from_sentence(self, sentence: str):
         """从单句学习 trigram — 用于睡眠巩固中的词序强化。
@@ -413,7 +415,7 @@ class Broca:
 
         # ---- 加载或构建 ----
         if os.path.exists(cache_path) and os.path.exists(index_path):
-            print(f"  Broca: loading {MAX_SENTENCES} sentence clusters "
+            _log.info(f"  Broca: loading {MAX_SENTENCES} sentence clusters "
                   f"(Hebb memory, capped)...")
             centroids = np.load(cache_path)
             indices = np.load(index_path)
@@ -441,7 +443,7 @@ class Broca:
 
         n_buckets = len(self._sentence_net.buckets)
         avg_per_bucket = len(centroids) / max(n_buckets, 1)
-        print(f"  Broca: {len(centroids)} sentence clusters, "
+        _log.info(f"  Broca: {len(centroids)} sentence clusters, "
               f"{n_buckets} buckets (~{avg_per_bucket:.0f}/bucket)")
 
     def _build_sent_clusters(self, cache_path, max_sentences=None):
@@ -453,7 +455,7 @@ class Broca:
 
         # 选择要编码的句子索引
         if max_sentences is not None and n_total > max_sentences:
-            print(f"  Broca: selecting {max_sentences} memorable sentences "
+            _log.info(f"  Broca: selecting {max_sentences} memorable sentences "
                   f"from {n_total} total...")
             # 基于长度评分: 长句包含更多 trigram → 更"可记忆"
             scores = np.array([min(len(s), 50) for s in self.sentences],
@@ -468,7 +470,7 @@ class Broca:
             selected_indices = np.argsort(scores)[-max_sentences:][::-1]
             selected_indices = sorted(selected_indices.tolist())
             target_sents = [self.sentences[i] for i in selected_indices]
-            print(f"  Broca: selected {len(target_sents)} sentences "
+            _log.info(f"  Broca: selected {len(target_sents)} sentences "
                   f"(len range: {min(len(s) for s in target_sents)}-"
                   f"{max(len(s) for s in target_sents)})")
         else:
@@ -479,12 +481,12 @@ class Broca:
         if self._text_env is not None:
             shared_encoder = self._text_env._encoder
             shared_pca = self._text_env.pca
-            print(f"  Broca: encoding {len(target_sents)} sentences with shared PCA...")
+            _log.info(f"  Broca: encoding {len(target_sents)} sentences with shared PCA...")
             full = shared_encoder.encode(
                 target_sents, show_progress_bar=True, batch_size=64)
             projected = shared_pca.transform(full).astype(np.float32)
         else:
-            print(f"  Broca: encoding {len(target_sents)} sentences (standalone PCA)...")
+            _log.info(f"  Broca: encoding {len(target_sents)} sentences (standalone PCA)...")
             from sentence_transformers import SentenceTransformer
             encoder = SentenceTransformer('all-MiniLM-L6-v2')
             full = encoder.encode(
@@ -504,7 +506,7 @@ class Broca:
         np.save(cache_path, centroids)
         index_path = cache_path.replace('.npy', '_idx.npy')
         np.save(index_path, indices)
-        print(f"  Broca: sentence clusters cached ({centroids.shape})")
+        _log.info(f"  Broca: sentence clusters cached ({centroids.shape})")
         return centroids, indices
 
     # ================================================================
@@ -686,7 +688,7 @@ class Broca:
 
         # ---- 缓存命中 ----
         if os.path.exists(cache_path) and os.path.exists(words_cache):
-            print(f"  Loading concept→word Hebb network...")
+            _log.info(f"  Loading concept→word Hebb network...")
             centroids = np.load(cache_path)
             word_indices = np.load(words_cache)
 
@@ -698,11 +700,11 @@ class Broca:
                 self.concept_word_net.buckets.setdefault(hash_key, []).append(c)
 
             self._concept_word_built = True
-            print(f"  Concept→word net: {len(centroids)} associations (cached)")
+            _log.info(f"  Concept→word net: {len(centroids)} associations (cached)")
             return
 
         # ---- 构建 ----
-        print(f"  Building concept→word Hebb network...")
+        _log.info(f"  Building concept→word Hebb network...")
         self._ensure_sent_clusters()
 
         # 收集要编码的句子 (去重)
@@ -766,7 +768,7 @@ class Broca:
         np.save(words_cache, word_idx_arr)
 
         self._concept_word_built = True
-        print(f"  Concept→word net: {len(centroids_arr)} associations "
+        _log.info(f"  Concept→word net: {len(centroids_arr)} associations "
               f"({len(unique_si)} sentences, cached)")
 
     def _learn_concept_word(self, concept_vec: np.ndarray,
